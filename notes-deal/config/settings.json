@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Knowledge Collector Configuration",
+  "description": "知识点自动整理 Skill 的配置文件",
+  "type": "object",
+  "properties": {
+    "source_dir": {
+      "type": "string",
+      "description": "采集文件源目录",
+      "default": "F:\\Obsidian\\第二大脑\\Archive_归档\\knowladgeCollect"
+    },
+    "resource_base_dir": {
+      "type": "string",
+      "description": "资源目录基础路径",
+      "default": "F:\\Obsidian\\第二大脑\\Resource_资源"
+    },
+    "excluded_tags": {
+      "type": "array",
+      "description": "排除的标签列表",
+      "items": {
+        "type": "string"
+      },
+      "default": ["knowladgeCollect"]
+    },
+    "date_formats": {
+      "type": "array",
+      "description": "支持的日期格式列表",
+      "items": {
+        "type": "string"
+      },
+      "default": ["YYYY-MM-DD", "YYYY/MM/DD", "YYYYMMDD"]
+    },
+    "file_patterns": {
+      "type": "array",
+      "description": "要处理的文件模式列表",
+      "items": {
+        "type": "string"
+      },
+      "default": ["笔记_*.md", "*.md"]
+    },
+    "conflict_strategy": {
+      "type": "string",
+      "description": "文件冲突处理策略",
+      "enum": ["overwrite", "skip", "rename"],
+      "default": "overwrite"
+    },
+    "cleanup_source": {
+      "type": "boolean",
+      "description": "是否删除源文件",
+      "default": true
+    },
+    "max_file_size_mb": {
+      "type": "number",
+      "description": "最大文件大小（MB）",
+      "default": 1.0,
+      "minimum": 0.1,
+      "maximum": 10.0
+    },
+    "max_keywords": {
+      "type": "number",
+      "description": "最大关键词数量",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 20
+    },
+    "enable_logging": {
+      "type": "boolean",
+      "description": "是否启用详细日志",
+      "default": true
+    }
+  },
+  "required": ["source_dir", "resource_base_dir"],
+  "current_values": {
+    "source_dir": "F:\\Obsidian\\第二大脑\\Archive_归档\\knowladgeCollect",
+    "resource_base_dir": "F:\\Obsidian\\第二大脑\\Resource_资源",
+    "excluded_tags": ["knowladgeCollect"],
+    "date_formats": ["YYYY-MM-DD", "YYYY/MM/DD", "YYYYMMDD"],
+    "file_patterns": ["笔记_*.md", "*.md"],
+    "conflict_strategy": "overwrite",
+    "cleanup_source": true,
+    "max_file_size_mb": 1.0,
+    "max_keywords": 10,
+    "enable_logging": true
+  }
+}
