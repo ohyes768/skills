@@ -59,15 +59,24 @@ def month_is_valid(month: str) -> bool:
     return 1 <= int(match.group(2)) <= 12
 
 
-def search_tavily(api_key: str, query: str, max_results: int = 3) -> dict[str, Any]:
-    """第一步：Tavily 搜索"""
+def search_tavily(
+    api_key: str, query: str, max_results: int = 3, days: int | None = None
+) -> dict[str, Any]:
+    """第一步：Tavily 搜索
+
+    Args:
+        days: 限制搜索结果的时间范围（天数）。例如 days=30 表示只返回最近30天发布的文章。
+              对于月度数据，建议覆盖到目标月份即可（通常不超过60天）。
+    """
     url = "https://api.tavily.com/search"
-    payload = {
+    payload: dict[str, Any] = {
         "api_key": api_key,
         "query": query,
         "max_results": max_results,
         "include_answer": False,
     }
+    if days is not None:
+        payload["days"] = days
     response = requests.post(url, json=payload, timeout=30)
     response.raise_for_status()
     return response.json()
@@ -167,9 +176,18 @@ def fetch_mlf_monthly_net(target_month: str) -> dict[str, Any]:
     year, month = target_month.split("-")
     query = f"财联社 MLF 净投放 {year}年{month}月"
 
+    # 计算日期范围：只搜索目标月份之后发布的内容
+    # MLF 通常在每月15日前后操作，当月15日之后才发布上月数据
+    target_date = datetime.strptime(f"{target_month}-15", "%Y-%m-%d")
+    today = datetime.now(timezone.utc)
+    days_since_target = (today - target_date).days
+    # 最多搜索90天，避免范围过大；最少搜索30天确保覆盖
+    search_days = max(30, min(days_since_target + 15, 90))
+    LOGGER.info("目标月份: %s，计算搜索时间窗口: %d 天", target_month, search_days)
+
     LOGGER.info("=== Step 1: Tavily 搜索 ===")
     try:
-        tavily_result = search_tavily(tavily_key, query)
+        tavily_result = search_tavily(tavily_key, query, days=search_days)
     except Exception as exc:
         result["error"] = f"Tavily 搜索失败: {exc}"
         return result
@@ -190,18 +208,35 @@ def fetch_mlf_monthly_net(target_month: str) -> dict[str, Any]:
 
     value = extracted.get("mlf_net_injection_yi")
     matched_idx = extracted.get("matched_article_index")
+    published_date_str = extracted.get("source_publish_date")
 
     if value is not None and matched_idx is not None:
         # matched_idx 是 1-based，转为 0-based
         source_result = results[matched_idx - 1]
+
+        # 日期校验：文章必须发布在目标月份之后
+        if published_date_str:
+            try:
+                pub_date = datetime.strptime(published_date_str, "%Y-%m-%d")
+                target_start = datetime.strptime(f"{target_month}-01", "%Y-%m-%d")
+                if pub_date < target_start:
+                    result["error"] = f"文章发布于 {published_date_str}，早于目标月份 {target_month}，被过滤"
+                    result["debug"] = extracted
+                    LOGGER.warning("过滤历史文章: %s (发布于 %s，早于 %s)",
+                                   extracted.get("article_title", ""), published_date_str, target_month)
+                    return result
+            except ValueError:
+                LOGGER.warning("无法解析发布日期: %s", published_date_str)
+
         result["value"] = int(value)
         result["source_url"] = extracted.get("source_url") or source_result.get("url")
         result["announcement_title"] = extracted.get("article_title", "")[:100] or source_result.get("title", "")[:100]
         result["raw_excerpt"] = source_result.get("content", "")[:300]
-        result["published_at"] = extracted.get("source_publish_date")
+        result["published_at"] = published_date_str
         result["matched_article_index"] = matched_idx
         result["parse_status"] = "ok"
-        LOGGER.info("MLF 净投放: %d 亿元 (来自第%d篇文章)", result["value"], matched_idx)
+        LOGGER.info("MLF 净投放: %d 亿元 (来自第%d篇文章, 发布于 %s)",
+                    result["value"], matched_idx, published_date_str)
     else:
         result["error"] = f"未找到 {target_month} 月的 MLF 净投放数据"
         result["debug"] = extracted
