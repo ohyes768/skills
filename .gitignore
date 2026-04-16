@@ -34,3 +34,6 @@ Desktop.ini
 *.tmp
 *.temp
 .cache/
+
+# Environment files (all subprojects)
+*/.env
