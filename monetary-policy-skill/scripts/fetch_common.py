@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Literal
 
 import requests
@@ -88,3 +90,21 @@ def parse_first_int(text: str, pattern: str) -> int | None:
         return int(raw)
     except (ValueError, TypeError):
         return None
+
+
+def _load_skill_dotenv() -> None:
+    """加载 skill 目录下的 .env 环境变量（如果存在）。"""
+    skill_dir = Path(__file__).parent.resolve().parent
+    env_path = skill_dir / ".env"
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue  # 跳过空行和注释
+            if "=" in line:
+                key, value = line.split("=", 1)
+                os.environ.setdefault(key.strip(), value.strip())
+
+
+# 模块加载时自动加载 skill .env
+_load_skill_dotenv()

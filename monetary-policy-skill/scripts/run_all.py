@@ -25,12 +25,23 @@ def get_default_month() -> str:
     return f"{today.year}-{today.month - 1:02d}"
 
 
+def to_prev_month(year_month: str) -> str:
+    """将 YYYY-MM 转为上月 YYYY-MM"""
+    y, m = year_month.split("-")
+    y, m = int(y), int(m)
+    if m == 1:
+        return f"{y - 1}-12"
+    return f"{y}-{m - 1:02d}"
+
+
 def build_payload(month: str | None = None) -> dict:
     target_month = month or get_default_month()
+    # MLF 净投放对应的是 target_month 的上一个月（次月1，2号公布）
+    mlf_month = to_prev_month(target_month)
     with ThreadPoolExecutor(max_workers=3) as executor:
         f1 = executor.submit(fetch_dr007_latest)
         f2 = executor.submit(fetch_lpr_latest)
-        f3 = executor.submit(fetch_mlf_monthly_net, target_month)
+        f3 = executor.submit(fetch_mlf_monthly_net, mlf_month)
         dr007, lpr, mlf = f1.result(), f2.result(), f3.result()
 
     return {
