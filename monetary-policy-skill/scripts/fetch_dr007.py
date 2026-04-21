@@ -15,6 +15,7 @@ from fetch_common import (
     fetch_text,
     setup_logging,
     to_iso_now,
+    write_cache,
 )
 
 
@@ -55,6 +56,10 @@ def fetch_dr007_latest() -> dict[str, Any]:
             result["value"] = value
             result["published_at"] = published_at
             result["parse_status"] = "ok"
+            # 写入月度缓存
+            month = published_at[:7] if published_at else None
+            if month:
+                write_cache("dr007", month, result)
             return result
 
         result["parse_status"] = "partial"

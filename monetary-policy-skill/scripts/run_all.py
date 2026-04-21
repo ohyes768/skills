@@ -10,6 +10,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 from fetch_common import setup_logging, to_iso_now
 from fetch_dr007 import fetch_dr007_latest
@@ -17,35 +18,41 @@ from fetch_lpr import fetch_lpr_latest
 from fetch_mlf_tavily import fetch_mlf_monthly_net
 
 
-def get_default_month() -> str:
-    """上个月（MLF 净投放在月初公布，默认查上月）"""
+def build_payload(requested_month: str | None = None) -> dict:
+    """构建数据载荷。
+
+    各指标获取逻辑由各自脚本内部处理：
+    - DR007：每日更新，直接查
+    - MLF：每月2-3日发布，脚本内部自动降级未发布的月份
+    - LPR：直接API获取最新值（每月20日发布）
+    """
     today = datetime.now()
-    if today.month == 1:
-        return f"{today.year - 1}-12"
-    return f"{today.year}-{today.month - 1:02d}"
+    requested_display = requested_month or "上月（默认）"
 
-
-def to_prev_month(year_month: str) -> str:
-    """将 YYYY-MM 转为上月 YYYY-MM"""
-    y, m = year_month.split("-")
-    y, m = int(y), int(m)
-    if m == 1:
-        return f"{y - 1}-12"
-    return f"{y}-{m - 1:02d}"
-
-
-def build_payload(month: str | None = None) -> dict:
-    target_month = month or get_default_month()
-    # MLF 净投放对应的是 target_month 的上一个月（次月1，2号公布）
-    mlf_month = to_prev_month(target_month)
     with ThreadPoolExecutor(max_workers=3) as executor:
         f1 = executor.submit(fetch_dr007_latest)
         f2 = executor.submit(fetch_lpr_latest)
-        f3 = executor.submit(fetch_mlf_monthly_net, mlf_month)
+        f3 = executor.submit(fetch_mlf_monthly_net, requested_month)
         dr007, lpr, mlf = f1.result(), f2.result(), f3.result()
 
+    # MLF 脚本内部已处理月份降级，从返回值中获取实际月份
+    actual_mlf_month = mlf.get("actual_month", requested_month or "unknown")
+    mlf_type = "prev" if mlf.get("requested_month") != actual_mlf_month else "same"
+
     return {
-        "as_of_date": datetime.now().strftime("%Y-%m-%d"),
+        "as_of_date": today.strftime("%Y-%m-%d"),
+        "requested_month": requested_display,
+        "actual_fetched_month": {
+            "mlf": actual_mlf_month,
+        },
+        "data_month_type": {
+            "mlf": mlf_type,
+        },
+        "publish_days": {
+            "mlf": "每月2-3日发布（脚本自动降级未发布月份）",
+            "lpr": "每月20日（直接API获取最新值）",
+            "dr007": "每日更新",
+        },
         "dr007": dr007,
         "mlf": mlf,
         "lpr": lpr,
@@ -63,12 +70,20 @@ def main() -> None:
     parser.add_argument(
         "--month",
         default="",
-        help="目标月份（YYYY-MM）",
+        help="目标月份（YYYY-MM），默认查上月",
     )
     args = parser.parse_args()
 
     setup_logging()
-    payload = build_payload(month=(args.month or None))
+    payload = build_payload(requested_month=(args.month or None))
+
+    # 输出数据可用性提示
+    print(f"[数据可用性] 请求月份: {payload['requested_month']}")
+    mlf_type_msg = "（请求月份数据）" if payload["data_month_type"]["mlf"] == "same" else "（上月数据，因发布日未到）"
+    print(f"[数据可用性] MLF实际获取: {payload['actual_fetched_month']['mlf']} {mlf_type_msg}")
+    print(f"[数据可用性] LPR: {payload['publish_days']['lpr']}")
+    print(f"[数据可用性] DR007: {payload['publish_days']['dr007']}")
+    print()
 
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)

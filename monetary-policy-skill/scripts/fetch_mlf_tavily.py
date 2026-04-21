@@ -16,7 +16,7 @@ from typing import Any
 
 import requests
 
-from fetch_common import build_session, setup_logging, to_iso_now, LOGGER
+from fetch_common import build_session, read_cache, setup_logging, to_iso_now, write_cache, LOGGER
 
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
 DEFAULT_MODEL = "deepseek-chat"
@@ -159,9 +159,46 @@ def call_deepseek_extract(
         return {"mlf_net_injection_yi": None}
 
 
+def determine_published_mlf_month(target_month: str, today: datetime) -> str:
+    """MLF 每月2-3日发布上月数据，自动降级到已发布的月份。
+
+    例如：2026-04-21 查询 2026-04，应降级为 2026-03（3月数据在4月2-3日已发布）。
+    """
+    req_year, req_month = map(int, target_month.split("-"))
+    next_month = req_month + 1
+    next_year = req_year
+    if next_month > 12:
+        next_month = 1
+        next_year += 1
+    publish_dt = datetime(next_year, next_month, MLF_PUBLISH_DAY)
+    if today >= publish_dt:
+        return target_month
+    # 未发布，降级查上月
+    prev_month = req_month - 1 if req_month > 1 else 12
+    prev_year = req_year if req_month > 1 else req_year - 1
+    return f"{prev_year}-{prev_month:02d}"
+
+
+MLF_PUBLISH_DAY = 3
+
+
 def fetch_mlf_monthly_net(target_month: str) -> dict[str, Any]:
-    """两步搜索获取 MLF 净投放"""
-    result = build_result_template(target_month)
+    """两步搜索获取 MLF 净投放。内部自动处理月份降级。"""
+    # 自动判断数据是否已发布，未发布则降级到上月
+    actual_month = determine_published_mlf_month(target_month, datetime.now())
+    requested_month = target_month
+
+    # 优先读缓存（用实际月份去读）
+    cached = read_cache("mlf", actual_month)
+    if cached:
+        LOGGER.info("MLF 缓存命中 [%s]，跳过搜索", actual_month)
+        cached["requested_month"] = requested_month
+        cached["actual_month"] = actual_month
+        return cached
+
+    result = build_result_template(actual_month)
+    result["requested_month"] = requested_month
+    result["actual_month"] = actual_month
 
     if not month_is_valid(target_month):
         result["error"] = f"month 格式错误: {target_month}"
@@ -179,17 +216,24 @@ def fetch_mlf_monthly_net(target_month: str) -> dict[str, Any]:
         return result
 
     # 构建搜索词
-    year, month = target_month.split("-")
+    year, month = actual_month.split("-")
     query = f"财联社 MLF 净投放 {year}年{month}月"
 
-    # 计算日期范围：只搜索目标月份之后发布的内容
-    # MLF 通常在每月15日前后操作，当月15日之后才发布上月数据
-    target_date = datetime.strptime(f"{target_month}-15", "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    # 计算日期范围：实际月份数据已发布，搜索窗口覆盖发布日之后
+    # actual_month 的数据在 next_month 的 2-3日 发布
+    req_year, req_month = map(int, actual_month.split("-"))
+    next_month = req_month + 1
+    next_year = req_year
+    if next_month > 12:
+        next_month = 1
+        next_year += 1
+    publish_dt = datetime(next_year, next_month, MLF_PUBLISH_DAY).replace(tzinfo=timezone.utc)
     today = datetime.now(timezone.utc)
-    days_since_target = (today - target_date).days
-    # 最多搜索90天，避免范围过大；最少搜索30天确保覆盖
-    search_days = max(30, min(days_since_target + 15, 90))
-    LOGGER.info("目标月份: %s，计算搜索时间窗口: %d 天", target_month, search_days)
+    days_since_publish = (today - publish_dt).days
+    # 最多搜索90天；发布后立即可查，覆盖发布日之后的时间
+    search_days = max(15, min(days_since_publish + 5, 90))
+    LOGGER.info("目标月份: %s（实际查询月份: %s），搜索时间窗口: %d 天",
+                requested_month, actual_month, search_days)
 
     LOGGER.info("=== Step 1: Tavily 搜索 ===")
     try:
@@ -241,6 +285,8 @@ def fetch_mlf_monthly_net(target_month: str) -> dict[str, Any]:
         result["published_at"] = published_date_str
         result["matched_article_index"] = matched_idx
         result["parse_status"] = "ok"
+        # 写入月度缓存
+        write_cache("mlf", target_month, result)
         LOGGER.info("MLF 净投放: %d 亿元 (来自第%d篇文章, 发布于 %s)",
                     result["value"], matched_idx, published_date_str)
     else:
@@ -257,7 +303,18 @@ def main() -> None:
     args = parser.parse_args()
 
     setup_logging()
-    data = fetch_mlf_monthly_net(args.month)
+
+    # 自动判断数据是否已发布（未发布则查上月）
+    requested_month = args.month
+    actual_month = determine_published_mlf_month(requested_month, datetime.now())
+    data = fetch_mlf_monthly_net(actual_month)
+
+    # 在返回结果中标注请求月份与实际月份的关系
+    data["requested_month"] = requested_month
+    data["actual_month"] = actual_month
+    if requested_month != actual_month:
+        LOGGER.info("请求月份 %s，数据尚未发布，降级到 %s", requested_month, actual_month)
+
     rendered = json.dumps(data, ensure_ascii=False, indent=2)
     print(rendered)
 

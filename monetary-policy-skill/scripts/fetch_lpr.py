@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-抓取 LPR 最新值（1年期、5年期以上）。
+从 akshare 抓取 LPR（贷款市场报价利率）最新值（1年期、5年期以上）。
 """
 
 from __future__ import annotations
@@ -9,23 +9,9 @@ import argparse
 import json
 from typing import Any
 
-from bs4 import BeautifulSoup
+import akshare as ak
 
-from fetch_common import LOGGER, build_session, fetch_text, parse_first_float, setup_logging, to_iso_now
-
-
-SOURCE_URL = "https://www.chinamoney.com.cn/chinese/bklpr/"
-LPR_API_URL = "https://www.chinamoney.com.cn/ags/ms/cm-u-bk-currency/LprHis?lang=CN"
-
-
-def parse_lpr_from_text(text: str) -> tuple[float | None, float | None]:
-    lpr_1y = parse_first_float(text, r"(?:1年期|1Y)[^0-9]*(\d+\.\d+)")
-    lpr_5y = parse_first_float(text, r"(?:5年期以上|5年期|5Y)[^0-9]*(\d+\.\d+)")
-    if lpr_1y is not None and lpr_5y is not None:
-        return lpr_1y, lpr_5y
-    lpr_1y = lpr_1y or parse_first_float(text, r"1年期LPR[^0-9]*(\d+\.\d+)")
-    lpr_5y = lpr_5y or parse_first_float(text, r"5年期以上LPR[^0-9]*(\d+\.\d+)")
-    return lpr_1y, lpr_5y
+from fetch_common import read_cache, setup_logging, to_iso_now, write_cache, LOGGER
 
 
 def fetch_lpr_latest() -> dict[str, Any]:
@@ -35,59 +21,53 @@ def fetch_lpr_latest() -> dict[str, Any]:
         "prev_lpr_1y": None,
         "prev_lpr_5y_plus": None,
         "unit": "%",
-        "source_url": SOURCE_URL,
+        "source_url": "https://akshare.akfamily.xyz",
         "published_at": None,
+        "month": None,
         "fetched_at": to_iso_now(),
         "parse_status": "failed",
+        "provider": "akshare",
     }
-    session = build_session()
 
     try:
-        # 先访问页面，初始化站点 Cookie
-        html = fetch_text(session, SOURCE_URL)
-        soup = BeautifulSoup(html, "lxml")
-        text = soup.get_text(" ", strip=True)
+        df = ak.macro_china_lpr()
+        # 筛选有效数据，按日期降序
+        df_valid = df[df["LPR1Y"].notna()].sort_values("TRADE_DATE", ascending=False)
 
-        api_resp = session.post(
-            LPR_API_URL,
-            timeout=20,
-            headers={"Referer": SOURCE_URL},
-        )
-        api_resp.raise_for_status()
-        payload = api_resp.json()
-        records = payload.get("records", [])
-        if records:
-            latest = records[0]
-            if latest.get("1Y") is not None:
-                result["lpr_1y"] = float(latest["1Y"])
-            if latest.get("5Y") is not None:
-                result["lpr_5y_plus"] = float(latest["5Y"])
-            result["published_at"] = latest.get("showDateCN")
-            result["source_url"] = LPR_API_URL
+        if df_valid.empty:
+            result["error"] = "无有效 LPR 数据"
+            return result
 
-            # 取上月数据（records[1]）
-            if len(records) > 1:
-                prev = records[1]
-                if prev.get("1Y") is not None:
-                    result["prev_lpr_1y"] = float(prev["1Y"])
-                if prev.get("5Y") is not None:
-                    result["prev_lpr_5y_plus"] = float(prev["5Y"])
-        else:
-            # API 不可用时回退到页面文本解析
-            lpr_1y, lpr_5y = parse_lpr_from_text(text)
-            if lpr_1y is not None:
-                result["lpr_1y"] = lpr_1y
-            if lpr_5y is not None:
-                result["lpr_5y_plus"] = lpr_5y
+        latest = df_valid.iloc[0]
+        prev = df_valid.iloc[1] if len(df_valid) > 1 else None
 
-        result["parse_status"] = (
-            "ok"
-            if result["lpr_1y"] is not None and result["lpr_5y_plus"] is not None
-            else "partial"
+        result["lpr_1y"] = float(latest["LPR1Y"])
+        result["lpr_5y_plus"] = float(latest["LPR5Y"])
+        result["published_at"] = str(latest["TRADE_DATE"])
+        result["month"] = str(latest["TRADE_DATE"])[:7]  # YYYY-MM
+
+        if prev is not None:
+            result["prev_lpr_1y"] = float(prev["LPR1Y"])
+            result["prev_lpr_5y_plus"] = float(prev["LPR5Y"])
+
+        result["parse_status"] = "ok"
+
+        # 写入月度缓存
+        if result["month"]:
+            write_cache("lpr", result["month"], result)
+
+        LOGGER.info(
+            "LPR 获取成功 [%s]: 1Y=%.2f%%, 5Y+=%.2f%%（上月: 1Y=%.2f%%, 5Y+=%.2f%%）",
+            result["month"],
+            result["lpr_1y"],
+            result["lpr_5y_plus"],
+            result["prev_lpr_1y"] or 0,
+            result["prev_lpr_5y_plus"] or 0,
         )
         return result
+
     except Exception as exc:
-        LOGGER.warning("LPR 抓取失败: %s", exc)
+        LOGGER.warning("LPR 获取失败: %s", exc)
         result["error"] = str(exc)
         return result
 

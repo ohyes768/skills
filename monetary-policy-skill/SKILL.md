@@ -28,7 +28,25 @@ description: |
 
 ## 数据获取流程
 
-### 第一步：脚本获取数据
+### 第一步：数据可用性判断
+
+脚本会自动判断各指标数据是否已发布：
+
+| 指标 | 发布时间 | 判断逻辑 |
+|------|---------|---------|
+| DR007 | **每日**（最新交易日） | 直接API获取最新值 |
+| MLF净投放 | **每月2-3日** | 当前日≥3日则查请求月，否则查上月 |
+| LPR | **每月20日**（节假日顺延） | 直接API获取最新值（自动含上月对比） |
+
+脚本运行时会输出判断结果：
+```
+[数据可用性] 请求月份: 2026-03
+[数据可用性] MLF实际获取: 2026-03 （请求月份数据）
+[数据可用性] LPR实际获取: 2026-02 （上月数据，因发布日未到）
+[数据可用性] DR007: 每日更新
+```
+
+### 第二步：脚本获取数据
 
 运行 `scripts/run_all.py` 获取初始数据：
 
@@ -39,7 +57,7 @@ python /path/to/skills/monetary-policy-skill/scripts/run_all.py --month YYYY-MM 
 
 **注意**：数据应输出到用户当前工作目录，不要输出到 skill 目录。
 
-### 第二步：数据交叉确认（必须执行）
+### 第三步：数据交叉确认（必须执行）
 
 **【重要】脚本获取的数据可能不完整或存在误差，必须引导用户核对！**
 
@@ -60,7 +78,7 @@ python /path/to/skills/monetary-policy-skill/scripts/run_all.py --month YYYY-MM 
 
 ---
 
-### 第三步：分析框架
+### 第四步：分析框架
 
 确认数据后，使用以下框架进行分析：
 
@@ -157,6 +175,18 @@ python /path/to/skills/monetary-policy-skill/scripts/run_all.py --month YYYY-MM 
 ```json
 {
   "month": "YYYY-MM",
+  "requested_month": "YYYY-MM 或 YYYY-MM（默认上月）",
+  "actual_fetched_month": {
+    "mlf": "YYYY-MM"
+  },
+  "data_month_type": {
+    "mlf": "same | prev"
+  },
+  "publish_days": {
+    "mlf": 3,
+    "lpr": "每月20日（直接API获取最新值）",
+    "dr007": "每日更新"
+  },
   "indicators": {
     "dr007": { "value": X.XX, "policy_rate": X.XX, "diff_bp": ±XX, "signal": -1 },
     "lpr_1y": { "value": X.XX, "prev": X.XX, "change_bp": ±XX, "signal": -1 },
@@ -174,9 +204,9 @@ python /path/to/skills/monetary-policy-skill/scripts/run_all.py --month YYYY-MM 
 ## 注意事项
 
 1. **DR007 数据**：脚本获取的是最新交易日日度值，非月均值，分析时需注意日内波动
-2. **LPR 时间窗口**：LPR 每月20日公布（节假日顺延），若在20日前分析当月数据，需使用上月值
+2. **LPR 数据来源**：LPR 每月20日公布（节假日顺延），脚本通过 akshare 获取数据（数据源同中国货币网），返回值中已包含上月对比数据
 3. **LPR 变化判断**：需对比上月 LPR 数值计算变化幅度
-4. **MLF 数据**：使用财联社净投放口径，若尚未公布可使用上月值
+4. **MLF 数据**：使用财联社净投放口径，每月2-3日发布，脚本已自动判断数据所属月份
 5. **交叉验证**：可将判断结果与央行官方货币政策基调进行交叉验证，若存在矛盾应重点提示
 6. **指标分歧处理**：当指标指向不一致时，参考综合评分而非单一指标
 7. **适用范围**：仅分析中国人民银行主导的国内货币政策
@@ -191,7 +221,7 @@ monetary-policy-skill/
 └── scripts/
     ├── fetch_common.py         # 公共工具
     ├── fetch_dr007.py          # DR007 抓取（中国货币网）
-    ├── fetch_lpr.py            # LPR 抓取（中国货币网）
+    ├── fetch_lpr.py            # LPR 抓取（akshare）
     ├── fetch_mlf_tavily.py     # MLF 抓取（财联社+Tavily+DeepSeek 两步方案）
     ├── run_all.py              # 统一入口
     └── run.sh                  # shell 入口

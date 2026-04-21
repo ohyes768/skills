@@ -108,3 +108,45 @@ def _load_skill_dotenv() -> None:
 
 # 模块加载时自动加载 skill .env
 _load_skill_dotenv()
+
+
+# ─── 缓存 ────────────────────────────────────────────────────────────────────
+
+def get_data_dir() -> Path:
+    """返回 data/ 目录路径（相对于 skill 根目录）。"""
+    return Path(__file__).resolve().parents[1] / "data"
+
+
+def read_cache(indicator: str, month: str) -> dict[str, Any] | None:
+    """读取指定月份的指标缓存。
+
+    Args:
+        indicator: 指标名，如 "dr007"、"lpr"、"mlf"
+        month:     月份，格式 "YYYY-MM"
+
+    Returns:
+        缓存数据（dict），无缓存则返回 None。
+    """
+    path = get_data_dir() / month / f"{indicator}.json"
+    if not path.exists():
+        return None
+    try:
+        import json
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def write_cache(indicator: str, month: str, data: dict[str, Any]) -> None:
+    """将指标数据写入指定月份的缓存。
+
+    Args:
+        indicator: 指标名，如 "dr007"、"lpr"、"mlf"
+        month:     月份，格式 "YYYY-MM"
+        data:      要缓存的数据（完整 JSON 输出）
+    """
+    import json
+    cache_dir = get_data_dir() / month
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    path = cache_dir / f"{indicator}.json"
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
