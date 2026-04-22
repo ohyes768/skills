@@ -1,0 +1,14 @@
+{
+  "month": "2026-03",
+  "freight_send_volume_million_tons": 4.6,
+  "freight_send_yoy_percent": 3.4,
+  "freight_turnover_billion_ton_km": 3342.67,
+  "freight_turnover_yoy_percent": 6.9,
+  "unit": "亿吨/亿吨公里/百分比",
+  "source_url": "http://sh.people.com.cn/n2/2026/0417/c134768-41555186.html",
+  "published_at": "2026-04-17",
+  "announcement_title": "一季度全国铁路完成货运发送量12.81亿吨",
+  "fetched_at": "2026-04-21T13:33:02.140060+00:00",
+  "parse_status": "ok",
+  "provider": "tavily+deepseek"
+}

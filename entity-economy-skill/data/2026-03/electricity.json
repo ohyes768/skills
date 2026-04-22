@@ -1,0 +1,16 @@
+{
+  "month": "2026-03",
+  "total_electricity_billion_kwh": 8595.0,
+  "yoy_percent": 3.5,
+  "primary_industry_kwh": 113.0,
+  "secondary_industry_kwh": 5708.0,
+  "tertiary_industry_kwh": 1601.0,
+  "residential_kwh": 1172.0,
+  "unit": "亿千瓦时/百分比",
+  "source_url": "https://www.nea.gov.cn/20260420/a86eed5481c74c7ca25b969779db2e1d/c.html",
+  "published_at": "2026-04-20",
+  "announcement_title": "2026年3月份全社会用电量同比增长3.5%",
+  "parse_status": "ok",
+  "provider": "nea.gov.cn",
+  "fetched_at": "2026-04-21T13:32:55.390849+00:00"
+}
