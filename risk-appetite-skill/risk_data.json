@@ -1,0 +1,115 @@
+{
+  "data": {
+    "fetched_at": "2026-04-28T10:59:08Z",
+    "period_days": 5,
+    "volume": {
+      "date": "2026-04-28",
+      "sh_amount_yi": 22291.61,
+      "sz_amount_yi": 14245.85,
+      "total_amount_yi": 36537.46,
+      "source": "exchange_official",
+      "fetched_at": "2026-04-28T10:59:08Z",
+      "status": "ok"
+    },
+    "turnover": {
+      "date": "2026-04-28",
+      "turnover_rate": 1.7244,
+      "volume": null,
+      "amount": null,
+      "amount_yi": null,
+      "change_pct": null,
+      "source": "exchange_official",
+      "fetched_at": "2026-04-28T10:59:12Z",
+      "status": "ok"
+    },
+    "margin": {
+      "date": "2026-04-27",
+      "rzye": 272002926.02,
+      "rqye": 272002926.02,
+      "rzje": 26100508.94,
+      "rqje": NaN,
+      "rzdf": 0.58,
+      "rqdf": 0.58,
+      "source": "akshare",
+      "fetched_at": "2026-04-28T10:59:12Z",
+      "status": "ok"
+    },
+    "history": {
+      "volume": [],
+      "margin": [
+        {
+          "date": "2026-04-27",
+          "rzye": 272002926.02,
+          "rqye": 272002926.02
+        },
+        {
+          "date": "2026-04-24",
+          "rzye": 270432508.5,
+          "rqye": 270432508.5
+        },
+        {
+          "date": "2026-04-23",
+          "rzye": 271581241.08,
+          "rqye": 271581241.08
+        },
+        {
+          "date": "2026-04-22",
+          "rzye": 271220157.77,
+          "rqye": 271220157.77
+        },
+        {
+          "date": "2026-04-21",
+          "rzye": 269816164.3,
+          "rqye": 269816164.3
+        },
+        {
+          "date": "2026-04-20",
+          "rzye": 269180694.94,
+          "rqye": 269180694.94
+        },
+        {
+          "date": "2026-04-17",
+          "rzye": 266266962.05,
+          "rqye": 266266962.05
+        },
+        {
+          "date": "2026-04-16",
+          "rzye": 266049316.37,
+          "rqye": 266049316.37
+        },
+        {
+          "date": "2026-04-15",
+          "rzye": 264953679.75,
+          "rqye": 264953679.75
+        },
+        {
+          "date": "2026-04-14",
+          "rzye": 263949923.29,
+          "rqye": 263949923.29
+        }
+      ]
+    },
+    "status": "ok"
+  },
+  "score": {
+    "turnover_score": 70,
+    "volume_score": 90,
+    "activity_score": 80.0,
+    "margin_score": 55,
+    "total_score": 72.5,
+    "conclusion": "偏热/乐观",
+    "suggestion": "趋势向好，可参与但保持警惕",
+    "bonus": {
+      "inflow": {
+        "score": 5,
+        "reason": "连续7日净流入"
+      }
+    },
+    "raw_data": {
+      "total_amount_yi": 36537.46,
+      "turnover_rate": 1.7244,
+      "rzdf": 0.58
+    },
+    "bonus_total": 5
+  }
+}

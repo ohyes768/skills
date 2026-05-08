@@ -1,0 +1,37 @@
+{
+  "scores": {
+    "monetary": 74.0,
+    "credit": 33.0,
+    "economy": 40.0,
+    "inflation": 25.0,
+    "risk": 72.5,
+    "exchange": 20.0
+  },
+  "friendly_scores": {
+    "monetary": 74.0,
+    "credit": 67.0,
+    "economy": 60.0,
+    "inflation": 75.0,
+    "risk": 27.5,
+    "exchange": 20.0
+  },
+  "weights": {
+    "monetary": 0.25,
+    "economy": 0.2,
+    "inflation": 0.2,
+    "credit": 0.15,
+    "risk": 0.15,
+    "exchange": 0.05
+  },
+  "contributions": {
+    "monetary": 18.5,
+    "economy": 12.0,
+    "inflation": 15.0,
+    "credit": 10.05,
+    "risk": 4.12,
+    "exchange": 1.0
+  },
+  "total_index": 60.67,
+  "conclusion": "中性",
+  "fetched_at": "2026-05-08T07:52:10Z"
+}

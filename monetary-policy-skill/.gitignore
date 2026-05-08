@@ -1,0 +1,10 @@
+.env
+.venv/
+mem.json
+trigger_eval_*.json
+trigger_eval_*.html
+run_optimization.py
+提示词.md
+data/
+scripts/data/
+optimization_output/

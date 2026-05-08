@@ -1,0 +1,13 @@
+{
+  "core_cpi_yoy": 1.1,
+  "unit": "%",
+  "month": "2026-03",
+  "source_url": "https://www.news.cn/20260410/644b942292884c94b9a400bfcee9f9f3/c.html",
+  "published_at": "2026-04-10",
+  "announcement_title": "权威数读丨3月份：CPI同比继续温和上涨 - 新华网",
+  "raw_excerpt": "国家统计局发布数据显示，3月份，全国居民消费价格指数（CPI）同比上涨1.0%，继续保持温和上涨，扣除食品和能源价格的核心CPI同比上涨1.1%。",
+  "fetched_at": "2026-04-23T06:11:51.134482+00:00",
+  "parse_status": "ok",
+  "provider": "tavily+deepseek",
+  "matched_article_index": 3
+}

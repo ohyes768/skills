@@ -1,0 +1,15 @@
+{
+  "cpi_national_yoy": 1.0,
+  "cpi_national_mom": -0.7,
+  "cpi_national_cumulative": 100.9,
+  "cpi_urban_yoy": 1.1,
+  "cpi_rural_yoy": 0.9,
+  "core_cpi_yoy": null,
+  "unit": "%",
+  "source_url": "https://akshare.akfamily.xyz",
+  "published_at": "2026-03",
+  "month": "2026-03",
+  "fetched_at": "2026-05-08T03:22:17.711624+00:00",
+  "parse_status": "ok",
+  "provider": "akshare"
+}

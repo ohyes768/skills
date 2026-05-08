@@ -1,0 +1,16 @@
+[project]
+name = "risk-appetite-skill"
+version = "0.1.0"
+description = "风险偏好判断 Skill - 通过成交额、换手率、融资融券余额判断市场情绪"
+requires-python = ">=3.10"
+dependencies = [
+    "akshare>=1.14.0",
+    "baostock>=0.9.1",
+    "pandas>=2.0.0",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]

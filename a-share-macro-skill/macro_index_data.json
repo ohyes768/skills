@@ -1,0 +1,37 @@
+{
+  "scores": {
+    "monetary_policy": 50.0,
+    "money_supply": 50.0,
+    "entity_economy": 50.0,
+    "inflation": 50.0,
+    "risk_appetite": 50.0,
+    "exchange_rate": 50.0
+  },
+  "friendly_scores": {
+    "monetary_policy": 50.0,
+    "money_supply": 50.0,
+    "economy": 85.0,
+    "inflation": 95.0,
+    "risk_appetite": 80.0,
+    "exchange_rate": 50.0
+  },
+  "weights": {
+    "monetary": 0.15,
+    "money_supply": 0.15,
+    "economy": 0.2,
+    "inflation": 0.1,
+    "risk": 0.2,
+    "exchange": 0.2
+  },
+  "contributions": {
+    "monetary": 7.5,
+    "money_supply": 7.5,
+    "economy": 17.0,
+    "inflation": 9.5,
+    "risk": 16.0,
+    "exchange": 10.0
+  },
+  "total_index": 67.5,
+  "conclusion": "友好",
+  "fetched_at": "2026-05-08T03:26:02Z"
+}

@@ -1,0 +1,70 @@
+{
+  "fetched_at": "2026-05-08T08:00:00Z",
+  "report_date": "2026-05-08",
+  "scores": {
+    "monetary": 60.0,
+    "credit": 33.0,
+    "economy": 40.0,
+    "inflation": 25.0,
+    "risk": 72.5,
+    "exchange": 20.0
+  },
+  "friendly_scores": {
+    "monetary": 60.0,
+    "credit": 67.0,
+    "economy": 60.0,
+    "inflation": 75.0,
+    "risk": 27.5,
+    "exchange": 20.0
+  },
+  "weights": {
+    "monetary": 0.25,
+    "economy": 0.20,
+    "inflation": 0.20,
+    "credit": 0.15,
+    "risk": 0.15,
+    "exchange": 0.05
+  },
+  "contributions": {
+    "monetary": 15.0,
+    "economy": 12.0,
+    "inflation": 15.0,
+    "credit": 10.05,
+    "risk": 4.12,
+    "exchange": 1.0
+  },
+  "total_index": 57.17,
+  "conclusion": "中性",
+  "data_sources": {
+    "monetary": {
+      "file": "lpr.json, dr007.json",
+      "month": "2026-04",
+      "details": "LPR_1Y=3.0%, DR007=1.3358%"
+    },
+    "credit": {
+      "file": "money_supply_latest.json",
+      "month": "2026-03",
+      "details": "M1 YoY=5.1% M2 YoY=8.5% 剪刀差=-3.4% 社融存比YoY=7.9%"
+    },
+    "economy": {
+      "file": "electricity.json",
+      "month": "2026-03",
+      "details": "用电YoY=3.5%"
+    },
+    "inflation": {
+      "file": "cpi.json, ppi.json",
+      "month": "2026-03",
+      "details": "CPI YoY=1.0% PPI=0.5%"
+    },
+    "risk": {
+      "file": "risk_data.json (推算)",
+      "month": "2026-04",
+      "details": "换手率=1.72%"
+    },
+    "exchange": {
+      "file": "exchange_rate_data.json",
+      "month": "2026-05",
+      "details": "北向30日净流出=-2194.07亿"
+    }
+  }
+}

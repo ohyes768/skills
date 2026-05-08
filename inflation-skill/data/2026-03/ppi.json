@@ -1,0 +1,12 @@
+{
+  "ppi_current": 100.5,
+  "ppi_yoy": 0.5,
+  "ppi_cumulative": 99.4,
+  "unit": "上年=100（定基）",
+  "source_url": "https://akshare.akfamily.xyz",
+  "published_at": "2026-03",
+  "month": "2026-03",
+  "fetched_at": "2026-05-08T03:22:18.465540+00:00",
+  "parse_status": "ok",
+  "provider": "akshare"
+}
