@@ -13,14 +13,17 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+
+import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from fetch_common import get_logger, setup_logging, now
 from fetch_exchange_rates import fetch_exchange_rates, save_exchange_rates_to_csv
-from fetch_fund_flow import fetch_fund_flow, save_fund_flow_to_csv, calculate_flow_statistics
+from fetch_north_flow import fetch_north_deal_amt, fetch_north_daily, save_north_flow_to_csv
+from fetch_common import build_session
 from fetch_ted_spread import fetch_ted_spread, save_ted_spread_to_csv
 
 logger = get_logger(__name__)
@@ -60,7 +63,7 @@ def run_all(days: int = 30) -> dict:
         包含所有原始数据的字典（评分由 SKILL.md 驱动）
     """
     results = {
-        "fetched_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "period_days": days,
         "data": {},
         "errors": [],
@@ -89,51 +92,65 @@ def run_all(days: int = 30) -> dict:
         logger.error(f"获取汇率数据失败: {e}")
         results["errors"].append(f"exchange_rates: {str(e)}")
 
-    # 2. 获取资金流向数据
+    # 2. 获取资金流向数据（北向/南向）
     try:
         logger.info("获取资金流向数据（北向/南向）...")
-        fund_flow_data = fetch_fund_flow()
-        csv_path = save_fund_flow_to_csv(fund_flow_data)
-        logger.info(f"资金流向数据已保存到: {csv_path}")
 
-        # 计算累计数据
-        north_stats = calculate_flow_statistics("north")
-        south_stats = calculate_flow_statistics("south")
+        session = build_session()
 
-        # 提取最新值
-        latest = {}
-        for direction, df in fund_flow_data.items():
-            if not df.empty:
-                last_idx = df.last_valid_index()
-                if last_idx is not None:
-                    dir_key = "north" if direction == "north" else "south"
-                    col_net = "北向净流入" if direction == "north" else "南向净流入"
-                    col_change = "北向涨幅" if direction == "north" else "南向涨幅"
-                    latest[dir_key] = {
-                        "net_flow_yi": round(float(df.loc[last_idx, col_net]), 2),
-                        "change_pct": round(float(df.loc[last_idx, col_change]), 2) if col_change in df.columns else None,
-                        "date": last_idx.strftime("%Y-%m-%d"),
-                    }
+        # 2a. 获取北向资金日频成交总额（来自 RPT_MUTUAL_DEALAMT 的 NF_DEAL_AMT）
+        deal_df = fetch_north_deal_amt(session, days=days)
+        if deal_df.empty:
+            raise ValueError("获取北向资金成交总额失败")
+
+        # 提取当日成交总额
+        last_idx = deal_df.index.max()
+        turnover_today_yi = round(float(deal_df.loc[last_idx, "北向成交总额"]), 2)
+
+        # 计算7日成交总额（近7个交易日）
+        deal_7d = deal_df.head(7)
+        turnover_7d_sum_yi = round(float(deal_7d["北向成交总额"].sum()), 2)
+        turnover_7d_avg_yi = round(turnover_7d_sum_yi / 7, 2)
+
+        # 计算上期7日成交总额（取更早的7个交易日）
+        if len(deal_df) >= 14:
+            prev_7d_sum_yi = round(float(deal_df.iloc[7:14]["北向成交总额"].sum()), 2)
+        else:
+            prev_7d_sum_yi = turnover_7d_sum_yi  # 数据不足时用本期代替
+
+        # 环比变化
+        if prev_7d_sum_yi > 0:
+            turnover_7d_change_pct = round((turnover_7d_sum_yi - prev_7d_sum_yi) / prev_7d_sum_yi * 100, 2)
+        else:
+            turnover_7d_change_pct = 0.0
+
+        # 2b. 合并成交总额和日频明细，统一写入 CSV
+        combined_df = deal_df[["北向成交总额"]].copy()
+        combined_df["北向净流入"] = 0  # 占位，日频明细中会有
+        combined_df["沪股通净流入"] = 0
+        combined_df["深股通净流入"] = 0
+
+        # 获取日频明细补充净流入数据
+        daily_df = fetch_north_daily(session, days=30)
+        if not daily_df.empty:
+            for col in ["北向净流入", "沪股通净流入", "深股通净流入"]:
+                if col in daily_df.columns:
+                    combined_df[col] = daily_df[col]
+
+        save_north_flow_to_csv(combined_df)
 
         results["data"]["fund_flow"] = {
-            "north": latest.get("north", {}),
-            "south": latest.get("south", {}),
+            "north": {
+                "turnover_yi": turnover_today_yi,
+                "date": last_idx.strftime("%Y-%m-%d"),
+            },
+            "south": {},  # 南向暂不处理
             "north_cumulative": {
-                "cum_7d": round(north_stats["cum_7d"], 2) if north_stats["cum_7d"] else None,
-                "cum_30d": round(north_stats["cum_30d"], 2) if north_stats["cum_30d"] else None,
-                "consecutive_positive_days": north_stats["consecutive_positive_days"],
-                "consecutive_negative_days": north_stats["consecutive_negative_days"],
-                "max_inflow": round(north_stats["max_inflow"], 2) if north_stats["max_inflow"] else None,
-                "max_outflow": round(north_stats["max_outflow"], 2) if north_stats["max_outflow"] else None,
+                "turnover_7d_sum_yi": turnover_7d_sum_yi,
+                "turnover_7d_avg_yi": turnover_7d_avg_yi,
+                "turnover_7d_change_pct": turnover_7d_change_pct,
             },
-            "south_cumulative": {
-                "cum_7d": round(south_stats["cum_7d"], 2) if south_stats["cum_7d"] else None,
-                "cum_30d": round(south_stats["cum_30d"], 2) if south_stats["cum_30d"] else None,
-                "consecutive_positive_days": south_stats["consecutive_positive_days"],
-                "consecutive_negative_days": south_stats["consecutive_negative_days"],
-                "max_inflow": round(south_stats["max_inflow"], 2) if south_stats["max_inflow"] else None,
-                "max_outflow": round(south_stats["max_outflow"], 2) if south_stats["max_outflow"] else None,
-            },
+            "south_cumulative": {},
         }
 
     except Exception as e:
@@ -245,46 +262,40 @@ def generate_report(results: dict, report_path: Path | None = None) -> Path:
         north = fund_flow.get("north", {})
         if north:
             lines.append("### 北向资金（沪深港通→A股）")
-            lines.append(f"- 净流入: {north.get('net_flow_yi', 'N/A')} 亿元")
-            lines.append(f"- 涨跌幅: {north.get('change_pct', 'N/A')}%")
+            lines.append(f"- 当日成交总额: {north.get('turnover_yi', 'N/A')} 亿元")
             lines.append("")
 
         # 南向
         south = fund_flow.get("south", {})
         if south:
             lines.append("### 南向资金（A股→沪深港通）")
-            lines.append(f"- 净流入: {south.get('net_flow_yi', 'N/A')} 亿元")
-            lines.append(f"- 涨跌幅: {south.get('change_pct', 'N/A')}%")
+            lines.append(f"- 当日成交总额: {south.get('turnover_yi', 'N/A')} 亿元")
             lines.append("")
 
-        # 累计数据
-        lines.append("### 累计数据")
+        # 成交总额数据
+        lines.append("### 北向资金成交总额")
         lines.append("")
-        lines.append("| 方向 | 7日累计 | 30日累计 | 连续正流入天 | 连续负流出天 | 最大单日流入 | 最大单日流出 |")
-        lines.append("|------|---------|---------|-------------|-------------|-------------|-------------|")
+        lines.append("| 7日累计成交额 | 7日日均成交额 | 环比变化 |")
+        lines.append("|---------------|---------------|----------|")
 
         north_cum = fund_flow.get("north_cumulative", {})
         south_cum = fund_flow.get("south_cumulative", {})
 
-        north_7d = north_cum.get("cum_7d")
-        north_30d = north_cum.get("cum_30d")
-        north_cons_pos = north_cum.get("consecutive_positive_days")
-        north_cons_neg = north_cum.get("consecutive_negative_days")
-        north_max_in = north_cum.get("max_inflow")
-        north_max_out = north_cum.get("max_outflow")
+        turnover_7d_sum = north_cum.get("turnover_7d_sum_yi")
+        turnover_7d_avg = north_cum.get("turnover_7d_avg_yi")
+        turnover_change = north_cum.get("turnover_7d_change_pct")
 
-        south_7d = south_cum.get("cum_7d")
-        south_30d = south_cum.get("cum_30d")
-        south_cons_pos = south_cum.get("consecutive_positive_days")
-        south_cons_neg = south_cum.get("consecutive_negative_days")
-        south_max_in = south_cum.get("max_inflow")
-        south_max_out = south_cum.get("max_outflow")
+        def _fmt(v: float | None, suffix: str = "") -> str:
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return f"N/A{suffix}"
+            return f"{v:.2f}{suffix}"
 
-        north_row = f"| 北向 | {north_7d:.2f}亿 | {north_30d:.2f}亿 | {north_cons_pos}天 | {north_cons_neg}天 | {north_max_in:.2f}亿 | {north_max_out:.2f}亿 |" if all(v is not None for v in [north_7d, north_30d]) else "| 北向 | N/A | N/A | N/A | N/A | N/A | N/A |"
-        south_row = f"| 南向 | {south_7d:.2f}亿 | {south_30d:.2f}亿 | {south_cons_pos}天 | {south_cons_neg}天 | {south_max_in:.2f}亿 | {south_max_out:.2f}亿 |" if all(v is not None for v in [south_7d, south_30d]) else "| 南向 | N/A | N/A | N/A | N/A | N/A | N/A |"
+        def _pct(v: float | None) -> str:
+            if v is None:
+                return "N/A"
+            return f"{v:+.2f}%"
 
-        lines.append(north_row)
-        lines.append(south_row)
+        lines.append(f"| {_fmt(turnover_7d_sum, '亿')} | {_fmt(turnover_7d_avg, '亿')} | {_pct(turnover_change)} |")
         lines.append("")
 
     # TED 利差

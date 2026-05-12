@@ -8,6 +8,7 @@ dependencies = [
     "fredapi>=0.5.2",
     "pandas>=2.0.0",
     "requests>=2.31.0",
+    "yfinance>=1.3.0",
 ]
 
 [project.optional-dependencies]

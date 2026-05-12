@@ -1,38 +1,21 @@
 {
-  "fetched_at": "2026-05-07T07:52:16Z",
-  "period_days": 30,
+  "fetched_at": "2026-05-12T17:00:30Z",
+  "period_days": 7,
   "data": {
+    "exchange_rates": {},
     "fund_flow": {
       "north": {
-        "net_flow_yi": -88.98,
-        "change_pct": -0.28,
-        "date": "2026-05-07"
+        "turnover_yi": 40.55,
+        "date": "2026-05-12"
       },
-      "south": {
-        "net_flow_yi": -229.77,
-        "change_pct": -0.73,
-        "date": "2026-05-07"
-      },
+      "south": {},
       "north_cumulative": {
-        "cum_7d": -554.31,
-        "cum_30d": -2194.07,
-        "consecutive_positive_days": 0,
-        "consecutive_negative_days": 1,
-        "max_inflow": 767.91,
-        "max_outflow": -731.12
+        "turnover_7d_sum_yi": 268.51,
+        "turnover_7d_avg_yi": 38.36,
+        "turnover_7d_change_pct": 0.0
       },
-      "south_cumulative": {
-        "cum_7d": -1537.2,
-        "cum_30d": -5247.05,
-        "consecutive_positive_days": 0,
-        "consecutive_negative_days": 18,
-        "max_inflow": 100.98,
-        "max_outflow": -452.7
-      }
+      "south_cumulative": {}
     }
   },
-  "errors": [
-    "exchange_rates: 未设置 FRED_API_KEY 环境变量",
-    "ted_spread: FRED_API_KEY 未设置。请选择以下方式之一：\n  1. 设置环境变量: export FRED_API_KEY=your_key\n  2. 在项目根目录创建 .env 文件，内容: FRED_API_KEY=your_key\n  3. 从 https://fred.stlouisfed.org/docs/api/api_key.html 申请 API Key"
-  ]
+  "errors": []
 }

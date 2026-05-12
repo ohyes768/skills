@@ -49,12 +49,12 @@ uv run python scripts/run_all.py --days 30 --output ./exchange_rate_data.json --
 
 ### 数据源说明
 
-| 指标 | 数据源 | FRED代码/AKShare接口 |
-|------|--------|---------------------|
-| 美元指数 | FRED | DTWEXBGS |
+| 指标 | 数据源 | 接口/代码 |
+|------|--------|-----------|
+| 美元指数 | Yahoo Finance | DX-Y.NYB |
 | 美元兑人民币 | FRED | DEXCHUS |
-| 北向资金 | AKShare (东方财富) | ak.stock_market_fund_flow() |
-| 南向资金 | AKShare (东方财富) | ak.stock_market_fund_flow() |
+| 北向资金（成交总额） | 东方财富 | RPT_MUTUAL_DEALAMT → NF_DEAL_AMT |
+| 南向资金 | 东方财富 | 暂不处理 |
 | SOFR | FRED | SOFR |
 | 3个月美债收益率 | FRED | DGS3MO |
 | TED利差 | 计算得出 | SOFR - DGS3MO |
@@ -71,7 +71,9 @@ uv run python scripts/run_all.py --days 30 --output ./exchange_rate_data.json --
 |------|-----------|-------------|
 | 美元指数 | {dollar_index} | FRED (Federal Reserve Economic Data) |
 | 美元兑人民币 | {usd_cny} | 中国人民银行/Wind |
-| 北向净流入 | {north_net_flow}亿元 | 东方财富/沪深港通 |
+| 北向成交总额 | {north_turnover}亿元 | 东方财富/沪深港通 |
+| 北向7日日均成交额 | {north_7d_avg}亿元 | 东方财富/沪深港通 |
+| 北向7日环比变化 | {north_7d_change}% | 计算得出 |
 | TED利差 | {ted_spread}% | 纽约联储银行 (SOFR) / 美国财政部 (3个月美债) |
 
 **如果数据不一致，请提供正确数值。**
@@ -111,18 +113,51 @@ uv run python scripts/run_all.py --days 30 --output ./exchange_rate_data.json --
 
 ### 指标三：北向资金（权重25%）
 
-| 7日累计净流入 | 30日累计净流入 | 市场状态 | 得分区间 |
-|-------------|---------------|---------|---------|
-| > 300亿 | > 1000亿 | 大幅流入 | 80–100 |
-| 100–300亿 | 300–1000亿 | 温和流入 | 60–80 |
-| -100–100亿 | -300–300亿 | 中性 | 40–60 |
-| -300– -100亿 | -1000– -300亿 | 温和流出 | 20–40 |
-| < -300亿 | < -1000亿 | 大幅流出 | 0–20 |
+#### 指标说明
+
+- **成交总额**：北向资金当日买入与卖出的总量（反应外资参与活跃度）
+- **7日日均成交额**：近7个交易日成交总额的均值（平滑波动）
+- **环比变化**：本期7日日均成交额较上期（上周同期）的变化率
+
+#### 数据获取
+
+通过东方财富 `RPT_MUTUAL_DEALAMT` 接口获取近30日日频成交总额：
+
+- 接口：`https://datacenter-web.eastmoney.com/securities/api/data/v1/get`
+- 字段：`NF_DEAL_AMT`（北向成交总额）、`SSC_DEAL_AMT`（沪股通）、`ST_DEAL_AMT`（深股通）
+- 单位：东方财富返回万元，需除以10000转为亿元
+
+```python
+# 计算公式（由 run_all.py 执行）
+7日成交总额 = sum(近7日 NF_DEAL_AMT) / 10000
+7日日均成交额 = 7日成交总额 / 7
+上期7日成交总额 = sum(第8-14日 NF_DEAL_AMT) / 10000
+环比变化 = (本期7日日均 - 上期7日日均) / 上期7日日均 × 100%
+```
+
+**注意**：`RPT_MUTUAL_NETINFLOW_STATISTICS` 的 `TOTAL_INFLOW_BOTH` 是"成交净买额"（买卖轧差），不等于本页所用的"成交总额"，请勿混淆。
+
+#### 评分标准
+
+| 7日日均成交额环比变化 | 市场状态 | 得分区间 |
+|---------------------|---------|---------|
+| 环比+20%以上 | 外资极度活跃，积极关注A股 | 70–100 |
+| 环比+5%～+20% | 外资活跃度提升 | 60–70 |
+| 环比-5%～+5% | 活跃度平稳 | 40–60 |
+| 环比-5%～-20% | 外资参与度下降 | 20–40 |
+| 环比-20%以下 | 外资大幅观望，参与度显著回落 | 0–20 |
+
+**解读：**
+- 北向成交总额环比大幅增长表明外资对A股参与度显著提升
+- 成交总额较净流入更能反映外资真实的交易活跃程度
+- 7日均线可平滑单日异常波动，更准确反映趋势
 
 **辅助加减分：**
-- 北向连续10个交易日净流入：+5分
-- 北向连续5个交易日净流出：-5分
-- 单日净流入 > 100亿：+3分
+- 成交总额创近30日新高：+5分
+- 连续3日成交额递减：-3分
+- 单日成交额超100亿：+3分
+
+---
 
 ### 指标四：TED利差（权重25%）
 
@@ -167,31 +202,28 @@ uv run python scripts/run_all.py --days 30 --output ./exchange_rate_data.json --
 
 ```json
 {
-  "fetched_at": "2026-05-07T10:30:00Z",
+  "fetched_at": "2026-05-12T10:30:00Z",
   "period_days": 30,
   "data": {
     "exchange_rates": {
-      "dollar_index": { "value": 104.5, "date": "2026-05-06" },
-      "usd_cny": { "value": 7.15, "date": "2026-05-06" }
+      "dollar_index": { "value": 104.5, "date": "2026-05-09" },
+      "usd_cny": { "value": 7.15, "date": "2026-05-09" }
     },
     "fund_flow": {
-      "north": { "net_flow_yi": -168.7, "change_pct": -1.7, "date": "2026-05-06" },
-      "south": { "net_flow_yi": -374.2, "change_pct": -1.48, "date": "2026-05-06" },
+      "north": {
+        "turnover_yi": 61.87,
+        "date": "2026-05-12"
+      },
+      "south": {},
       "north_cumulative": {
-        "cum_7d": -1688.7,
-        "cum_30d": -3418.9,
-        "consecutive_positive_days": 0,
-        "consecutive_negative_days": 5,
-        "max_inflow": 296.5,
-        "max_outflow": -521.3
+        "turnover_7d_sum_yi": 373.18,
+        "turnover_7d_avg_yi": 53.31,
+        "turnover_7d_change_pct": 12.5
       },
       "south_cumulative": {
-        "cum_7d": -1844.3,
-        "cum_30d": -6031.7,
-        "consecutive_positive_days": 2,
-        "consecutive_negative_days": 0,
-        "max_inflow": 150.2,
-        "max_outflow": -412.8
+        "turnover_7d_sum_yi": 89.08,
+        "turnover_7d_avg_yi": 12.73,
+        "turnover_7d_change_pct": -3.2
       }
     },
     "ted_spread": {
@@ -260,13 +292,13 @@ uv run python scripts/run_all.py --days 30 --output ./exchange_rate_data.json --
 exchange-rate-skill/
 ├── SKILL.md                    # 本文件（评分框架）
 ├── scripts/
-│   ├── fetch_common.py         # 公共工具（logging、缓存、类型转换）
-│   ├── fetch_exchange_rates.py # 美元指数+人民币汇率（FRED）
-│   ├── fetch_fund_flow.py      # 北向/南向资金（AKShare）
-│   ├── fetch_ted_spread.py    # TED利差（FRED）
-│   └── run_all.py             # 统一入口（数据抓取）
+│   ├── fetch_common.py         # 公共工具（logging、HTTP会话、类型转换）
+│   ├── fetch_exchange_rates.py # 美元指数+人民币汇率（FRED + Yahoo Finance）
+│   ├── fetch_north_flow.py     # 北向资金成交总额（东方财富 RPT_MUTUAL_DEALAMT）
+│   ├── fetch_ted_spread.py     # TED利差（FRED SOFR/DGS3MO）
+│   └── run_all.py              # 统一入口（数据抓取）
 ├── exchange_rates.csv          # 汇率数据
-├── fund_flow.csv               # 资金流向数据
+├── fund_flow.csv               # 资金流向数据（北向成交总额 + 日频明细）
 ├── ted_spread.csv              # TED利差数据
 ├── exchange_rate_data.json     # JSON 数据输出
 └── exchange_rate_report.md     # 文本报告（数据层面）

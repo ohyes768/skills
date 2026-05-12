@@ -58,10 +58,7 @@ def build_session() -> requests.Session:
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
             "Accept": "application/json, text/plain, */*",
         })
-        adapter = requests.adapters.HTTPAdapter(
-            max_retries=3,
-            backoff_factor=0.5,
-        )
+        adapter = requests.adapters.HTTPAdapter(max_retries=3)
         _session.mount("http://", adapter)
         _session.mount("https://", adapter)
     return _session
@@ -157,23 +154,31 @@ def read_cache(indicator: str, date_key: str) -> dict[str, Any] | None:
 
 
 def load_env_file(env_path: str | Path | None = None) -> None:
-    """加载 .env 环境变量文件"""
-    if env_path is None:
-        env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+    """加载 .env 环境变量文件。
+
+    默认依次加载（后者覆盖同名变量）：
+    1. monorepo 根目录 .env（scripts 上两级再上级的父目录）
+    2. 本 skill 根目录 .env（与 SKILL.md「项目根目录」一致）
+    """
+    paths: list[Path]
+    if env_path is not None:
+        paths = [Path(env_path)]
     else:
-        env_path = Path(env_path)
+        skill_root = Path(__file__).resolve().parent.parent
+        monorepo_root = skill_root.parent
+        paths = [monorepo_root / ".env", skill_root / ".env"]
 
-    if not env_path.exists():
-        return
-
-    with open(env_path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" in line:
-                key, value = line.split("=", 1)
-                os.environ[key.strip()] = value.strip()
+    for path in paths:
+        if not path.exists():
+            continue
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                    os.environ[key.strip()] = value.strip()
 
 
 # ============ 数据工具 ============
