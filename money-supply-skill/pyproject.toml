@@ -1,0 +1,9 @@
+[project]
+name = "money-supply-skill"
+version = "0.1.0"
+description = "货币供应与流动性分析 Skill"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.28.0",
+    "akshare>=1.18.0",
+]

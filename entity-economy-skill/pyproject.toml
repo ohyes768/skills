@@ -1,0 +1,9 @@
+[project]
+name = "entity-economy-skill"
+version = "0.1.0"
+description = "实体经济强弱判断 Skill"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.28.0",
+    "akshare>=1.18.0",
+]

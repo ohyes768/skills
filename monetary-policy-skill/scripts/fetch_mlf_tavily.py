@@ -159,11 +159,24 @@ def call_deepseek_extract(
         return {"mlf_net_injection_yi": None}
 
 
-def determine_published_mlf_month(target_month: str, today: datetime) -> str:
+def determine_published_mlf_month(target_month: str | None, today: datetime) -> str:
     """MLF 每月2-3日发布上月数据，自动降级到已发布的月份。
 
     例如：2026-04-21 查询 2026-04，应降级为 2026-03（3月数据在4月2-3日已发布）。
+
+    Args:
+        target_month: 目标月份（YYYY-MM），如果为 None 则默认查上月
+        today: 当前日期
     """
+    if target_month is None:
+        # 默认查上月（MLF 发布规则：每月2-3日发布上月数据）
+        today_date = today.date()
+        month = today_date.month
+        year = today_date.year
+        if month <= 1:
+            target_month = f"{year - 1}-12"
+        else:
+            target_month = f"{year}-{month - 1:02d}"
     req_year, req_month = map(int, target_month.split("-"))
     next_month = req_month + 1
     next_year = req_year
@@ -182,7 +195,7 @@ def determine_published_mlf_month(target_month: str, today: datetime) -> str:
 MLF_PUBLISH_DAY = 3
 
 
-def fetch_mlf_monthly_net(target_month: str) -> dict[str, Any]:
+def fetch_mlf_monthly_net(target_month: str | None) -> dict[str, Any]:
     """两步搜索获取 MLF 净投放。内部自动处理月份降级。"""
     # 自动判断数据是否已发布，未发布则降级到上月
     actual_month = determine_published_mlf_month(target_month, datetime.now())
