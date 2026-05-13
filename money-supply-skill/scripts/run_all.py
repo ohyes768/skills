@@ -103,7 +103,7 @@ def build_payload(requested_month: str | None = None) -> dict:
                 "m1_yoy": latest_m1m2.get("m1_yoy"),
                 "m0_yi": latest_m1m2.get("m0"),
                 "m0_yoy": latest_m1m2.get("m0_yoy"),
-                "m1_m2_spread": latest_m1m2.get("m1_m2_spread"),
+                "m2_m1_spread": latest_m1m2.get("m2_m1_spread"),
             },
             "history": m1m2_hist.get("historical", []),
             "source": "eastmoney",

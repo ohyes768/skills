@@ -26,7 +26,7 @@ def build_result_template() -> dict[str, Any]:
         "m1_yoy": None,               # M1 同比（%）
         "m0": None,                   # M0 余额（亿元）
         "m0_yoy": None,               # M0 同比（%）
-        "m1_m2_spread": None,         # M1-M2剪刀差（百分点）
+        "m2_m1_spread": None,         # M2-M1剪刀差（百分点）
         "unit": "亿元/百分比",
         "month": None,
         "source_url": EM_REFERER,
@@ -116,7 +116,7 @@ def fetch_m1_m2_latest(session: requests.Session) -> dict[str, Any]:
     result["m0_yoy"] = float(m0_yoy) if m0_yoy else None
 
     if m1_yoy is not None and m2_yoy is not None:
-        result["m1_m2_spread"] = round(m1_yoy - m2_yoy, 2)
+        result["m2_m1_spread"] = round(m2_yoy - m1_yoy, 2)
 
     result["month"] = parse_month_from_date(record.get("REPORT_DATE"))
     result["published_at"] = record.get("REPORT_DATE", "")[:10]
@@ -124,13 +124,13 @@ def fetch_m1_m2_latest(session: requests.Session) -> dict[str, Any]:
 
     LOGGER.info(
         "M1/M2 数据获取成功 [%s]: M1=%s(同比%s%%), M2=%s(同比%s%%), "
-        "M1-M2剪刀差=%s%%",
+        "M2-M1剪刀差=%s%%",
         result["month"],
         _fmt_yi(result["m1"]),
         result["m1_yoy"],
         _fmt_yi(result["m2"]),
         result["m2_yoy"],
-        result["m1_m2_spread"],
+        result["m2_m1_spread"],
     )
 
     return result
@@ -201,7 +201,7 @@ def fetch_m1_m2_historical(
             "m0_yoy": float(rec.get("FREE_CASH_SAME")) if rec.get("FREE_CASH_SAME") else None,
         }
         if entry["m1_yoy"] is not None and entry["m2_yoy"] is not None:
-            entry["m1_m2_spread"] = round(entry["m1_yoy"] - entry["m2_yoy"], 2)
+            entry["m2_m1_spread"] = round(entry["m2_yoy"] - entry["m1_yoy"], 2)
         historical.append(entry)
 
     return {
