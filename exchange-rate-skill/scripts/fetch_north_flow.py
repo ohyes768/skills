@@ -264,10 +264,10 @@ def fetch_north_deal_amt(session: requests.Session, days: int = 30) -> pd.DataFr
         if not trade_date:
             continue
 
-        # 单位从万元转为亿元
-        nf_deal = (rec.get("NF_DEAL_AMT") or 0) / 10000
-        ssc_deal = (rec.get("SSC_DEAL_AMT") or 0) / 10000
-        st_deal = (rec.get("ST_DEAL_AMT") or 0) / 10000
+        # 单位从百万元转为亿元
+        nf_deal = (rec.get("NF_DEAL_AMT") or 0) / 100
+        ssc_deal = (rec.get("SSC_DEAL_AMT") or 0) / 100
+        st_deal = (rec.get("ST_DEAL_AMT") or 0) / 100
 
         daily_records.append({
             "date": pd.to_datetime(trade_date).date(),

@@ -1,21 +1,23 @@
 {
-  "fetched_at": "2026-05-12T17:00:30Z",
+  "fetched_at": "2026-05-12T17:48:30Z",
   "period_days": 7,
   "data": {
     "exchange_rates": {},
     "fund_flow": {
       "north": {
-        "turnover_yi": 40.55,
+        "turnover_yi": 4055.43,
         "date": "2026-05-12"
       },
       "south": {},
       "north_cumulative": {
-        "turnover_7d_sum_yi": 268.51,
-        "turnover_7d_avg_yi": 38.36,
+        "turnover_7d_sum_yi": 26850.52,
+        "turnover_7d_avg_yi": 3835.79,
         "turnover_7d_change_pct": 0.0
       },
       "south_cumulative": {}
     }
   },
-  "errors": []
+  "errors": [
+    "ted_spread: FRED_API_KEY 未设置。请选择以下方式之一：\n  1. 设置环境变量: export FRED_API_KEY=your_key\n  2. 在项目根目录创建 .env 文件，内容: FRED_API_KEY=your_key\n  3. 从 https://fred.stlouisfed.org/docs/api/api_key.html 申请 API Key"
+  ]
 }
