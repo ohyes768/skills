@@ -22,7 +22,7 @@ sys.path.insert(0, str(_SCRIPT_DIR))
 
 from fetch_common import setup_logging, LOGGER, to_iso_now
 from fetch_margin import fetch_margin_ohlc, fetch_margin_history
-from fetch_volume import fetch_market_volume, fetch_turnover_rate, fetch_history
+from fetch_volume import fetch_market_volume, fetch_turnover_rate
 
 
 def fetch_all(days: int = 5) -> dict[str, Any]:
@@ -60,10 +60,9 @@ def fetch_all(days: int = 5) -> dict[str, Any]:
         LOGGER.info("获取融资融券余额...")
         result["margin"] = fetch_margin_ohlc()
 
-        # 4. 历史数据（用于环比计算和趋势判断）
+        # 4. 历史数据（用于趋势判断和融资加分）
         LOGGER.info("获取历史数据用于趋势分析...")
         result["history"] = {
-            "volume": fetch_history(days * 2),
             "margin": fetch_margin_history(days * 2),
         }
 

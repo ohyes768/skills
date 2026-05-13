@@ -4,12 +4,18 @@
 数据来源：
   - 上交所: https://www.sse.com.cn/market/stockdata/overview/day/
   - 深交所: https://www.szse.cn/market/overview/index.html
+
+时间规则（重要）：
+  - 盘中（09:30-15:00）：上交所API查昨日数据（当日数据未生成）
+  - 收盘后（15:00-24:00）：查今日数据
+  - 节假日/非交易日：自动使用最近交易日
 """
 
 from __future__ import annotations
 
+import json
 import re
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from typing import Any
 
 import requests
@@ -22,6 +28,46 @@ _szse_cache: dict[str, Any] = {}
 
 # 请求会话（复用连接）
 _session = requests.Session()
+
+
+def get_trade_date() -> str:
+    """
+    根据当前时间返回正确的查询日期
+    - 交易日 09:30-15:00：查上一交易日（上交所当日数据未生成）
+    - 交易日 15:00-24:00：查今日数据
+    - 非交易日：自动往前找最近交易日
+    """
+    now = datetime.now()
+    current_time = now.time()
+    is_weekend = now.weekday() >= 5
+
+    if is_weekend:
+        # 找最近交易日
+        date = now
+        while date.weekday() >= 5:
+            date -= timedelta(days=1)
+        return date.strftime("%Y-%m-%d")
+
+    # 交易日判断
+    if time(9, 30) <= current_time <= time(15, 0):
+        # 盘中：查上一交易日
+        date = now - timedelta(days=1)
+        while date.weekday() >= 5:
+            date -= timedelta(days=1)
+        LOGGER.info("当前盘中，查询最近交易日: %s", date.strftime("%Y-%m-%d"))
+        return date.strftime("%Y-%m-%d")
+    else:
+        # 16点后或更早：查今天
+        return now.strftime("%Y-%m-%d")
+
+
+def _normalize_lbmc(s: str) -> str:
+    """规范化深交所板块名称，修复损坏的Unicode代理对"""
+    # 移除 &nbsp; HTML实体
+    s = s.replace("&nbsp;", "").strip()
+    # 移除单独的高代理字符（如 \udc81）
+    s = re.sub(r"[\udc81-\udfff]", "", s)
+    return s
 
 
 def _clean_number(s: str | None) -> float | None:
@@ -300,7 +346,7 @@ def fetch_szse_volume(trade_date: str | None = None) -> dict[str, Any]:
         chinext = 0.0
 
         for item in data[0]["data"]:
-            lbmc = item.get("lbmc", "")
+            lbmc = _normalize_lbmc(item.get("lbmc", ""))
             cjje = _clean_number(item.get("cjje")) or 0.0
 
             if "主板A股" in lbmc:
@@ -350,6 +396,11 @@ def fetch_both_exchanges(trade_date: str | None = None) -> dict[str, Any]:
             "fetched_at": "ISO时间"
         }
     """
+    # 自动判断正确的交易日期
+    if trade_date is None:
+        trade_date = get_trade_date()
+        LOGGER.info("自动选择交易日期: %s", trade_date)
+
     sse_data = fetch_sse_volume(trade_date)
     szse_data = fetch_szse_volume(trade_date)
 
@@ -360,14 +411,14 @@ def fetch_both_exchanges(trade_date: str | None = None) -> dict[str, Any]:
         "date": sse_data.get("date") or trade_date,
         "sh_amount_yi": sse_data.get("total_amount_yi"),
         "sz_amount_yi": szse_data.get("total_amount_yi"),
-        "total_amount_yi": round(sh + sz, 2) if sh and sz else None,
+        "total_amount_yi": round(sh + sz, 2) if (sh or sz) else None,
         "source": "exchange_official",
         "details": {
             "sse": sse_data,
             "szse": szse_data,
         },
         "fetched_at": to_iso_now(),
-        "status": "ok" if (sse_data.get("status") == "ok" and szse_data.get("status") == "ok") else "failed",
+        "status": "ok" if (sse_data.get("status") == "ok" and szse_data.get("status") == "ok") else "partial",
     }
 
 

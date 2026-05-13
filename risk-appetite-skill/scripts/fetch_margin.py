@@ -102,15 +102,15 @@ def fetch_margin_ohlc(force: bool = False) -> dict[str, Any]:
         latest_sz = df_sz.iloc[-1]
 
         # 提取数据（单位：万元 -> 亿元）
-        rzye_sh = to_float(latest_sh[col_map_sh["rzye"]]) / 10000
-        rzje_sh = to_float(latest_sh[col_map_sh["rzje"]]) / 10000
-        rqye_sh = to_float(latest_sh[col_map_sh["rqye"]]) / 10000
-        rqje_sh = to_float(latest_sh[col_map_sh["rqje"]]) / 10000
+        rzye_sh = to_float(latest_sh[col_map_sh["rzye"]]) / 100000000
+        rzje_sh = to_float(latest_sh[col_map_sh["rzje"]]) / 100000000
+        rqye_sh = to_float(latest_sh[col_map_sh["rqye"]]) / 100000000
+        rqje_sh = to_float(latest_sh[col_map_sh["rqje"]]) / 100000000
 
-        rzye_sz = to_float(latest_sz[col_map_sz["rzye"]]) / 10000
-        rzje_sz = to_float(latest_sz[col_map_sz["rzje"]]) / 10000
-        rqye_sz = to_float(latest_sz[col_map_sz["rqye"]]) / 10000
-        rqje_sz = to_float(latest_sz[col_map_sz["rqje"]]) / 10000
+        rzye_sz = to_float(latest_sz[col_map_sz["rzye"]]) / 100000000
+        rzje_sz = to_float(latest_sz[col_map_sz["rzje"]]) / 100000000
+        rqye_sz = to_float(latest_sz[col_map_sz["rqye"]]) / 100000000
+        rqje_sz = to_float(latest_sz[col_map_sz["rqje"]]) / 100000000
 
         # 合计（亿元）
         rzye = rzye_sh + rzye_sz
@@ -125,10 +125,10 @@ def fetch_margin_ohlc(force: bool = False) -> dict[str, Any]:
         rzdf = None
         rqdf = None
         if prev_sh is not None and prev_sz is not None:
-            prev_rzye_sh = to_float(prev_sh[col_map_sh["rzye"]]) / 10000
-            prev_rzye_sz = to_float(prev_sz[col_map_sz["rzye"]]) / 10000
-            prev_rqye_sh = to_float(prev_sh[col_map_sh["rqye"]]) / 10000
-            prev_rqye_sz = to_float(prev_sz[col_map_sz["rqye"]]) / 10000
+            prev_rzye_sh = to_float(prev_sh[col_map_sh["rzye"]]) / 100000000
+            prev_rzye_sz = to_float(prev_sz[col_map_sz["rzye"]]) / 100000000
+            prev_rqye_sh = to_float(prev_sh[col_map_sh["rqye"]]) / 100000000
+            prev_rqye_sz = to_float(prev_sz[col_map_sz["rqye"]]) / 100000000
 
             prev_rzye = prev_rzye_sh + prev_rzye_sz
             prev_rqye = prev_rqye_sh + prev_rqye_sz
@@ -216,10 +216,10 @@ def fetch_margin_history(days: int = 20) -> list[dict[str, Any]]:
 
             date_str = str(row_sh[col_map_sh["date"]])[:10]
 
-            rzye_sh = to_float(row_sh[col_map_sh["rzye"]]) / 10000
-            rzye_sz = to_float(row_sz[col_map_sz["rzye"]]) / 10000
-            rqye_sh = to_float(row_sh[col_map_sh["rqye"]]) / 10000
-            rqye_sz = to_float(row_sz[col_map_sz["rqye"]]) / 10000
+            rzye_sh = to_float(row_sh[col_map_sh["rzye"]]) / 100000000
+            rzye_sz = to_float(row_sz[col_map_sz["rzye"]]) / 100000000
+            rqye_sh = to_float(row_sh[col_map_sh["rqye"]]) / 100000000
+            rqye_sz = to_float(row_sz[col_map_sz["rqye"]]) / 100000000
 
             results.append({
                 "date": date_str,
