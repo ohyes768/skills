@@ -125,13 +125,13 @@ uv run python scripts/run_all.py --days 30 --output ./exchange_rate_data.json --
 
 - 接口：`https://datacenter-web.eastmoney.com/securities/api/data/v1/get`
 - 字段：`NF_DEAL_AMT`（北向成交总额）、`SSC_DEAL_AMT`（沪股通）、`ST_DEAL_AMT`（深股通）
-- 单位：东方财富返回万元，需除以10000转为亿元
+- 单位：东方财富返回**百万元**，需除以100转为亿元
 
 ```python
 # 计算公式（由 run_all.py 执行）
-7日成交总额 = sum(近7日 NF_DEAL_AMT) / 10000
+7日成交总额 = sum(近7日 NF_DEAL_AMT) / 100
 7日日均成交额 = 7日成交总额 / 7
-上期7日成交总额 = sum(第8-14日 NF_DEAL_AMT) / 10000
+上期7日成交总额 = sum(第8-14日 NF_DEAL_AMT) / 100
 环比变化 = (本期7日日均 - 上期7日日均) / 上期7日日均 × 100%
 ```
 
@@ -235,6 +235,10 @@ uv run python scripts/run_all.py --days 30 --output ./exchange_rate_data.json --
   "errors": []
 }
 ```
+
+**单位说明：**
+- `turnover_yi` / `turnover_7d_sum_yi` / `turnover_7d_avg_yi`：**亿元**（北向成交总额已从东方财富百万元转换为亿元）
+- 其他汇率指标：美元指数（无单位）、美元兑人民币（汇率）、TED利差（%）
 
 ### 完整分析报告格式（LLM 生成）
 
