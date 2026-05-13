@@ -2,7 +2,7 @@
 """
 汇率数据获取脚本 - exchange-rate-skill
 数据源:
-- 美元指数 (DXY): Yahoo Finance (DX-Y.NYB)
+- 美元指数: FRED (DTWEXBGS) - 名义广义美元指数，2006年1月=100
 - 美元兑人民币: FRED (DEXCHUS)
 """
 
@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import yfinance as yf
 from fredapi import Fred
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -29,7 +28,7 @@ from fetch_common import (
 logger = get_logger(__name__)
 
 # 数据源配置
-DXY_TICKER = "DX-Y.NYB"  # Yahoo Finance 美元指数 ticker
+FRED_DOLLAR_INDEX_CODE = "DTWEXBGS"  # FRED 美元指数（广义贸易加权，2006年1月=100）
 FRED_USD_CNY_CODE = "DEXCHUS"  # FRED 美元兑人民币
 
 # CSV 文件列名映射
@@ -53,32 +52,33 @@ def get_fred_service() -> Fred:
     return Fred(api_key=fred_api_key)
 
 
-def fetch_dxy_from_yahoo(days: int = 30) -> pd.Series:
-    """从 Yahoo Finance 获取 DXY 美元指数
+def fetch_dollar_index_from_fred(fred: Fred, start_date: pd.Timestamp, end_date: pd.Timestamp) -> pd.Series:
+    """从 FRED 获取 DTWEXBGS 美元指数
 
     Args:
-        days: 回溯天数
+        fred: FRED 服务实例
+        start_date: 起始日期
+        end_date: 结束日期
 
     Returns:
-        pd.Series，index 为日期，value 为收盘价
+        pd.Series，index 为日期，value 为指数值
     """
     try:
-        ticker = yf.Ticker(DXY_TICKER)
-        hist = ticker.history(period=f"{days}d")
-        if hist.empty:
-            logger.warning("DXY 历史数据为空")
+        logger.info(f"获取 dollar_index ({FRED_DOLLAR_INDEX_CODE})...")
+        series = fred.get_series(
+            FRED_DOLLAR_INDEX_CODE,
+            observation_start=start_date,
+            observation_end=end_date,
+        )
+        if series is not None and not series.empty:
+            series.name = "dollar_index"
+            logger.info(f"成功获取 dollar_index，共 {len(series)} 条记录")
+            return series
+        else:
+            logger.warning("dollar_index 数据为空")
             return pd.Series(dtype="float64")
-
-        # 重命名为简单日期索引（去除时区）
-        hist.index = hist.index.tz_localize(None)
-        hist.index = hist.index.normalize()
-
-        series = hist["Close"]
-        series.name = "dollar_index"
-        logger.info(f"成功获取 DXY，共 {len(series)} 条记录")
-        return series
     except Exception as e:
-        logger.error(f"获取 DXY 失败: {e}")
+        logger.error(f"获取 dollar_index 失败: {e}")
         return pd.Series(dtype="float64")
 
 
@@ -114,19 +114,19 @@ def fetch_exchange_rates(
 
     result = {}
 
-    # 1. DXY 美元指数 - Yahoo Finance
-    dxy_series = fetch_dxy_from_yahoo(days=days)
-    if not dxy_series.empty:
-        # 过滤日期范围
-        dxy_series = dxy_series[(dxy_series.index >= start_date) & (dxy_series.index <= end_date)]
-        result["dollar_index"] = dxy_series
-
-    # 2. 美元兑人民币 - FRED
+    # 获取 FRED 服务（美元指数和美元兑人民币都从 FRED 获取）
     fred_api_key = os.environ.get("FRED_API_KEY")
     if not fred_api_key:
-        logger.warning("未设置 FRED_API_KEY，跳过美元兑人民币数据")
+        logger.warning("未设置 FRED_API_KEY，无法获取汇率数据")
     else:
         fred = Fred(api_key=fred_api_key)
+
+        # 1. 美元指数 - FRED DTWEXBGS
+        dollar_index_series = fetch_dollar_index_from_fred(fred, start_date, end_date)
+        if not dollar_index_series.empty:
+            result["dollar_index"] = dollar_index_series
+
+        # 2. 美元兑人民币 - FRED DEXCHUS
         try:
             logger.info(f"获取 usd_cny ({FRED_USD_CNY_CODE})...")
             series = fred.get_series(

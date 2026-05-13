@@ -51,7 +51,7 @@ uv run python scripts/run_all.py --days 30 --output ./exchange_rate_data.json --
 
 | 指标 | 数据源 | 接口/代码 |
 |------|--------|-----------|
-| 美元指数 | Yahoo Finance | DX-Y.NYB |
+| 美元指数 | FRED | DTWEXBGS |
 | 美元兑人民币 | FRED | DEXCHUS |
 | 北向资金（成交总额） | 东方财富 | RPT_MUTUAL_DEALAMT → NF_DEAL_AMT |
 | 南向资金 | 东方财富 | 暂不处理 |
@@ -86,17 +86,19 @@ uv run python scripts/run_all.py --days 30 --output ./exchange_rate_data.json --
 
 ### 指标一：美元指数（权重30%）
 
-| 美元指数 | 市场状态 | 得分区间 |
-|---------|---------|---------|
-| > 110 | 强势美元 | 70–100 |
-| 100–110 | 中性偏强 | 50–70 |
-| 95–100 | 中性 | 40–50 |
-| 90–95 | 中性偏弱 | 30–40 |
-| < 90 | 弱势美元 | 0–30 |
+**数据说明：** DTWEXBGS 为美联储发布的名义广义美元指数（包含人民币等26种货币），以 2006年1月 为基期设 100，历史极值可达 125-130（2022年加息周期峰值）。截至2025年末约为 118-121，120 已是较高水平，对应 DXY 时代约 105 左右的美元强度。
+
+| DTWEXBGS 指数值 | 市场状态 | 得分区间 |
+|----------------|---------|---------|
+| > 125 | 强势美元（极强） | 70–100 |
+| 115–125 | 中性偏强（偏强） | 50–70 |
+| 105–115 | 中性 | 40–50 |
+| 95–105 | 中性偏弱 | 30–40 |
+| < 95 | 弱势美元 | 0–30 |
 
 **解读：**
-- 美元指数 > 105 表示资金避险情绪较强
-- 美元指数 < 95 表示风险偏好较高
+- DTWEXBGS > 120 表示资金避险情绪较强
+- DTWEXBGS < 105 表示风险偏好较高
 
 ### 指标二：人民币汇率（权重20%）
 
@@ -125,13 +127,13 @@ uv run python scripts/run_all.py --days 30 --output ./exchange_rate_data.json --
 
 - 接口：`https://datacenter-web.eastmoney.com/securities/api/data/v1/get`
 - 字段：`NF_DEAL_AMT`（北向成交总额）、`SSC_DEAL_AMT`（沪股通）、`ST_DEAL_AMT`（深股通）
-- 单位：东方财富返回**百万元**，需除以100转为亿元
+- 单位：东方财富返回万元，需除以10000转为亿元
 
 ```python
 # 计算公式（由 run_all.py 执行）
-7日成交总额 = sum(近7日 NF_DEAL_AMT) / 100
+7日成交总额 = sum(近7日 NF_DEAL_AMT) / 10000
 7日日均成交额 = 7日成交总额 / 7
-上期7日成交总额 = sum(第8-14日 NF_DEAL_AMT) / 100
+上期7日成交总额 = sum(第8-14日 NF_DEAL_AMT) / 10000
 环比变化 = (本期7日日均 - 上期7日日均) / 上期7日日均 × 100%
 ```
 
@@ -236,10 +238,6 @@ uv run python scripts/run_all.py --days 30 --output ./exchange_rate_data.json --
 }
 ```
 
-**单位说明：**
-- `turnover_yi` / `turnover_7d_sum_yi` / `turnover_7d_avg_yi`：**亿元**（北向成交总额已从东方财富百万元转换为亿元）
-- 其他汇率指标：美元指数（无单位）、美元兑人民币（汇率）、TED利差（%）
-
 ### 完整分析报告格式（LLM 生成）
 
 ```markdown
@@ -297,7 +295,7 @@ exchange-rate-skill/
 ├── SKILL.md                    # 本文件（评分框架）
 ├── scripts/
 │   ├── fetch_common.py         # 公共工具（logging、HTTP会话、类型转换）
-│   ├── fetch_exchange_rates.py # 美元指数+人民币汇率（FRED + Yahoo Finance）
+│   ├── fetch_exchange_rates.py # 美元指数+人民币汇率（FRED DTWEXBGS/DEXCHUS）
 │   ├── fetch_north_flow.py     # 北向资金成交总额（东方财富 RPT_MUTUAL_DEALAMT）
 │   ├── fetch_ted_spread.py     # TED利差（FRED SOFR/DGS3MO）
 │   └── run_all.py              # 统一入口（数据抓取）
