@@ -125,3 +125,25 @@ cd ~/.claude/skills/exchange-rate-skill && uv run python scripts/run_all.py --da
 - 若央行货币政策受外部制约（如人民币贬值压力大），即使经济差也可能无法宽松，此时应结合外汇维度手动调整货币政策的实际友好度。
 - 风险偏好维度的极端值（如<15的极度恐慌）往往预示短期流动性冲击，债市可能先跌后涨，可在解读中说明路径复杂性。
 - 建议每月/每周定期生成综合评估报告，跟踪指数变化趋势。
+
+## 飞书通知
+
+分析完成后，可将结果发送到飞书机器人：
+
+```python
+from feishu_webhook import FeishuConfig, FeishuWebhook
+
+config = FeishuConfig(
+    webhook_url="https://open.feishu.cn/open-apis/bot/v2/hook/91ad4ddf-8e4a-44fb-887f-bd2683c3bd5c",
+    secret="XRb47KmQRL6KbFMmZdFp2f"
+)
+client = FeishuWebhook(config)
+
+# 发送Markdown格式的分析结果
+client.send_markdown(content="**债市宏观友好度指数：65**\n\n- 货币政策：友好（宽松）\n- 经济运行：对债市友好（偏冷）\n...")
+```
+
+或通过CLI：
+```bash
+python -m feishu_webhook.main --url "https://..." --secret "XRb..." --md "**内容**"
+```

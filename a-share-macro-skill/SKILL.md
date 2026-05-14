@@ -139,3 +139,25 @@ cd {skill_dir}/inflation-skill && uv run python scripts/run_all.py --days 30
 - 如果某个维度得分处于极端区间（如风险偏好>90或<10），即使其他维度中性，也需在结论中特别警告
 - 极端情绪往往是市场拐点信号
 - 建议每月/每周定期生成综合评估报告，跟踪指数变化趋势
+
+## 飞书通知
+
+分析完成后，可将结果发送到飞书机器人：
+
+```python
+from feishu_webhook import FeishuConfig, FeishuWebhook
+
+config = FeishuConfig(
+    webhook_url="https://open.feishu.cn/open-apis/bot/v2/hook/91ad4ddf-8e4a-44fb-887f-bd2683c3bd5c",
+    secret="XRb47KmQRL6KbFMmZdFp2f"
+)
+client = FeishuWebhook(config)
+
+# 发送Markdown格式的分析结果
+client.send_markdown(content="**A股宏观友好度指数：72**\n\n- 货币政策：友好（宽松）\n- 信用扩张：友好（扩张）\n...")
+```
+
+或通过CLI：
+```bash
+python -m feishu_webhook.main --url "https://..." --secret "XRb..." --md "**内容**"
+```
