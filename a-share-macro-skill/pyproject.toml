@@ -1,0 +1,9 @@
+[project]
+name = "a-share-macro-skill"
+version = "0.1.0"
+description = "A股宏观环境综合评估Skill"
+requires-python = ">=3.11"
+dependencies = ["requests>=2.31"]
+
+[tool.uv]
+detached = true

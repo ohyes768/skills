@@ -1,0 +1,9 @@
+[project]
+name = "bond-market-overview-skill"
+version = "0.1.0"
+description = "债市宏观环境综合评估Skill"
+requires-python = ">=3.11"
+dependencies = ["requests>=2.31"]
+
+[tool.uv]
+detached = true
