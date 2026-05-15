@@ -103,7 +103,7 @@ def save_incremental(
         LOGGER.info("  %s: 无新数据，跳过写入", csv_path.name)
         return 0
 
-    fieldnames = list(df_rows[0].keys())
+    fieldnames = list(df_rows[0].keys()) + ["fetched_at", "indicator"]
     fetched_at = to_iso_now()
 
     for row in new_rows:

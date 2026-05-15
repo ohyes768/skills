@@ -106,19 +106,25 @@ def call_deepseek_extract(
 ---"""
 
     prompt = f"""你是宏观数据抽取助手。
-用户需要查找 "{target_month}" 月的 MLF（中期借贷便利）净投放数据。
+用户需要查找 **"{target_month}"** 月的 MLF（中期借贷便利）净投放数据。
 
-以下是搜索到的多篇文章，请仔细阅读，找出**明确报道 "{target_month}" 月 MLF 净投放数据**的那篇文章。
+以下是搜索到的多篇文章，请仔细阅读，找出**明确以 "{target_month}" 月 MLF 净投放为主题的主要报道**。
 
 {articles_context}
 
+【关键判断规则】
+1. 文章必须是**关于 "{target_month}" 月 MLF 操作的主要报道**，而不仅仅是提到该月数据
+2. 如果一篇文章主要在讲其他月份的 MLF 操作，只是顺便提及 "{target_month}" 的数据作为对比或引用，则不能选
+3. 如果文章标题或正文中出现"**{target_month}月MLF**"的明确表述（如"3月MLF净投放"、"{target_month}月MLF操作"），且正文围绕该月展开，则可选
+4. 警惕！文章中可能出现"{target_month}"之前的月份数据（如"1月MLF续作加量7000亿"），这通常是背景介绍，不是目标月份数据
+
 要求：
-1. 找出内容中**明确提到 "{target_month}" 月 MLF 净投放**的文章
-2. 从中找到 MLF 净投放数值（单位：亿元）
+1. 确认文章是关于 "{target_month}" 月 MLF 的主要报道，才提取数值
+2. 如果文章不符合要求，返回 matched_article_index=null
 3. 只返回 JSON，不要任何解释
 4. 格式：{{"matched_article_index": 文章序号(1/2/3), "mlf_net_injection_yi": 数值, "source_url": "链接", "source_publish_date": "YYYY-MM-DD", "article_title": "文章标题"}}
 
-如果没有任何一篇提到 "{target_month}" 月的 MLF，返回：{{"matched_article_index": null, "mlf_net_injection_yi": null}}"""
+如果没有任何一篇是关于 "{target_month}" 月 MLF 的主要报道，返回：{{"matched_article_index": null, "mlf_net_injection_yi": null}}"""
 
     messages = [{"role": "user", "content": prompt}]
     body = {
@@ -207,8 +213,8 @@ def fetch_mlf_monthly_net(target_month: str | None) -> dict[str, Any]:
     result["requested_month"] = requested_month
     result["actual_month"] = actual_month
 
-    if not month_is_valid(target_month):
-        result["error"] = f"month 格式错误: {target_month}"
+    if not month_is_valid(actual_month):
+        result["error"] = f"month 格式错误: {actual_month}"
         return result
 
     load_env_file()
