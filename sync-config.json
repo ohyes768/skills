@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "link_type": "junction",
+  "registry": "skill-agent-matrix.html",
+  "agents": {
+    "claudecode": {
+      "enabled": true,
+      "description": "Claude Code 编码 agent",
+      "skills_dir": "~/.claude/skills"
+    },
+    "codex": {
+      "enabled": true,
+      "description": "Codex 编码 agent",
+      "skills_dir": "~/.codex/skills"
+    },
+    "openclaw": {
+      "enabled": false,
+      "description": "研究/金融场景 agent",
+      "skills_dir": "~/.openclaw/workspace/skills"
+    },
+    "hermes": {
+      "enabled": false,
+      "description": "开发工程场景 agent",
+      "skills_dir": "~/.hermes/skills",
+      "skills_subdir": "software-development",
+      "source_repo": "~/agent/hermes-agent/skills"
+    }
+  }
+}

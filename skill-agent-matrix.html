@@ -128,10 +128,12 @@
 
 
 
+
+
 {
   "version": "2.1",
   "updated": "2026-08-12",
-  "description": "个人 skill 库注册表（本 HTML 为唯一数据源）。source=local 为本仓库自研；source=github 为外部仓库 skill。github 版本号可用 scripts/sync_github_versions.py 刷新写回本文件",
+  "description": "个人 skill 库注册表（本 HTML 为唯一数据源）。source=local 为本仓库自研；source=github 为外部仓库 skill。github 版本号用 scripts/sync_github_versions.py 刷新，安装用 scripts/sync_github_skills.py",
   "themes": {
     "finance-macro": {
       "label": "金融宏观分析",
@@ -326,7 +328,7 @@
       "theme": "design",
       "status": "active",
       "summary": "UI/UX 设计智能：67 风格、96 配色、57 字体搭配、13 技术栈",
-      "latest_version": "v2.9.0",
+      "latest_version": "v2.14.1",
       "head_commit": "abb7f2f",
       "checked_at": "2026-08-12"
     },
@@ -346,38 +348,43 @@
       "status": "active",
       "summary": "游资（UZI）A股/港股/美股分析：22维数据×180条量化规则×17种机构分析方法，全免费数据源、零 API key",
       "latest_version": "v3.9.1",
-      "head_commit": "0acf251",
+      "head_commit": "7bc779d",
       "checked_at": "2026-08-12"
     }
   ],
   "agents": {
     "openclaw": {
       "description": "研究/金融场景 agent",
+      "skills_dir": "~/.openclaw/workspace/skills",
       "skills": [
         "UZI-Skill"
       ]
     },
     "hermes": {
       "description": "开发工程场景 agent",
+      "skills_dir": "~/.hermes/skills",
+      "skills_subdir": "software-development",
+      "source_repo": "~/agent/hermes-agent/skills",
       "skills": [
-        "UZI-Skill",
-        "git-commit-push"
+        "UZI-Skill"
       ]
     },
     "claudecode": {
       "description": "Claude Code 编码 agent",
+      "skills_dir": "~/.claude/skills",
       "skills": [
         "git-commit-push"
       ]
     },
     "codex": {
       "description": "Codex 编码 agent",
-      "skills": [
-        "git-commit-push"
-      ]
+      "skills_dir": "~/.codex/skills",
+      "skills": []
     }
   }
 }
+
+
 
 
 
@@ -589,6 +596,18 @@ function esc(s) {
   );
 }
 
+function agentPathLine(agentKey) {
+  const cfg = REGISTRY.agents[agentKey];
+  if (!cfg || !cfg.skills_dir) return "";
+  let path = cfg.skills_dir;
+  if (cfg.skills_subdir) path += "/" + cfg.skills_subdir;
+  let html = `<span style="font-size:11px;display:block;margin-top:4px;font-family:Consolas,monospace">${esc(path)}</span>`;
+  if (cfg.source_repo) {
+    html += `<span style="font-size:11px;display:block;font-family:Consolas,monospace;color:var(--muted)">源: ${esc(cfg.source_repo)}</span>`;
+  }
+  return html;
+}
+
 function skillBadge(s) {
   if (s.status === "empty") return '<span class="badge empty">待补充</span>';
   if (s.source === "github") return '<span class="badge github">github</span>';
@@ -679,6 +698,7 @@ function refreshUI() {
       <span>${esc(a)}</span>
       <b>${(assign[a] || []).length} <span style="font-size:12px;color:var(--muted)">/ ${active}</span></b>
       <span>${esc((REGISTRY.agents[a] && REGISTRY.agents[a].description) || "（新增 agent）")}</span>
+      ${agentPathLine(a)}
     </div>`).join("");
 
   document.querySelectorAll(".col-all").forEach((cb) => {

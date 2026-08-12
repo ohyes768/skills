@@ -13,8 +13,9 @@ dev-workflow/         # 开发工程（5 个）
 agent-methods/        # Agent 方法论（5 个）
 design/               # UI/UX 设计（1 个）
 knowledge/            # 知识管理（1 个）
-scripts/              # 维护脚本（sync_github_versions.py 刷新外部 skill 版本）
-registry.json         # skill 注册表 + agent 安装配置（唯一事实来源）
+scripts/              # 维护脚本（sync_skills.py 同步自研 skill；sync_github_versions.py 刷新版本；sync_github_skills.py 安装 GitHub skill）
+sync-config.json      # 各 agent 的 skills 目录路径与 enabled 开关
+skill-agent-matrix.html  # skill 注册表 + agent 勾选矩阵（唯一事实来源）
 README.md
 ```
 
@@ -79,6 +80,27 @@ README.md
 
 **刷新远程版本**：运行 `python scripts/sync_github_versions.py`（可加 `--dry-run` 只看不写）。脚本对每个 github skill 执行 `git ls-remote`（不走 GitHub REST API、无需 token），取最新 tag 回填 `latest_version`/`head_commit`/`checked_at`，并打印版本变化；无 tag 的仓库以 `HEAD@<短commit>` 记录。刷新后请同步更新上表的「最新版本/检查日期」列。
 
+**安装/更新到各 agent**：在 `skill-agent-matrix.html` 勾选 skill × agent 后，编辑 `sync-config.json` 开启对应 agent 的 `enabled`，然后运行：
+
+```bash
+python scripts/sync_github_versions.py   # 可选：先刷新注册表中的最新版本
+python scripts/sync_github_skills.py     # clone/pull 到缓存并 junction 到各 agent
+python scripts/sync_github_skills.py --status
+python scripts/sync_github_skills.py --skill UZI-Skill --agent openclaw
+```
+
+GitHub skill 缓存在本仓库 `.cache/github-skills/<skill名>/`，各 agent 以 **junction** 指向缓存（若注册表有 `path` 字段则指向子目录）。更新时重新运行 `sync_github_versions.py` + `sync_github_skills.py` 即可 checkout 到最新 tag。
+
+**同步自研 skill 到各 agent**（`source: local`）：
+
+```bash
+python scripts/sync_skills.py          # 同步所有已启用 agent
+python scripts/sync_skills.py --status # 查看 junction 状态
+python scripts/sync_skills.py --skill git-commit-push --agent claudecode
+```
+
+自研 skill 以 **junction** 链接到各 agent 的 `skills_dir`，改仓库即生效。`openclaw` / `hermes` 等 agent 路径在 `sync-config.json` 中配置，启用前请确认目录存在或允许脚本自动创建父目录。
+
 ## Agent 安装配置
 
 以 [registry.json](registry.json) 的 `agents` 字段为准。agent 安装 skill 时：读取 `agents.<agent名>.skills` 中的 skill 名称列表 → 在 `skills` 数组中按 `name` 匹配 → 根据 `source` 安装：`local` 按 `dir` 路径取本仓库目录；`github` 按 `repo`（必要时加 `path`）从远程仓库安装。
@@ -94,16 +116,17 @@ README.md
 
 **新增自研 skill**：
 1. 在对应主题目录下创建 `<skill名>/SKILL.md`；
-2. 在 `registry.json` 的 `skills` 数组中登记条目（source: local，name/dir/theme/status/summary）；
-3. 如需安装，把 name 加入相应 agent 的 `skills` 列表；
-4. 更新本 README 的分类索引表。
+2. 在 `skill-agent-matrix.html` 的 `registry-data` 中登记条目（source: local，name/dir/theme/status/summary）；
+3. 在矩阵页面勾选要安装到的 agent；
+4. 运行 `python scripts/sync_skills.py`；
+5. 更新本 README 的分类索引表。
 
 **新增外部 skill**：
-1. 在 `registry.json` 的 `skills` 数组中登记条目：`source: "github"`，并填写 `repo`（GitHub 仓库地址）、可选 `path`（skill 目录子路径）、theme/status/summary；
+1. 在 `skill-agent-matrix.html` 的 `registry-data` 中登记条目：`source: "github"`，并填写 `repo`、可选 `path`、theme/status/summary；
 2. 运行 `python scripts/sync_github_versions.py` 自动回填 `latest_version` 等版本字段；
-3. 如需安装，把 name 加入相应 agent 的 `skills` 列表；
+3. 在矩阵页面勾选要安装到的 agent，运行 `python scripts/sync_github_skills.py`；
 4. 在本 README「外部 skill（GitHub）」表中加一行。
 
-**新增 agent**：在 `registry.json` 的 `agents` 中添加条目（description + skills 列表），并同步 README 的 Agent 安装配置表。
+**新增 agent**：在 `sync-config.json` 添加路径与 `enabled`，并在 `skill-agent-matrix.html` 的 `agents` 中添加条目（description + skills 列表），同步 README。
 
 **修改 skill 清单**：skill 的启用/停用通过条目的 `status`（active / empty / deprecated）标识，deprecated 的 skill 应从各 agent 的 skills 列表中移除。
