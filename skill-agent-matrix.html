@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skill × Agent 安装配置矩阵</title>
+<style>
+  :root {
+    --bg: #f5f6fa;
+    --card: #ffffff;
+    --border: #e2e5ec;
+    --text: #1f2430;
+    --muted: #7a8299;
+    --accent: #4f6ef7;
+    --accent-soft: #eef1fe;
+    --green: #2fae72;
+    --orange: #e08f2e;
+    --purple: #8a5cf6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+  }
+  .container { max-width: 1100px; margin: 0 auto; }
+  header {
+    display: flex; flex-wrap: wrap; align-items: center;
+    justify-content: space-between; gap: 12px; margin-bottom: 16px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); font-size: 13px; margin: 0; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    border: 1px solid var(--border); background: var(--card); color: var(--text);
+    padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 13px;
+    transition: all .15s;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { filter: brightness(1.08); color: #fff; }
+  button.danger:hover { border-color: #d64545; color: #d64545; }
+  .save-state {
+    align-self: center; font-size: 12px; padding: 6px 12px; border-radius: 8px;
+    background: #e8f6ee; color: var(--green); border: 1px solid #c6e8d5; white-space: nowrap;
+  }
+  .save-state.pending { background: #f0f2f8; color: var(--muted); border-color: var(--border); }
+  .save-state.error { background: #fdeaea; color: #d64545; border-color: #f2c9c9; }
+  .banner {
+    background: #fff8e8; border: 1px solid #f0d9a0; color: #8a6116;
+    border-radius: 10px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px;
+    line-height: 1.6;
+  }
+  .banner code { background: #f5edd8; padding: 1px 6px; border-radius: 4px; }
+  .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .stat-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 16px; font-size: 13px; min-width: 130px;
+  }
+  .stat-card b { display: block; font-size: 20px; margin-top: 2px; color: var(--accent); }
+  .stat-card span { color: var(--muted); }
+  .theme-block {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; margin-bottom: 18px; overflow: hidden;
+  }
+  .theme-header {
+    padding: 12px 18px; background: var(--accent-soft);
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  }
+  .theme-header h2 { margin: 0; font-size: 15px; }
+  .theme-header small { color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    padding: 8px 10px; text-align: center; color: var(--muted);
+    font-weight: 600; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--card);
+  }
+  thead th.skill-col { text-align: left; padding-left: 18px; }
+  tbody td { padding: 10px; border-bottom: 1px solid var(--border); text-align: center; vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #fafbff; }
+  td.skill-col { text-align: left; padding-left: 18px; }
+  .skill-name { font-weight: 600; font-family: Consolas, monospace; }
+  .skill-summary { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .skill-summary a { color: var(--accent); text-decoration: none; }
+  .badge {
+    display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 10px;
+    margin-left: 8px; vertical-align: 1px;
+  }
+  .badge.empty { background: #fdf1e0; color: var(--orange); }
+  .badge.local { background: #e8f6ee; color: var(--green); }
+  .badge.github { background: #f1ebfe; color: var(--purple); }
+  input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent); cursor: pointer; }
+  tr.disabled td { opacity: .45; }
+  tr.disabled input[type="checkbox"] { pointer-events: none; }
+  .agent-del { margin-left: 4px; color: #d64545; cursor: pointer; font-weight: 400; }
+  .toast {
+    position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: #23273a; color: #fff; padding: 9px 20px; border-radius: 8px;
+    font-size: 13px; opacity: 0; transition: all .25s; pointer-events: none; z-index: 99;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  footer { color: var(--muted); font-size: 12px; margin-top: 6px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <h1>Skill × Agent 安装配置矩阵</h1>
+      <p class="subtitle">所有数据都在本文件里。<b>首次保存</b>需选一次本 HTML 文件（浏览器安全限制）；之后改勾选会<b>自动保存</b>，不用再弹框。</p>
+    </div>
+    <div class="toolbar">
+      <span id="save-hint" class="save-state pending" hidden>有未保存的修改</span>
+      <button id="btn-save" class="primary">保存</button>
+      <button id="btn-add-agent">+ agent</button>
+      <button id="btn-reset" class="danger">撤销修改</button>
+    </div>
+  </header>
+  <div class="stats" id="stats"></div>
+  <div id="table-area"></div>
+  <footer id="footer"></footer>
+</div>
+<div class="toast" id="toast"></div>
+<script type="application/json" id="registry-data">
+
+
+
+{
+  "version": "2.1",
+  "updated": "2026-08-12",
+  "description": "个人 skill 库注册表（本 HTML 为唯一数据源）。source=local 为本仓库自研；source=github 为外部仓库 skill。github 版本号可用 scripts/sync_github_versions.py 刷新写回本文件",
+  "themes": {
+    "finance-macro": {
+      "label": "金融宏观分析",
+      "description": "A股/债市宏观环境评估及其子指标 skill（货币政策、货币供应、实体经济、通胀、风险偏好、汇率）"
+    },
+    "dev-workflow": {
+      "label": "开发工程",
+      "description": "git 提交、文档更新、环境初始化等开发流程工具"
+    },
+    "agent-methods": {
+      "label": "Agent 方法论",
+      "description": "思考模式、访谈澄清、skill 创建与发现等提升 agent 工作质量的方法类 skill"
+    },
+    "design": {
+      "label": "UI/UX 设计",
+      "description": "前端界面设计智能（风格、配色、字体、图表）"
+    },
+    "knowledge": {
+      "label": "知识管理",
+      "description": "笔记、知识点的采集与整理"
+    },
+    "finance-quant": {
+      "label": "量化股票分析",
+      "description": "量化规则、机构视角的股票/证券分析类 skill（含外部 GitHub 开源 skill）"
+    }
+  },
+  "skills": [
+    {
+      "name": "macro-overview-skill",
+      "source": "local",
+      "dir": "finance-macro/a-share-macro-skill",
+      "theme": "finance-macro",
+      "status": "active",
+      "summary": "A股宏观环境综合评估，计算宏观友好度指数",
+      "depends_on": [
+        "monetary-policy-skill",
+        "money-supply-skill",
+        "entity-economy-skill",
+        "inflation-skill",
+        "risk-appetite-skill",
+        "exchange-rate-skill"
+      ]
+    },
+    {
+      "name": "bond-market-overview-skill",
+      "source": "local",
+      "dir": "finance-macro/bond-market-overview-skill",
+      "theme": "finance-macro",
+      "status": "active",
+      "summary": "债市宏观环境综合评估，计算债市宏观友好度指数",
+      "depends_on": [
+        "monetary-policy-skill",
+        "money-supply-skill",
+        "entity-economy-skill",
+        "inflation-skill",
+        "risk-appetite-skill",
+        "exchange-rate-skill"
+      ]
+    },
+    {
+      "name": "monetary-policy-skill",
+      "source": "local",
+      "dir": "finance-macro/monetary-policy-skill",
+      "theme": "finance-macro",
+      "status": "active",
+      "summary": "央行货币政策松紧立场分析（DR007/LPR/MLF）"
+    },
+    {
+      "name": "money-supply-skill",
+      "source": "local",
+      "dir": "finance-macro/money-supply-skill",
+      "theme": "finance-macro",
+      "status": "active",
+      "summary": "货币供应与流动性分析（M1/M2/社融/信用扩张）"
+    },
+    {
+      "name": "entity-economy-skill",
+      "source": "local",
+      "dir": "finance-macro/entity-economy-skill",
+      "theme": "finance-macro",
+      "status": "active",
+      "summary": "实体经济强弱判断（PMI/工业增加值/固投/社零）"
+    },
+    {
+      "name": "inflation-skill",
+      "source": "local",
+      "dir": "finance-macro/inflation-skill",
+      "theme": "finance-macro",
+      "status": "active",
+      "summary": "通胀分析（CPI/PPI/核心CPI）"
+    },
+    {
+      "name": "risk-appetite-skill",
+      "source": "local",
+      "dir": "finance-macro/risk-appetite-skill",
+      "theme": "finance-macro",
+      "status": "active",
+      "summary": "A股市场风险偏好分析（成交额/换手率/两融余额）"
+    },
+    {
+      "name": "exchange-rate-skill",
+      "source": "local",
+      "dir": "finance-macro/exchange-rate-skill",
+      "theme": "finance-macro",
+      "status": "active",
+      "summary": "汇率与资金流向分析（美元指数/人民币/北向南向/TED利差）"
+    },
+    {
+      "name": "git-commit-push",
+      "source": "local",
+      "dir": "dev-workflow/git-commit-push",
+      "theme": "dev-workflow",
+      "status": "active",
+      "summary": "自动生成规范 commit message 并推送远程"
+    },
+    {
+      "name": "update-doc",
+      "source": "local",
+      "dir": "dev-workflow/update-doc",
+      "theme": "dev-workflow",
+      "status": "active",
+      "summary": "根据项目改动自动更新需求/设计/API 等相关文档"
+    },
+    {
+      "name": "python-venv",
+      "source": "local",
+      "dir": "dev-workflow/python-venv",
+      "theme": "dev-workflow",
+      "status": "active",
+      "summary": "Python 项目虚拟环境初始化（无 frontmatter，纯说明型）"
+    },
+    {
+      "name": "docker-cn-source",
+      "source": "local",
+      "dir": "dev-workflow/docker-cn-source",
+      "theme": "dev-workflow",
+      "status": "active",
+      "summary": "Docker/Docker Compose 国内镜像源配置"
+    },
+    {
+      "name": "windows-bat-dev",
+      "source": "local",
+      "dir": "dev-workflow/windows-bat-dev",
+      "theme": "dev-workflow",
+      "status": "active",
+      "summary": "Windows 批处理脚本开发最佳实践（无 frontmatter，纯说明型）"
+    },
+    {
+      "name": "think",
+      "source": "local",
+      "dir": "agent-methods/think-skill",
+      "theme": "agent-methods",
+      "status": "active",
+      "summary": "深度分析模式，先思考后行动，分析阶段不生成业务代码"
+    },
+    {
+      "name": "ask-me",
+      "source": "local",
+      "dir": "agent-methods/ask-me",
+      "theme": "agent-methods",
+      "status": "active",
+      "summary": "任务前深度访谈，消除歧义并生成技术规范文档"
+    },
+    {
+      "name": "skill-creator",
+      "source": "local",
+      "dir": "agent-methods/skill-creator",
+      "theme": "agent-methods",
+      "status": "active",
+      "summary": "创建、改进、评测 skill"
+    },
+    {
+      "name": "find-skills",
+      "source": "local",
+      "dir": "agent-methods/find-skills",
+      "theme": "agent-methods",
+      "status": "active",
+      "summary": "帮助用户发现并安装 agent skill"
+    },
+    {
+      "name": "claudeception",
+      "source": "local",
+      "dir": "agent-methods/claudeception",
+      "theme": "agent-methods",
+      "status": "empty",
+      "summary": "空目录，待补充内容"
+    },
+    {
+      "name": "ui-ux-pro-max",
+      "source": "github",
+      "repo": "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill",
+      "theme": "design",
+      "status": "active",
+      "summary": "UI/UX 设计智能：67 风格、96 配色、57 字体搭配、13 技术栈",
+      "latest_version": "v2.9.0",
+      "head_commit": "abb7f2f",
+      "checked_at": "2026-08-12"
+    },
+    {
+      "name": "notes-deal",
+      "source": "local",
+      "dir": "knowledge/notes-deal",
+      "theme": "knowledge",
+      "status": "active",
+      "summary": "自动整理浏览器插件采集的知识点并按关键词分类"
+    },
+    {
+      "name": "UZI-Skill",
+      "source": "github",
+      "repo": "https://github.com/wbh604/UZI-Skill",
+      "theme": "finance-quant",
+      "status": "active",
+      "summary": "游资（UZI）A股/港股/美股分析：22维数据×180条量化规则×17种机构分析方法，全免费数据源、零 API key",
+      "latest_version": "v3.9.1",
+      "head_commit": "0acf251",
+      "checked_at": "2026-08-12"
+    }
+  ],
+  "agents": {
+    "openclaw": {
+      "description": "研究/金融场景 agent",
+      "skills": [
+        "UZI-Skill"
+      ]
+    },
+    "hermes": {
+      "description": "开发工程场景 agent",
+      "skills": [
+        "UZI-Skill",
+        "git-commit-push"
+      ]
+    },
+    "claudecode": {
+      "description": "Claude Code 编码 agent",
+      "skills": [
+        "git-commit-push"
+      ]
+    },
+    "codex": {
+      "description": "Codex 编码 agent",
+      "skills": [
+        "git-commit-push"
+      ]
+    }
+  }
+}
+
+
+
+</script>
+<script>
+const REGISTRY_DATA_ID = "registry-data";
+const IDB_NAME = "skill-agent-matrix";
+const HANDLE_KEY = "html-file";
+
+let REGISTRY = null;
+let extraAgents = [];
+let assign = {};
+let fileHandle = null;
+let dirty = false;
+let saveTimer = null;
+let autoSaveReady = false;
+
+function openIDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("handles");
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function idbGet(db, key) {
+  return new Promise((resolve, reject) => {
+    const req = db.transaction("handles", "readonly").objectStore("handles").get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function idbPut(db, key, value) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("handles", "readwrite");
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.objectStore("handles").put(value, key);
+  });
+}
+
+async function storeFileHandle(handle) {
+  try {
+    await idbPut(await openIDB(), HANDLE_KEY, handle);
+  } catch (e) { /* ignore */ }
+}
+
+async function restoreFileHandle() {
+  if (!("showOpenFilePicker" in window)) return;
+  try {
+    const handle = await idbGet(await openIDB(), HANDLE_KEY);
+    if (!handle) return;
+    fileHandle = handle;
+    if ((await handle.queryPermission({ mode: "readwrite" })) === "granted") {
+      autoSaveReady = true;
+      updateLinkHint(true);
+    }
+  } catch (e) { /* ignore */ }
+}
+
+function updateLinkHint(linked) {
+  const el = document.getElementById("save-hint");
+  if (linked && autoSaveReady) {
+    el.hidden = false;
+    el.classList.remove("pending", "error");
+    el.textContent = dirty ? "已关联文件 · 有未保存修改" : "已关联文件 · 改勾选自动保存";
+  } else if (dirty) {
+    el.hidden = false;
+    el.classList.add("pending");
+    el.textContent = "有未保存的修改 · 点保存并选文件";
+  } else {
+    el.hidden = true;
+  }
+}
+
+function skillNames() {
+  return new Set(REGISTRY.skills.map((s) => s.name));
+}
+
+function agentsList() {
+  return [...Object.keys(REGISTRY.agents), ...extraAgents];
+}
+
+function loadRegistryFromDOM() {
+  REGISTRY = JSON.parse(document.getElementById(REGISTRY_DATA_ID).textContent);
+}
+
+function initAssignFromRegistry() {
+  assign = {};
+  for (const a of Object.keys(REGISTRY.agents)) {
+    assign[a] = [...(REGISTRY.agents[a].skills || [])];
+  }
+}
+
+function markDirty() {
+  dirty = true;
+  updateLinkHint(autoSaveReady);
+  scheduleAutoSave();
+}
+
+function markClean() {
+  dirty = false;
+  updateLinkHint(autoSaveReady);
+}
+
+function isChecked(agent, skillName) {
+  return !!(assign[agent] && assign[agent].includes(skillName));
+}
+
+function setChecked(agent, skillName, checked) {
+  const set = new Set(assign[agent] || []);
+  if (checked) set.add(skillName);
+  else set.delete(skillName);
+  assign[agent] = [...set];
+  markDirty();
+  refreshUI();
+}
+
+function buildExport() {
+  const out = JSON.parse(JSON.stringify(REGISTRY));
+  const valid = skillNames();
+  const agentsOut = {};
+  for (const a of agentsList()) {
+    agentsOut[a] = {
+      description: (REGISTRY.agents[a] && REGISTRY.agents[a].description) || "",
+      skills: (assign[a] || []).filter((n) => valid.has(n)),
+    };
+  }
+  out.agents = agentsOut;
+  out.updated = new Date().toISOString().slice(0, 10);
+  return out;
+}
+
+function patchHtml(html, data) {
+  const json = JSON.stringify(data, null, 2);
+  const re = /(<script\s+type="application\/json"\s+id="registry-data"\s*>\s*)([\s\S]*?)(\s*<\/script>)/;
+  if (!re.test(html)) throw new Error("未找到 registry-data 数据块");
+  return html.replace(re, "$1\n" + json + "\n$3");
+}
+
+function applySaved(data) {
+  REGISTRY = data;
+  extraAgents = [];
+  initAssignFromRegistry();
+  document.getElementById(REGISTRY_DATA_ID).textContent = "\n" + JSON.stringify(data, null, 2) + "\n";
+  markClean();
+}
+
+function scheduleAutoSave() {
+  if (!autoSaveReady || !fileHandle) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => saveHtml(true), 500);
+}
+
+async function ensureFileAccess(needPicker) {
+  if (!window.showOpenFilePicker) return false;
+  if (!fileHandle && needPicker) {
+    [fileHandle] = await window.showOpenFilePicker({
+      types: [{ description: "HTML", accept: { "text/html": [".html"] } }],
+      multiple: false,
+    });
+    await storeFileHandle(fileHandle);
+  }
+  if (!fileHandle) return false;
+  let perm = await fileHandle.queryPermission({ mode: "readwrite" });
+  if (perm !== "granted") perm = await fileHandle.requestPermission({ mode: "readwrite" });
+  if (perm !== "granted") throw new Error("没有写入权限");
+  autoSaveReady = true;
+  return true;
+}
+
+async function saveHtml(silent) {
+  const data = buildExport();
+  try {
+    if (await ensureFileAccess(!silent)) {
+      const html = patchHtml(await (await fileHandle.getFile()).text(), data);
+      const w = await fileHandle.createWritable();
+      await w.write(html);
+      await w.close();
+      applySaved(data);
+      updateLinkHint(true);
+      if (!silent) showToast("已保存");
+      return;
+    }
+  } catch (e) {
+    if (e.name === "AbortError") return;
+    showToast("保存失败：" + e.message);
+    return;
+  }
+
+  if (silent) return;
+  const html = patchHtml("<!DOCTYPE html>\n" + document.documentElement.outerHTML, data);
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "skill-agent-matrix.html";
+  a.click();
+  URL.revokeObjectURL(url);
+  applySaved(data);
+  showToast("已下载 HTML，用它覆盖原文件");
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
+}
+
+function skillBadge(s) {
+  if (s.status === "empty") return '<span class="badge empty">待补充</span>';
+  if (s.source === "github") return '<span class="badge github">github</span>';
+  return '<span class="badge local">local</span>';
+}
+
+function skillMeta(s) {
+  if (s.source !== "github") return esc(s.summary || "");
+  const ver = [s.latest_version, s.head_commit, s.checked_at].filter(Boolean).join(" · ");
+  return (
+    esc(s.summary || "") +
+    ' · <a href="' + esc(s.repo) + '" target="_blank">' + esc(s.repo) + "</a>" +
+    (ver ? " · " + esc(ver) : "")
+  );
+}
+
+function render() {
+  const area = document.getElementById("table-area");
+  area.innerHTML = "";
+  const agents = agentsList();
+
+  for (const [themeKey, theme] of Object.entries(REGISTRY.themes)) {
+    const skills = REGISTRY.skills.filter((s) => s.theme === themeKey);
+    if (!skills.length) continue;
+    const block = document.createElement("div");
+    block.className = "theme-block";
+    block.innerHTML = `
+      <div class="theme-header">
+        <h2>${esc(theme.label || themeKey)}</h2>
+        <small>${esc(theme.description || "")} · ${skills.length} 个 skill</small>
+      </div>
+      <table>
+        <thead><tr>
+          <th class="skill-col">Skill</th>
+          ${agents.map((a) => `
+            <th>${esc(a)}${extraAgents.includes(a) ? `<span class="agent-del" data-del-agent="${esc(a)}">×</span>` : ""}
+              <input type="checkbox" class="col-all" data-agent="${esc(a)}">
+            </th>`).join("")}
+        </tr></thead>
+        <tbody>
+          ${skills.map((s) => `
+            <tr class="${s.status === "empty" ? "disabled" : ""}">
+              <td class="skill-col">
+                <div class="skill-name">${esc(s.name)}${skillBadge(s)}</div>
+                <div class="skill-summary">${skillMeta(s)}</div>
+              </td>
+              ${agents.map((a) => `
+                <td><input type="checkbox" class="cell-cb" data-agent="${esc(a)}" data-skill="${esc(s.name)}"
+                  ${isChecked(a, s.name) ? "checked" : ""} ${s.status === "empty" ? "disabled" : ""}></td>`).join("")}
+            </tr>`).join("")}
+        </tbody>
+      </table>`;
+    area.appendChild(block);
+  }
+
+  area.querySelectorAll(".cell-cb").forEach((cb) => {
+    cb.addEventListener("change", () => setChecked(cb.dataset.agent, cb.dataset.skill, cb.checked));
+  });
+  area.querySelectorAll(".col-all").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      const agent = cb.dataset.agent;
+      cb.closest("table").querySelectorAll(`.cell-cb[data-agent='${agent}']`).forEach((cell) => {
+        if (!cell.disabled && cell.checked !== cb.checked) {
+          cell.checked = cb.checked;
+          setChecked(agent, cell.dataset.skill, cb.checked);
+        }
+      });
+      refreshUI();
+    });
+  });
+  area.querySelectorAll(".agent-del").forEach((el) => {
+    el.addEventListener("click", () => {
+      const a = el.dataset.delAgent;
+      if (!confirm(`移除 agent 列「${a}」？`)) return;
+      extraAgents = extraAgents.filter((x) => x !== a);
+      delete assign[a];
+      markDirty();
+      render();
+    });
+  });
+  refreshUI();
+}
+
+function refreshUI() {
+  const active = REGISTRY.skills.filter((s) => s.status === "active").length;
+  document.getElementById("stats").innerHTML = agentsList().map((a) => `
+    <div class="stat-card">
+      <span>${esc(a)}</span>
+      <b>${(assign[a] || []).length} <span style="font-size:12px;color:var(--muted)">/ ${active}</span></b>
+      <span>${esc((REGISTRY.agents[a] && REGISTRY.agents[a].description) || "（新增 agent）")}</span>
+    </div>`).join("");
+
+  document.querySelectorAll(".col-all").forEach((cb) => {
+    const agent = cb.dataset.agent;
+    const cells = [...cb.closest("table").querySelectorAll(`.cell-cb[data-agent='${agent}']`)].filter((c) => !c.disabled);
+    const n = cells.filter((c) => c.checked).length;
+    cb.checked = cells.length > 0 && n === cells.length;
+    cb.indeterminate = n > 0 && n < cells.length;
+  });
+
+  document.getElementById("footer").textContent =
+    `v${REGISTRY.version}（${REGISTRY.updated}）· ${REGISTRY.skills.length} 个 skill · agents：${agentsList().join(" / ")}`;
+}
+
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove("show"), 2400);
+}
+
+document.getElementById("btn-save").addEventListener("click", () => saveHtml(false));
+document.getElementById("btn-add-agent").addEventListener("click", () => {
+  const key = (prompt("新 agent 名称（英文，如 claudecode）：") || "").trim();
+  if (!key) return;
+  if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(key)) { showToast("名称格式不正确"); return; }
+  if (agentsList().includes(key)) { showToast("已存在"); return; }
+  extraAgents.push(key);
+  assign[key] = [];
+  markDirty();
+  render();
+});
+document.getElementById("btn-reset").addEventListener("click", () => {
+  loadRegistryFromDOM();
+  extraAgents = [];
+  initAssignFromRegistry();
+  markClean();
+  render();
+  showToast("已撤销未保存的修改");
+});
+
+loadRegistryFromDOM();
+initAssignFromRegistry();
+restoreFileHandle().then(render);
+
+</script>
+</body>
+</html>

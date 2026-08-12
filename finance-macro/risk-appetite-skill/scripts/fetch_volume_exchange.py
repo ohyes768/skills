@@ -1,0 +1,470 @@
+#!/usr/bin/env python3
+"""
+两市成交额爬虫 - 直接抓取沪深交易所官方数据
+数据来源：
+  - 上交所: https://www.sse.com.cn/market/stockdata/overview/day/
+  - 深交所: https://www.szse.cn/market/overview/index.html
+
+时间规则（重要）：
+  - 盘中（09:30-15:00）：上交所API查昨日数据（当日数据未生成）
+  - 收盘后（15:00-24:00）：查今日数据
+  - 节假日/非交易日：自动使用最近交易日
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from datetime import datetime, time, timedelta
+from typing import Any
+
+import requests
+
+from fetch_common import LOGGER, to_iso_now
+
+# 缓存
+_sse_cache: dict[str, Any] = {}
+_szse_cache: dict[str, Any] = {}
+
+# 请求会话（复用连接）
+_session = requests.Session()
+
+
+def get_trade_date() -> str:
+    """
+    根据当前时间返回正确的查询日期
+    - 交易日 09:30-15:59：查上一交易日（上交所当日数据未生成）
+    - 交易日 16:00后：查今日数据
+    - 非交易日：自动往前找最近交易日
+    """
+    now = datetime.now()
+    current_time = now.time()
+    is_weekend = now.weekday() >= 5
+
+    if is_weekend:
+        # 找最近交易日
+        date = now
+        while date.weekday() >= 5:
+            date -= timedelta(days=1)
+        return date.strftime("%Y-%m-%d")
+
+    # 交易日判断
+    if time(9, 30) <= current_time < time(16, 0):
+        # 盘中：查上一交易日
+        date = now - timedelta(days=1)
+        while date.weekday() >= 5:
+            date -= timedelta(days=1)
+        LOGGER.info("当前时间 %s < 16:00，查询最近交易日: %s", current_time, date.strftime("%Y-%m-%d"))
+        return date.strftime("%Y-%m-%d")
+    else:
+        # 16点后或更早：查今天
+        return now.strftime("%Y-%m-%d")
+
+
+def _normalize_lbmc(s: str) -> str:
+    """规范化深交所板块名称，修复损坏的Unicode代理对"""
+    # 移除 &nbsp; HTML实体
+    s = s.replace("&nbsp;", "").strip()
+    # 移除单独的高代理字符（如 \udc81）
+    s = re.sub(r"[\udc81-\udfff]", "", s)
+    return s
+
+
+def _clean_number(s: str | None) -> float | None:
+    """清洗数字字符串，移除逗号、空格等"""
+    if s is None:
+        return None
+    s = s.strip().replace(",", "").replace(" ", "")
+    if not s or s == "-" or s == "NaN":
+        return None
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return None
+
+
+def fetch_sse_turnover(trade_date: str | None = None) -> dict[str, Any]:
+    """
+    获取上交所换手率数据（加权平均）
+    自动回退：当日数据为空时使用上一交易日
+    """
+    if trade_date is None:
+        trade_date = datetime.now().strftime("%Y-%m-%d")
+
+    result: dict[str, Any] = {
+        "date": trade_date,
+        "turnover_rate": None,
+        "total_turnover_rate": None,
+        "source": "sse",
+        "fetched_at": to_iso_now(),
+        "status": "failed",
+    }
+
+    try:
+        url = "https://query.sse.com.cn/commonQuery.do"
+        params = {
+            "jsonCallBack": "cb",
+            "sqlId": "COMMON_SSE_SJ_GPSJ_CJGK_MRGK_C",
+            "PRODUCT_CODE": "01,02,03,11,17",
+            "type": "inParams",
+            "SEARCH_DATE": trade_date,
+        }
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://www.sse.com.cn/",
+        }
+
+        resp = _session.get(url, params=params, headers=headers, timeout=15)
+        resp.raise_for_status()
+
+        text = resp.text
+        json_str = text[text.index("(") + 1 : text.rindex(")")]
+        import json
+
+        data = json.loads(json_str)
+
+        if not data.get("result"):
+            LOGGER.warning("SSE换手率API返回空数据，尝试上一交易日")
+            # 尝试上一交易日
+            prev = datetime.strptime(trade_date, "%Y-%m-%d") - timedelta(days=1)
+            while prev.weekday() >= 5:
+                prev -= timedelta(days=1)
+            prev_str = prev.strftime("%Y-%m-%d")
+            LOGGER.info("回退到 %s 获取换手率", prev_str)
+            params_prev = dict(params, SEARCH_DATE=prev_str)
+            resp_prev = _session.get(url, params=params_prev, headers=headers, timeout=15)
+            resp_prev.raise_for_status()
+            text = resp_prev.text
+            json_str = text[text.index("(") + 1 : text.rindex(")")]
+            data = json.loads(json_str)
+            if data.get("result"):
+                trade_date = prev_str
+                result["date"] = prev_str
+            else:
+                return result
+
+        # 计算加权换手率（按成交额加权）
+        total_amount = 0.0
+        weighted_turnover = 0.0
+
+        for item in data["result"]:
+            trade_amt = _clean_number(item.get("TRADE_AMT")) or 0.0
+            to_rate = _clean_number(item.get("TOTAL_TO_RATE")) or 0.0
+            total_amount += trade_amt
+            weighted_turnover += trade_amt * to_rate
+
+        if total_amount > 0:
+            turnover_rate = weighted_turnover / total_amount
+            result.update({
+                "turnover_rate": round(turnover_rate, 4),
+                "total_turnover_rate": round(turnover_rate, 4),
+                "status": "ok",
+            })
+            LOGGER.info("上交所换手率获取成功: %.4f%% (日期=%s)", turnover_rate, trade_date)
+        else:
+            LOGGER.warning("SSE换手率计算失败：总成交额为0")
+
+    except Exception as exc:
+        LOGGER.warning("上交所换手率获取失败: %s", exc)
+        result["error"] = str(exc)
+
+    return result
+
+
+def fetch_sse_volume(trade_date: str | None = None) -> dict[str, Any]:
+    """
+    获取上交所成交额数据
+
+    参数:
+        trade_date: 交易日期，格式 YYYY-MM-DD，默认今日
+
+    返回:
+        {
+            "date": "2026-04-28",
+            "total_amount_yi": 11145.48,    # 沪市总成交额（亿元）
+            "main_board_yi": 7841.52,        # 主板A成交额
+            "main_board_b_yi": 2.42,         # 主板B成交额
+            "star_board_yi": 3301.54,        # 科创板成交额
+            "source": "sse",
+            "fetched_at": "ISO时间"
+        }
+    """
+    global _sse_cache
+
+    if trade_date is None:
+        trade_date = datetime.now().strftime("%Y-%m-%d")
+
+    # 读缓存
+    if trade_date in _sse_cache:
+        LOGGER.info("使用SSE缓存: %s", trade_date)
+        return _sse_cache[trade_date]
+
+    result: dict[str, Any] = {
+        "date": trade_date,
+        "total_amount_yi": None,
+        "main_board_yi": None,
+        "main_board_b_yi": None,
+        "star_board_yi": None,
+        "source": "sse",
+        "fetched_at": to_iso_now(),
+        "status": "failed",
+    }
+
+    try:
+        # 日期转 YYYYMMDD
+        date_str = trade_date.replace("-", "")
+
+        # 上交所 API
+        url = "https://query.sse.com.cn/commonQuery.do"
+        params = {
+            "jsonCallBack": "cb",
+            "sqlId": "COMMON_SSE_SJ_GPSJ_CJGK_MRGK_C",
+            "PRODUCT_CODE": "01,02,03,11,17",
+            "type": "inParams",
+            "SEARCH_DATE": trade_date,
+        }
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://www.sse.com.cn/",
+        }
+
+        resp = _session.get(url, params=params, headers=headers, timeout=15)
+        resp.raise_for_status()
+
+        # 解析 JSONP
+        text = resp.text
+        json_str = text[text.index("(") + 1 : text.rindex(")")]
+        import json
+
+        data = json.loads(json_str)
+
+        if not data.get("result"):
+            LOGGER.warning("SSE API 返回空数据: %s", data)
+            return result
+
+        # 汇总各板块成交额
+        total = 0.0
+        main_board = 0.0
+        main_board_b = 0.0
+        star_board = 0.0
+
+        for item in data["result"]:
+            product_code = item.get("PRODUCT_CODE", "")
+            trade_amt = _clean_number(item.get("TRADE_AMT")) or 0.0
+
+            if product_code == "01":
+                main_board = trade_amt
+                total += trade_amt
+            elif product_code == "02":
+                main_board_b = trade_amt
+                total += trade_amt
+            elif product_code == "03":
+                total += trade_amt
+            elif product_code == "11":
+                total += trade_amt
+            elif product_code == "17":
+                star_board = trade_amt
+                total += trade_amt
+
+        result.update({
+            "date": trade_date,
+            "total_amount_yi": round(total, 2),
+            "main_board_yi": round(main_board, 2),
+            "main_board_b_yi": round(main_board_b, 2),
+            "star_board_yi": round(star_board, 2),
+            "status": "ok",
+        })
+
+        _sse_cache[trade_date] = result
+        LOGGER.info("上交所成交额获取成功: %.2f亿元 (日期=%s)", total, trade_date)
+
+    except Exception as exc:
+        LOGGER.warning("上交所成交额获取失败: %s", exc)
+        result["error"] = str(exc)
+
+    return result
+
+
+def fetch_szse_volume(trade_date: str | None = None) -> dict[str, Any]:
+    """
+    获取深交所成交额数据
+
+    参数:
+        trade_date: 交易日期，格式 YYYY-MM-DD，默认今日
+
+    返回:
+        {
+            "date": "2026-04-28",
+            "total_amount_yi": 14245.86,     # 深市总成交额（亿元）
+            "main_board_a_yi": 7546.79,      # 主板A股成交额
+            "main_board_b_yi": 1.18,          # 主板B成交额
+            "chinext_yi": 6697.88,            # 创业板成交额
+            "source": "szse",
+            "fetched_at": "ISO时间"
+        }
+    """
+    global _szse_cache
+
+    if trade_date is None:
+        trade_date = datetime.now().strftime("%Y-%m-%d")
+
+    if trade_date in _szse_cache:
+        LOGGER.info("使用SZSE缓存: %s", trade_date)
+        return _szse_cache[trade_date]
+
+    result: dict[str, Any] = {
+        "date": trade_date,
+        "total_amount_yi": None,
+        "main_board_a_yi": None,
+        "main_board_b_yi": None,
+        "chinext_yi": None,
+        "source": "szse",
+        "fetched_at": to_iso_now(),
+        "status": "failed",
+    }
+
+    try:
+        url = "https://www.szse.cn/api/report/ShowReport/data"
+        params = {
+            "SHOWTYPE": "JSON",
+            "CATALOGID": "1803_sczm",
+            "TABKEY": "tab1",
+            "txtQueryDate": trade_date,
+        }
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://www.szse.cn/market/overview/index.html",
+        }
+
+        resp = _session.get(url, params=params, headers=headers, timeout=15)
+        resp.raise_for_status()
+
+        import json
+
+        data = json.loads(resp.text)
+
+        if not data or not data[0].get("data"):
+            LOGGER.warning("SZSE API 返回空数据")
+            return result
+
+        # 汇总股票类别成交额（主板A股+主板B股+创业板）
+        total = 0.0
+        main_board_a = 0.0
+        main_board_b = 0.0
+        chinext = 0.0
+
+        for item in data[0]["data"]:
+            lbmc = _normalize_lbmc(item.get("lbmc", ""))
+            cjje = _clean_number(item.get("cjje")) or 0.0
+
+            if "主板A股" in lbmc:
+                main_board_a = cjje
+                total += cjje
+            elif "主板B股" in lbmc:
+                main_board_b = cjje
+                total += cjje
+            elif "创业板" in lbmc:
+                chinext = cjje
+                total += cjje
+
+        result.update({
+            "date": trade_date,
+            "total_amount_yi": round(total, 2),
+            "main_board_a_yi": round(main_board_a, 2),
+            "main_board_b_yi": round(main_board_b, 2),
+            "chinext_yi": round(chinext, 2),
+            "status": "ok",
+        })
+
+        _szse_cache[trade_date] = result
+        LOGGER.info("深交所成交额获取成功: %.2f亿元 (日期=%s)", total, trade_date)
+
+    except Exception as exc:
+        LOGGER.warning("深交所成交额获取失败: %s", exc)
+        result["error"] = str(exc)
+
+    return result
+
+
+def fetch_both_exchanges(trade_date: str | None = None) -> dict[str, Any]:
+    """
+    获取沪深两市合计成交额
+
+    返回:
+        {
+            "date": "2026-04-28",
+            "sh_amount_yi": 11145.48,       # 上交所成交额
+            "sz_amount_yi": 14245.86,       # 深交所成交额
+            "total_amount_yi": 25391.34,    # 两市合计
+            "source": "exchange_official",
+            "details": {
+                "sse": {...},
+                "szse": {...}
+            },
+            "fetched_at": "ISO时间"
+        }
+    """
+    # 自动判断正确的交易日期
+    if trade_date is None:
+        trade_date = get_trade_date()
+        LOGGER.info("自动选择交易日期: %s", trade_date)
+
+    # 尝试获取指定日期数据，若当日数据为空则回退到上一交易日
+    sse_data = fetch_sse_volume(trade_date)
+    szse_data = fetch_szse_volume(trade_date)
+
+    has_sse = sse_data.get("status") == "ok" and sse_data.get("total_amount_yi") is not None
+    has_szse = szse_data.get("status") == "ok" and szse_data.get("total_amount_yi") is not None
+
+    if not has_sse or not has_szse:
+        # 找上一交易日
+        fallback_date = datetime.strptime(trade_date, "%Y-%m-%d") - timedelta(days=1)
+        while fallback_date.weekday() >= 5:
+            fallback_date -= timedelta(days=1)
+        fallback_str = fallback_date.strftime("%Y-%m-%d")
+        LOGGER.info("当日数据不完整(SSE=%s, SZSE=%s)，回退到 %s", has_sse, has_szse, fallback_str)
+        sse_fallback = fetch_sse_volume(fallback_str)
+        szse_fallback = fetch_szse_volume(fallback_str)
+
+        if not has_sse and sse_fallback.get("status") == "ok":
+            sse_data = sse_fallback
+        if not has_szse and szse_fallback.get("status") == "ok":
+            szse_data = szse_fallback
+
+    sh = sse_data.get("total_amount_yi") or 0
+    sz = szse_data.get("total_amount_yi") or 0
+
+    return {
+        "date": sse_data.get("date") or trade_date,
+        "sh_amount_yi": sse_data.get("total_amount_yi"),
+        "sz_amount_yi": szse_data.get("total_amount_yi"),
+        "total_amount_yi": round(sh + sz, 2) if (sh or sz) else None,
+        "source": "exchange_official",
+        "details": {
+            "sse": sse_data,
+            "szse": szse_data,
+        },
+        "fetched_at": to_iso_now(),
+        "status": "ok" if (sse_data.get("status") == "ok" and szse_data.get("status") == "ok") else "partial",
+    }
+
+
+def main() -> None:
+    import argparse, json
+
+    parser = argparse.ArgumentParser(description="抓取沪深交易所官方成交额")
+    parser.add_argument("--date", type=str, default=None, help="交易日期 YYYY-MM-DD")
+    parser.add_argument("--output", type=str, default="", help="输出 JSON 文件路径")
+    args = parser.parse_args()
+
+    data = fetch_both_exchanges(args.date)
+    rendered = json.dumps(data, ensure_ascii=False, indent=2)
+    print(rendered)
+
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as f:
+            f.write(rendered + "\n")
+
+
+if __name__ == "__main__":
+    main()

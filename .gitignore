@@ -35,5 +35,8 @@ Desktop.ini
 *.temp
 .cache/
 
+# matrix_server 自动回写备份
+registry.json.bak
+
 # Environment files (all subprojects)
 */.env
