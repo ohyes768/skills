@@ -179,13 +179,15 @@ def load_env_file(env_path: str | Path | None = None) -> None:
 # ============ 数据工具 ============
 
 def to_float(val: Any, default: float = 0.0) -> float:
-    """安全转换为浮点数"""
+    """安全转换为浮点数（NaN/None 返回 default）"""
     if val is None:
         return default
     if isinstance(val, (int, float)):
-        return float(val)
+        # NaN 判断（NaN != NaN）
+        return default if val != val else float(val)
     try:
-        return float(str(val).replace(",", "").replace("%", "").strip())
+        result = float(str(val).replace(",", "").replace("%", "").strip())
+        return default if result != result else result
     except (ValueError, AttributeError):
         return default
 

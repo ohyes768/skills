@@ -153,8 +153,8 @@ def fetch_margin_ohlc(force: bool = False) -> dict[str, Any]:
             "status": "ok",
         })
 
-        # 写入缓存
-        write_cache("margin", date_str, result)
+        # 写入缓存（键与读取一致，用抓取日期，当日缓存有效）
+        write_cache("margin", today, result)
         LOGGER.info("融资融券数据获取成功: 融资余额=%.2f亿, 环比=%.2f%%", rzye, rzdf or 0)
 
     except Exception as exc:
@@ -165,25 +165,43 @@ def fetch_margin_ohlc(force: bool = False) -> dict[str, Any]:
 
 
 def _detect_margin_columns(columns: list[str]) -> dict[str, str] | None:
-    """检测融资融券数据的列名映射"""
+    """检测融资融券数据的列名映射
+
+    优先精确匹配，再做子串匹配，且子串匹配排除汇总列"融资融券余额"，
+    避免"融资余额"/"融券余额"被误匹配到"融资融券余额"。
+    """
     # 常见的列名模式
     patterns = {
         "date": ["日期", "date", "日期列"],
-        "rzye": ["融资余额", "融资余额(元)", "余额"],
+        "rzye": ["融资余额", "融资余额(元)", "融资余额(万元)"],
         "rzje": ["融资买入额", "买入额", "融资买入"],
-        "rqye": ["融券余额", "融券余额(元)"],
+        "rqye": ["融券余额", "融券余额(元)", "融券余额(万元)"],
         "rqje": ["融券卖出额", "融券卖出"],
         "rzjmre": ["融资净买入", "净买入"],
         "rqjmre": ["融券净卖出", "净卖出"],
     }
 
     col_map: dict[str, str] = {}
+
+    # 第一轮：精确匹配
     for target, keywords in patterns.items():
         for col in columns:
+            if col.strip() in keywords:
+                col_map[target] = col
+
+    # 第二轮：子串匹配（跳过已匹配目标，排除"融资融券余额"汇总列）
+    for target, keywords in patterns.items():
+        if target in col_map:
+            continue
+        for col in columns:
+            if "融资融券余额" in col:
+                continue
             for kw in keywords:
                 if kw in col:
                     col_map[target] = col
                     break
+            if target in col_map:
+                break
 
     # 至少需要日期和融资余额
     if "date" not in col_map or "rzye" not in col_map:
