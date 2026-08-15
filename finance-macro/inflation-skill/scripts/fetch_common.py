@@ -117,8 +117,9 @@ _load_skill_dotenv()
 # ─── 缓存 ────────────────────────────────────────────────────────────────────
 
 def get_data_dir() -> Path:
-    """返回 data/ 目录路径（相对于 skill 根目录）。"""
-    return Path(__file__).resolve().parents[1] / "data"
+    """返回统一输出目录路径（finance-macro/output/<skill 目录名>）。"""
+    skill_dir = Path(__file__).resolve().parents[1]
+    return skill_dir.parent / "output" / skill_dir.name
 
 
 def read_cache(indicator: str, month: str) -> dict[str, Any] | None:

@@ -40,3 +40,21 @@ registry.json.bak
 
 # Environment files (all subprojects)
 */.env
+
+# finance-macro 运行产物（统一输出/缓存/日志，不入代码库）
+finance-macro/output/
+finance-macro/cache/
+finance-macro/logs/
+# 各 skill 目录内的历史输出残留（脚本已改写到 output/，此处在过渡期兜底）
+finance-macro/*/data/
+finance-macro/*/test_output/
+finance-macro/*/macro_signal.json
+finance-macro/a-share-macro-skill/macro_index_data.json
+finance-macro/bond-market-overview-skill/bond_index_data.json
+finance-macro/exchange-rate-skill/exchange_rate_data.json
+finance-macro/exchange-rate-skill/exchange_rate_report.md
+finance-macro/exchange-rate-skill/*.csv
+finance-macro/risk-appetite-skill/risk_data.json
+finance-macro/risk-appetite-skill/risk_report.md
+# 备份文件
+*.backup

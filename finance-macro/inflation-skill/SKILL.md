@@ -68,7 +68,9 @@ uv run scripts/fetch_all.py --month 2026-03
 - `core_cpi`：核心CPI数据（含来源URL）
 - `fetched_at`：抓取时间
 
-缓存路径：`data/YYYY-MM/inflation.json`
+输出路径（统一输出目录，不入代码库）：
+- 最新数据：`finance-macro/output/inflation-skill/inflation_latest.json`
+- 按月缓存：`finance-macro/output/inflation-skill/YYYY-MM/inflation.json`
 
 ## 分析框架
 

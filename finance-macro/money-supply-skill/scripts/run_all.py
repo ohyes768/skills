@@ -29,6 +29,10 @@ from fetch_common import build_session, setup_logging, to_iso_now
 from fetch_m1_m2 import fetch_m1_m2_latest, fetch_m1_m2_historical
 from fetch_social_financing_tavily import fetch_social_financing_monthly
 
+# 统一输出目录：finance-macro/output/<skill 目录名>
+_SKILL_DIR = Path(__file__).resolve().parents[1]
+DEFAULT_OUTPUT = str(_SKILL_DIR.parent / "output" / _SKILL_DIR.name / "money_supply_latest.json")
+
 # 数据发布时间：每月13日（中国人民银行调查统计司发布金融统计数据报告）
 PUBLISH_DAY = 13
 
@@ -128,8 +132,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="抓取 M1/M2 和社融数据")
     parser.add_argument(
         "--output",
-        default="data/money_supply_latest.json",
-        help="输出文件路径（默认 data/money_supply_latest.json）",
+        default=DEFAULT_OUTPUT,
+        help=f"输出文件路径（默认 {DEFAULT_OUTPUT}）",
     )
     parser.add_argument(
         "--month",

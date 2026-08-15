@@ -16,6 +16,8 @@ from typing import Any
 
 # ── 路径设置（本地 fetch_common 优先）─────────────────────────────────────────
 _SCRIPT_DIR = Path(__file__).resolve().parent
+# 统一输出目录：finance-macro/output/<skill 目录名>
+_SKILL_DIR = _SCRIPT_DIR.parent
 _LOCAL_COMMON = _SCRIPT_DIR / "fetch_common.py"
 _MONETARY_COMMON = (
     Path(__file__).resolve().parents[2]
@@ -143,7 +145,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="抓取全部实体经济指标")
     parser.add_argument(
         "--output",
-        default="data/entity_economy_latest.json",
+        default=str(_SKILL_DIR.parent / "output" / _SKILL_DIR.name / "entity_economy_latest.json"),
         help="输出文件路径",
     )
     args = parser.parse_args()

@@ -17,6 +17,10 @@ from fetch_dr007 import fetch_dr007_latest
 from fetch_lpr import fetch_lpr_latest
 from fetch_mlf_tavily import fetch_mlf_monthly_net
 
+# 统一输出目录：finance-macro/output/<skill 目录名>
+_SKILL_DIR = Path(__file__).resolve().parents[1]
+DEFAULT_OUTPUT = str(_SKILL_DIR.parent / "output" / _SKILL_DIR.name / "monetary_indicators_latest.json")
+
 
 def build_payload(requested_month: str | None = None) -> dict:
     """构建数据载荷。
@@ -64,8 +68,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="抓取 DR007/MLF/LPR 最新指标")
     parser.add_argument(
         "--output",
-        default="data/monetary_indicators_latest.json",
-        help="输出文件路径（默认 data/monetary_indicators_latest.json）",
+        default=DEFAULT_OUTPUT,
+        help=f"输出文件路径（默认 {DEFAULT_OUTPUT}）",
     )
     parser.add_argument(
         "--month",

@@ -15,6 +15,10 @@ from fetch_cpi import fetch_cpi
 from fetch_ppi import fetch_ppi
 from fetch_core_cpi_tavily import fetch_core_cpi
 
+# 统一输出目录：finance-macro/output/<skill 目录名>
+_SKILL_DIR = Path(__file__).resolve().parents[1]
+DEFAULT_OUTPUT = str(_SKILL_DIR.parent / "output" / _SKILL_DIR.name / "inflation_latest.json")
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="抓取 CPI、PPI 和核心CPI")
@@ -26,8 +30,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--output",
-        default="data/inflation_latest.json",
-        help="输出 JSON 文件路径（默认 data/inflation_latest.json）",
+        default=DEFAULT_OUTPUT,
+        help=f"输出 JSON 文件路径（默认 {DEFAULT_OUTPUT}）",
     )
     args = parser.parse_args()
 

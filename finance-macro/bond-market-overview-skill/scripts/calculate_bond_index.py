@@ -11,7 +11,7 @@ from typing import Any
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SKILLS_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_OUTPUT_PATH = SKILL_ROOT / "bond_index_data.json"
+DEFAULT_OUTPUT_PATH = DEFAULT_SKILLS_ROOT / "output" / SKILL_ROOT.name / "bond_index_data.json"
 
 
 @dataclass(frozen=True)
@@ -95,9 +95,18 @@ def load_signal(
     today: date,
     max_age_days: int,
 ) -> dict[str, Any]:
-    path = skills_root / config.folder / "macro_signal.json"
+    out_dir = skills_root / "output" / config.folder
+    path = out_dir / "macro_signal.json"
+    if not path.exists():
+        legacy = skills_root / config.folder / "macro_signal.json"
+        if legacy.exists():
+            path = legacy
     if not path.exists() and name == "risk_appetite":
-        path = skills_root / config.folder / "risk_data.json"
+        path = out_dir / "risk_data.json"
+        if not path.exists():
+            legacy = skills_root / config.folder / "risk_data.json"
+            if legacy.exists():
+                path = legacy
     if not path.exists():
         return unavailable_signal(name, config, None, "未找到该维度的统一输出文件")
 

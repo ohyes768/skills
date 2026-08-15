@@ -301,7 +301,9 @@ def save_north_flow_to_csv(
         CSV 文件路径
     """
     if csv_path is None:
-        csv_path = Path(__file__).resolve().parent.parent / "fund_flow.csv"
+        # 统一输出目录：finance-macro/output/<skill 目录名>
+        _skill_dir = Path(__file__).resolve().parents[1]
+        csv_path = _skill_dir.parent / "output" / _skill_dir.name / "fund_flow.csv"
 
     if north_df.empty:
         logger.warning("没有数据可保存")

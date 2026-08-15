@@ -18,18 +18,18 @@ version: 0.2.0
 
 ## 数据文件路径
 
-所有数据文件位于项目 `data/` 目录下：
+所有数据文件位于统一输出目录 `finance-macro/output/entity-economy-skill/` 下（不入代码库）：
 
 | 指标 | CSV 路径 | 关键列 |
 |------|---------|--------|
-| 制造业PMI | `data/pmi_manufacturing/pmi_m.csv` | `制造业-指数` / `制造业-同比增长` |
-| 非制造业PMI | `data/pmi_non_manufacturing/pmi_nm.csv` | `非制造业-指数` / `非制造业-同比增长` |
-| 工业增加值 | `data/gyzjz/gyzjz.csv` | `同比增长` |
-| 城镇固定资产投资 | `data/gdzctz/gdzctz.csv` | `当月`（当月同比）/ `自年初累计` |
-| 社会消费品零售总额 | `data/consumer_retail/consumer_retail.csv` | `当月`（当月同比）/ `累计` |
-| 工业用电量增速 | `data/electricity_consumption/electricity_consumption.csv` | `yoy_percent` |
-| 铁路货运量增速 | `data/railway_freight/railway_freight.csv` | `freight_send_yoy_percent` |
-| 中长期贷款余额增速 | `data/pbc_credit_balance/pbc_credit_balance.csv`（当前月份）<br>`data/pbc_credit_balance/pbc_credit_balance_2025.csv`（历史基准，用于计算同比） | `中长期企业贷款_亿元`（用于计算企业贷款同比） |
+| 制造业PMI | `output/entity-economy-skill/pmi_manufacturing/pmi_m.csv` | `制造业-指数` / `制造业-同比增长` |
+| 非制造业PMI | `output/entity-economy-skill/pmi_non_manufacturing/pmi_nm.csv` | `非制造业-指数` / `非制造业-同比增长` |
+| 工业增加值 | `output/entity-economy-skill/gyzjz/gyzjz.csv` | `同比增长` |
+| 城镇固定资产投资 | `output/entity-economy-skill/gdzctz/gdzctz.csv` | `当月`（当月同比）/ `自年初累计` |
+| 社会消费品零售总额 | `output/entity-economy-skill/consumer_retail/consumer_retail.csv` | `当月`（当月同比）/ `累计` |
+| 工业用电量增速 | `output/entity-economy-skill/electricity_consumption/electricity_consumption.csv` | `yoy_percent` |
+| 铁路货运量增速 | `output/entity-economy-skill/railway_freight/railway_freight.csv` | `freight_send_yoy_percent` |
+| 中长期贷款余额增速 | `output/entity-economy-skill/pbc_credit_balance/pbc_credit_balance.csv`（当前月份）<br>`output/entity-economy-skill/pbc_credit_balance/pbc_credit_balance_2025.csv`（历史基准，用于计算同比） | `中长期企业贷款_亿元`（用于计算企业贷款同比） |
 
 ## 评分体系
 
@@ -82,10 +82,10 @@ version: 0.2.0
 克强指数 = 工业用电量增速×40% + 中长期贷款余额增速×35% + 铁路货运量增速×25%
 
 **计算步骤**：
-1. 从 `data/electricity_consumption/electricity_consumption.csv` 读取 `yoy_percent`（用电量增速）
-2. 从 `data/railway_freight/railway_freight.csv` 读取 `freight_send_yoy_percent`（货运增速）
-3. 从 `data/pbc_credit_balance/pbc_credit_balance.csv` 读取当前月份的 `中长期企业贷款_亿元`
-4. 从 `data/pbc_credit_balance/pbc_credit_balance_2025.csv` 读取上年同期的 `企业中长期贷款_亿元`，计算企业贷款同比 = (本期 - 上年同期) / 上年同期 × 100%
+1. 从 `output/entity-economy-skill/electricity_consumption/electricity_consumption.csv` 读取 `yoy_percent`（用电量增速）
+2. 从 `output/entity-economy-skill/railway_freight/railway_freight.csv` 读取 `freight_send_yoy_percent`（货运增速）
+3. 从 `output/entity-economy-skill/pbc_credit_balance/pbc_credit_balance.csv` 读取当前月份的 `中长期企业贷款_亿元`
+4. 从 `output/entity-economy-skill/pbc_credit_balance/pbc_credit_balance_2025.csv` 读取上年同期的 `企业中长期贷款_亿元`，计算企业贷款同比 = (本期 - 上年同期) / 上年同期 × 100%
 5. 三项代入公式加权求和
 
 注：若克强指数三子项数据不可得，跳过该指标，总权重重新分配至其余四项。

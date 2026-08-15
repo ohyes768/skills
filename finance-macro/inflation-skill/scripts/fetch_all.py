@@ -49,7 +49,7 @@ def main() -> None:
     }
 
     if actual_for_core:
-        data_dir = Path(__file__).resolve().parents[1] / "data" / actual_for_core
+        data_dir = Path(__file__).resolve().parents[2] / "output" / "inflation-skill" / actual_for_core
         data_dir.mkdir(parents=True, exist_ok=True)
         out = data_dir / "inflation.json"
         out.write_text(json.dumps(combined, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

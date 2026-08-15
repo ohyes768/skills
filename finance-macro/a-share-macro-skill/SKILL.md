@@ -53,7 +53,7 @@ uv run python scripts\run_all.py --days 30
 
 ### 2. 要求统一输出格式
 
-每个子 skill 最好输出自己的 `macro_signal.json`，放在对应 skill 根目录。
+每个子 skill 最好输出自己的 `macro_signal.json`，放在统一输出目录 `finance-macro/output/<skill 目录名>/`。
 
 格式：
 
@@ -90,7 +90,7 @@ python scripts\calculate_macro_index.py
 结果会写入：
 
 ```text
-F:\personal-projects\macro-fin-skill\skills\a-share-macro-skill\macro_index_data.json
+F:\personal-projects\skills\finance-macro\output\a-share-macro-skill\macro_index_data.json
 ```
 
 运行输出必须先展示 6 个 skill 的详细数据，再展示总结：

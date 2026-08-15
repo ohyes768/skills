@@ -36,26 +36,27 @@ description: |
 运行 `scripts/run_all.py` 获取所有风险偏好指标数据：
 
 ```bash
-# 在 skill 目录下运行
-uv run python scripts/run_all.py --days 5 --output ./risk_data.json
+# 在 skill 目录下运行，默认写入统一输出目录
+uv run python scripts/run_all.py --days 5
 ```
 
 参数说明：
 - `--days N`: 评估区间天数，默认5日
-- `--output`: 输出 JSON 数据文件路径
-- `--report`: 输出文本报告路径
+- `--output`: 输出 JSON 数据文件路径（默认 `finance-macro/output/risk-appetite-skill/risk_data.json`）
+- `--report`: 输出文本报告路径（默认 `finance-macro/output/risk-appetite-skill/risk_report.md`）
+- `--upload`: 抓取+评分后推送到线上 macro 后端（需先配置 token，见第三步）
 
-### 数据抓取优先级
+### 数据抓取来源
 
-脚本内部有**两层 fallback 机制**：
+脚本统一抓取真实汇总数据，不使用指数近似：
 
-1. **成交额/换手率**：`fetch_volume_exchange.py`（沪深交易所官方API）→ `fetch_volume.py`（akshare 指数数据 fallback）
+1. **成交额/换手率**：`fetch_volume.py` 调用 `fetch_volume_exchange.py`（沪深交易所官方API）
 2. **融资融券**：`fetch_margin.py`（akshare 中证数据）
 
 具体实现：
-- `fetch_volume_exchange.py` 直接调用沪深交易所官方 API，是**优先数据源**
-- `fetch_volume.py` 在官方 API 失败时使用 akshare stock_zh_a_hist（上证指数+深证成指）作为 fallback
-- `fetch_margin.py` 使用 akshare macro_china_market_margin_sh/sz（来自中证数据公司）
+- `fetch_volume_exchange.py` 直接调用沪深交易所官方 API（上交所 commonQuery + 深交所 ShowReport）
+- 单个交易所失败时仍输出 partial 结果；当日数据为空时自动回退上一交易日
+- `fetch_margin.py` 使用 akshare macro_china_market_margin_sh/sz（来自中证数据公司），沪深两市合计
 
 ### 第二步：数据交叉确认
 
@@ -72,6 +73,47 @@ uv run python scripts/run_all.py --days 5 --output ./risk_data.json
 | 融资余额 | {rzye}亿元 | 中证数据有限责任公司 |
 
 **如果数据不一致，请提供正确数值。**
+
+---
+
+### 第三步：推送到线上 macro 后端（可选）
+
+将 `risk_data.json` 推送到 personal-web 的宏观信号后端，供前端展示。对接契约见
+`personal-web/.trellis/spec/guides/macro-signal-upload.md`。
+
+**前置配置**：在 `finance-macro/.env`（已被 .gitignore 忽略，不入库）配置：
+
+```env
+MACRO_SIGNAL_UPLOAD_TOKEN=<token>   # 必填，来自 personal-web 根 .env
+MACRO_SIGNAL_UPLOAD_URL=https://web.duomi77.cn:9443/api/macro/signal/upload
+MACRO_UPLOAD_SSL_VERIFY=0           # NAS 自签证书场景跳过 TLS 校验（仅限内网自建服务）
+```
+
+**方式一：抓取+评分+推送一条龙**
+
+```bash
+uv run python scripts/run_all.py --upload
+```
+
+**方式二：单独推送已有 JSON**
+
+```bash
+# 干跑（只做本地预检，不发送）
+uv run python scripts/upload_signal.py --dry-run
+
+# 真实推送
+uv run python scripts/upload_signal.py
+
+# 推送并验证月份出现（GET /api/macro/months）
+uv run python scripts/upload_signal.py --verify
+```
+
+**上传前本地预检**（`upload_signal.py` 自动执行，不通过则不上传）：
+- skill/file 白名单与配对（risk-appetite-skill 只能推 `risk_data.json`）
+- `score.conclusion`、`data.{volume,turnover,margin}` 及各自 `date`/数值字段齐全
+- 数据日期距今超过 10 天时警告确认（后端靠 date 判断数据月份）
+
+**错误处理**：401 → 检查 token；400 → 检查白名单/data 结构；网络错误最多重试 2 次。后端同名 file 直接覆盖（原子写），可重复推送。
 
 ---
 
@@ -207,8 +249,8 @@ uv run python scripts/run_all.py --days 5 --output ./risk_data.json
 
 ## 注意事项
 
-1. **成交额数据**：使用上证指数+深证成指分别代表沪市和深市，合计为两市成交额
-2. **换手率数据**：使用上证指数换手率作为全市场参考指标
+1. **成交额数据**：来自沪深交易所官方API，按板块（主板A股/B股、科创板、创业板）汇总为两市成交额
+2. **换手率数据**：使用上交所官方API的加权平均换手率作为全市场参考指标
 3. **融资融券数据**：每日09:45左右更新前一交易日数据，存在1天延迟
 4. **指标权重**：活跃度50%（成交额25%+换手率25%），融资融券50%
 5. **信号优先级**：当成交与融资指标出现分歧时，优先信任融资数据
@@ -227,5 +269,6 @@ risk-appetite-skill/
 │   ├── fetch_margin.py        # 融资融券抓取（akshare 中证数据）
 │   ├── fetch_volume_exchange.py # 交易所官方API（优先数据源）
 │   ├── fetch_volume.py        # 成交额/换手率（官方API优先，akshare fallback）
-│   └── run_all.py             # 统一入口（抓取+评分）
+│   ├── upload_signal.py       # 推送 JSON 到线上 macro 后端（6 个 skill 通用）
+│   └── run_all.py             # 统一入口（抓取+评分，--upload 可选推送）
 ```

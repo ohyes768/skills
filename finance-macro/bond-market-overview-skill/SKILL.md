@@ -34,12 +34,12 @@ cd F:\personal-projects\macro-fin-skill\skills\a-share-macro-skill
 python scripts\generate_macro_signals.py
 ```
 
-这会为货币、信用、经济、通胀、外部压力生成 `macro_signal.json`。
+这会为货币、信用、经济、通胀、外部压力生成 `macro_signal.json`（写入统一输出目录 `finance-macro/output/<skill 目录名>/`）。
 
 风险偏好来自：
 
 ```text
-F:\personal-projects\macro-fin-skill\skills\risk-appetite-skill\risk_data.json
+F:\personal-projects\skills\finance-macro\output\risk-appetite-skill\risk_data.json
 ```
 
 如果未来风险偏好也生成 `macro_signal.json`，债市脚本会优先读取它。
@@ -54,7 +54,7 @@ python scripts\calculate_bond_index.py
 结果写入：
 
 ```text
-F:\personal-projects\macro-fin-skill\skills\bond-market-overview-skill\bond_index_data.json
+F:\personal-projects\skills\finance-macro\output\bond-market-overview-skill\bond_index_data.json
 ```
 
 运行输出必须先展示 6 个维度详细数据，再展示总结：

@@ -218,7 +218,9 @@ def main() -> None:
     if args.data_dir:
         base_dir = Path(args.data_dir)
     else:
-        base_dir = _SCRIPT_DIR.parent / "data"
+        # 统一输出目录：finance-macro/output/<skill 目录名>
+        _skill_dir = _SCRIPT_DIR.parent
+        base_dir = _skill_dir.parent / "output" / _skill_dir.name
 
     if args.indicators == "all":
         targets = list(INDICATOR_CONFIG.keys())

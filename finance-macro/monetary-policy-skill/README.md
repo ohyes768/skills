@@ -20,14 +20,14 @@ pip install -r requirements.txt
 python scripts/run_all.py
 ```
 
-默认输出文件：
+默认输出文件（统一输出目录，不入代码库）：
 
-- `data/monetary_indicators_latest.json`
+- `finance-macro/output/monetary-policy-skill/monetary_indicators_latest.json`
 
 指定输出路径：
 
 ```bash
-python scripts/run_all.py --output data/latest.json
+python scripts/run_all.py --output ./latest.json
 ```
 
 按月抓取 MLF 月度净投放（推荐，DeepSeek WebSearch）：

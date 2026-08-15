@@ -28,6 +28,11 @@ FOLDERS = {
 }
 
 
+def out_dir_for(skill_dir: Path) -> Path:
+    """统一输出目录：skills_root/output/<skill 目录名>。"""
+    return skill_dir.parent / "output" / skill_dir.name
+
+
 def generate_all(skills_root: Path = SKILLS_ROOT) -> dict[str, Any]:
     builders: dict[str, Callable[[Path], dict[str, Any]]] = {
         "monetary_policy": build_monetary_policy_signal,
@@ -58,7 +63,7 @@ def generate_all(skills_root: Path = SKILLS_ROOT) -> dict[str, Any]:
 
 
 def build_monetary_policy_signal(skill_dir: Path) -> dict[str, Any]:
-    data_dir = skill_dir / "data"
+    data_dir = out_dir_for(skill_dir)
     dr007 = read_latest_json(data_dir, "dr007.json")
     lpr = read_latest_json(data_dir, "lpr.json")
     mlf = read_latest_json(data_dir, "mlf.json", required=False) or {}
@@ -84,7 +89,7 @@ def build_monetary_policy_signal(skill_dir: Path) -> dict[str, Any]:
 
 
 def build_money_supply_signal(skill_dir: Path) -> dict[str, Any]:
-    payload = read_json(skill_dir / "data" / "money_supply_latest.json")
+    payload = read_json(out_dir_for(skill_dir) / "money_supply_latest.json")
     latest = payload.get("m1_m2", {}).get("latest", {})
     social = payload.get("social_financing", {})
     m2_yoy = number(latest.get("m2_yoy"))
@@ -112,7 +117,7 @@ def build_money_supply_signal(skill_dir: Path) -> dict[str, Any]:
 
 
 def build_entity_economy_signal(skill_dir: Path) -> dict[str, Any]:
-    data_dir = skill_dir / "data"
+    data_dir = out_dir_for(skill_dir)
     electricity = read_latest_json(data_dir, "electricity.json")
     railway = read_latest_json(data_dir, "railway_freight.json", required=False) or {}
 
@@ -131,7 +136,7 @@ def build_entity_economy_signal(skill_dir: Path) -> dict[str, Any]:
 
 
 def build_inflation_signal(skill_dir: Path) -> dict[str, Any]:
-    data_dir = skill_dir / "data"
+    data_dir = out_dir_for(skill_dir)
     latest_path = data_dir / "inflation_latest.json"
     payload = read_json(latest_path) if latest_path.exists() else read_latest_json(data_dir, "inflation.json")
     cpi = payload.get("cpi", {})
@@ -162,7 +167,7 @@ def build_inflation_signal(skill_dir: Path) -> dict[str, Any]:
 
 
 def build_exchange_rate_signal(skill_dir: Path) -> dict[str, Any]:
-    payload = read_json(skill_dir / "exchange_rate_data.json")
+    payload = read_json(out_dir_for(skill_dir) / "exchange_rate_data.json")
     data = payload.get("data", {})
     errors = [str(item) for item in payload.get("errors", []) if item]
     exchange = data.get("exchange_rates", {})
@@ -245,8 +250,9 @@ def validate_signal(signal: dict[str, Any]) -> None:
 
 
 def write_signal(skill_dir: Path, signal: dict[str, Any]) -> None:
-    skill_dir.mkdir(parents=True, exist_ok=True)
-    (skill_dir / "macro_signal.json").write_text(json.dumps(signal, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    out_dir = out_dir_for(skill_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "macro_signal.json").write_text(json.dumps(signal, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def number(value: Any) -> float | None:

@@ -26,6 +26,10 @@ from fetch_north_flow import fetch_north_deal_amt, fetch_north_daily, save_north
 from fetch_common import build_session
 from fetch_ted_spread import fetch_ted_spread, save_ted_spread_to_csv
 
+# 统一输出目录：finance-macro/output/<skill 目录名>
+_SKILL_DIR = Path(__file__).resolve().parents[1]
+OUTPUT_DIR = _SKILL_DIR.parent / "output" / _SKILL_DIR.name
+
 logger = get_logger(__name__)
 
 
@@ -201,7 +205,7 @@ def save_results(results: dict, output_path: Path | None = None) -> Path:
         输出文件路径
     """
     if output_path is None:
-        output_path = Path(__file__).resolve().parent.parent / "exchange_rate_data.json"
+        output_path = OUTPUT_DIR / "exchange_rate_data.json"
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -223,7 +227,7 @@ def generate_report(results: dict, report_path: Path | None = None) -> Path:
         报告文件路径
     """
     if report_path is None:
-        report_path = Path(__file__).resolve().parent.parent / "exchange_rate_report.md"
+        report_path = OUTPUT_DIR / "exchange_rate_report.md"
 
     # 读取原始数据用于报告
     data = results.get("data", {})
@@ -360,9 +364,8 @@ def main():
         results = run_all(days=args.days)
 
         # 确定输出路径
-        skill_dir = Path(__file__).resolve().parent.parent
-        output_path = Path(args.output) if args.output else skill_dir / "exchange_rate_data.json"
-        report_path = Path(args.report) if args.report else skill_dir / "exchange_rate_report.md"
+        output_path = Path(args.output) if args.output else OUTPUT_DIR / "exchange_rate_data.json"
+        report_path = Path(args.report) if args.report else OUTPUT_DIR / "exchange_rate_report.md"
 
         # 保存结果
         save_results(results, output_path)

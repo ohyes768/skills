@@ -51,11 +51,10 @@ description: |
 运行 `scripts/run_all.py` 获取初始数据：
 
 ```bash
-# 在用户工作目录下运行，数据保存到用户指定路径
-python /path/to/skills/monetary-policy-skill/scripts/run_all.py --month YYYY-MM --output ./monetary_data.json
+python /path/to/skills/monetary-policy-skill/scripts/run_all.py --month YYYY-MM
 ```
 
-**注意**：数据应输出到用户当前工作目录，不要输出到 skill 目录。
+**注意**：数据默认写入统一输出目录 `finance-macro/output/monetary-policy-skill/monetary_indicators_latest.json`（不入代码库）；如需自定义路径可用 `--output` 指定，不要输出到 skill 目录。
 
 ### 第三步：数据交叉确认（必须执行）
 

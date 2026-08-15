@@ -156,7 +156,9 @@ def save_exchange_rates_to_csv(data: dict[str, pd.Series], csv_path: Path | None
         CSV 文件路径
     """
     if csv_path is None:
-        csv_path = Path(__file__).resolve().parent.parent / "exchange_rates.csv"
+        # 统一输出目录：finance-macro/output/<skill 目录名>
+        _skill_dir = Path(__file__).resolve().parents[1]
+        csv_path = _skill_dir.parent / "output" / _skill_dir.name / "exchange_rates.csv"
 
     # 构建 DataFrame
     df_data = {}

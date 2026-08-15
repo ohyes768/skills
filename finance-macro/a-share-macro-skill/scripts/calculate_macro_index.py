@@ -11,7 +11,7 @@ from typing import Any
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SKILLS_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_OUTPUT_PATH = SKILL_ROOT / "macro_index_data.json"
+DEFAULT_OUTPUT_PATH = DEFAULT_SKILLS_ROOT / "output" / SKILL_ROOT.name / "macro_index_data.json"
 
 
 @dataclass(frozen=True)
@@ -33,7 +33,7 @@ DIMENSIONS: dict[str, DimensionConfig] = {
         folder="money-supply-skill",
         title="信用扩张",
         core=True,
-        candidate_files=("macro_signal.json", "money_supply_data.json", "data/money_supply_latest.json"),
+        candidate_files=("macro_signal.json", "money_supply_data.json", "money_supply_latest.json"),
     ),
     "entity_economy": DimensionConfig(
         folder="entity-economy-skill",
@@ -45,7 +45,7 @@ DIMENSIONS: dict[str, DimensionConfig] = {
         folder="inflation-skill",
         title="通胀环境",
         core=True,
-        candidate_files=("macro_signal.json", "inflation_data.json", "data/2026-03/inflation.json"),
+        candidate_files=("macro_signal.json", "inflation_data.json", "inflation_latest.json"),
     ),
     "exchange_rate": DimensionConfig(
         folder="exchange-rate-skill",
@@ -129,10 +129,14 @@ def load_signal(
     max_age_days: int,
 ) -> dict[str, Any]:
     skill_dir = skills_root / config.folder
-    checked_paths = [str(skill_dir / candidate) for candidate in config.candidate_files]
+    out_dir = skills_root / "output" / config.folder
+    # 优先查统一输出目录，兼容旧的 skill 目录内输出
+    candidate_paths = [out_dir / c for c in config.candidate_files] + [
+        skill_dir / c for c in config.candidate_files
+    ]
+    checked_paths = [str(path) for path in candidate_paths]
 
-    for candidate in config.candidate_files:
-        path = skill_dir / candidate
+    for path in candidate_paths:
         if not path.exists():
             continue
 

@@ -37,15 +37,15 @@ description: |
 运行 `scripts/run_all.py` 获取所有汇率与资金流向指标数据：
 
 ```bash
-# 在 skill 目录下运行
+# 在 skill 目录下运行，默认写入统一输出目录
 export FRED_API_KEY=your_fred_api_key
-uv run python scripts/run_all.py --days 30 --output ./exchange_rate_data.json --report ./exchange_rate_report.md
+uv run python scripts/run_all.py --days 30
 ```
 
 参数说明：
 - `--days N`: 回溯天数，默认30日
-- `--output`: JSON 数据文件路径
-- `--report`: Markdown 报告路径
+- `--output`: JSON 数据文件路径（默认 `finance-macro/output/exchange-rate-skill/exchange_rate_data.json`）
+- `--report`: Markdown 报告路径（默认 `finance-macro/output/exchange-rate-skill/exchange_rate_report.md`）
 
 ### 数据源说明
 
@@ -293,13 +293,16 @@ uv run python scripts/run_all.py --days 30 --output ./exchange_rate_data.json --
 ```
 exchange-rate-skill/
 ├── SKILL.md                    # 本文件（评分框架）
-├── scripts/
-│   ├── fetch_common.py         # 公共工具（logging、HTTP会话、类型转换）
-│   ├── fetch_exchange_rates.py # 美元指数+人民币汇率（FRED DTWEXBGS/DEXCHUS）
-│   ├── fetch_north_flow.py     # 北向资金成交总额（东方财富 RPT_MUTUAL_DEALAMT）
-│   ├── fetch_ted_spread.py     # TED利差（FRED SOFR/DGS3MO）
-│   └── run_all.py              # 统一入口（数据抓取）
-├── exchange_rates.csv          # 汇率数据
+└── scripts/
+    ├── fetch_common.py         # 公共工具（logging、HTTP会话、类型转换）
+    ├── fetch_exchange_rates.py # 美元指数+人民币汇率（FRED DTWEXBGS/DEXCHUS）
+    ├── fetch_north_flow.py     # 北向资金成交总额（东方财富 RPT_MUTUAL_DEALAMT）
+    ├── fetch_ted_spread.py     # TED利差（FRED SOFR/DGS3MO）
+    └── run_all.py              # 统一入口（数据抓取）
+
+# 运行产物统一写入（不入代码库）：
+finance-macro/output/exchange-rate-skill/
+├── exchange_rates.csv          # 汇率数据（追加式）
 ├── fund_flow.csv               # 资金流向数据（北向成交总额 + 日频明细）
 ├── ted_spread.csv              # TED利差数据
 ├── exchange_rate_data.json     # JSON 数据输出
