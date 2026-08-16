@@ -2,12 +2,12 @@
 """
 构建 macro_signal.json(线上契约结构)- entity-economy-skill
 
-读取统一输出目录下的 7 个 CSV(PMI/工业增加值/固投/社零/用电量/铁路货运/央行信贷),
-按 SKILL.md 评分体系计算五大指标得分与加权总分,生成 macro 后端契约结构:
+读取统一输出目录下的 4 个 CSV(PMI/工业增加值/固投/社零),
+按 SKILL.md 评分体系计算四大指标得分与加权总分,生成 macro 后端契约结构:
     {"conclusion": "...", "data_date": "YYYY-MM-DD", "total_score": XX.X, "details": {key: number}}
 
-克强指数 = 工业用电量增速×40% + 中长期贷款余额增速×35% + 铁路货运量增速×25%
-(三子项任一缺失则跳过克强指标,总权重重新分配,对齐 SKILL.md)。
+评分权重:PMI 40% + 工业增加值 20% + 固投 20% + 社零 20%
+(缺失维度按剩余权重归一化,对齐 SKILL.md)。
 
 用法:
     uv run python scripts/build_macro_signal.py                    # 默认输入/输出
@@ -32,17 +32,13 @@ logger = logging.getLogger("build_macro_signal")
 
 OUTPUT_DIR = _SCRIPT_DIR.parent.parent / "output" / _SCRIPT_DIR.parent.name
 
-# 各维度权重(对齐 SKILL.md:PMI 30% + 工业 20% + 固投 20% + 社零 20% + 克强 10%)
+# 各维度权重(对齐 SKILL.md:PMI 40% + 工业 20% + 固投 20% + 社零 20%)
 WEIGHTS = {
-    "pmi": 0.30,
+    "pmi": 0.40,
     "industrial": 0.20,
     "fai": 0.20,
     "retail": 0.20,
-    "keqiang": 0.10,
 }
-
-# 克强指数子项权重
-KEQIANG_WEIGHTS = {"electricity": 0.40, "credit": 0.35, "railway": 0.25}
 
 _MONTH_RE = re.compile(r"^(\d{4})年(\d{1,2})月")
 
@@ -98,7 +94,6 @@ SCORE_PMI = [(53, 90), (50, 70), (49, 50), (47, 30)]
 SCORE_INDUSTRIAL = [(7, 90), (5.5, 70), (4.5, 50), (3, 30)]
 SCORE_FAI = [(5, 90), (3.5, 70), (2, 50), (0, 30)]
 SCORE_RETAIL = [(5, 90), (4, 70), (2.5, 50), (1, 30)]
-SCORE_KEQIANG = [(8, 90), (5, 70), (3, 50), (1, 30)]
 
 
 def map_conclusion(total: float) -> str:
@@ -112,38 +107,6 @@ def map_conclusion(total: float) -> str:
     if total >= 20:
         return "经济偏冷"
     return "经济过冷"
-
-
-def _credit_yoy(base_dir: Path, month: str) -> float | None:
-    """企业中长期贷款余额同比:当月值 vs 上年同期(2025 基准表)。"""
-    cur = _read_csv(base_dir / "pbc_credit_balance" / "pbc_credit_balance.csv")
-    if cur is None:
-        return None
-    col = next((c for c in cur.columns if "中长期企业贷款" in c or "企业中长期贷款" in c), None)
-    if col is None:
-        return None
-    row = cur[cur.iloc[:, 0].astype(str).str.contains(month.replace("-", "年") + "月", regex=False)]
-    if row.empty:
-        return None
-    current = _safe_float(row.iloc[0][col])
-    if current is None:
-        return None
-
-    prev_csv = _read_csv(base_dir / "pbc_credit_balance" / "pbc_credit_balance_2025.csv")
-    if prev_csv is None:
-        return None
-    prev_col = next((c for c in prev_csv.columns if "中长期企业贷款" in c or "企业中长期贷款" in c), None)
-    if prev_col is None:
-        return None
-    year = int(month[:4]) - 1
-    prev_key = f"{year}年{int(month[5:])}月"
-    prev_row = prev_csv[prev_csv.iloc[:, 0].astype(str).str.startswith(prev_key)]
-    if prev_row.empty:
-        return None
-    previous = _safe_float(prev_row.iloc[0][prev_col])
-    if previous is None or previous == 0:
-        return None
-    return round((current - previous) / previous * 100, 2)
 
 
 def build_signal(conclusion_override: str | None = None) -> dict[str, Any]:
@@ -203,38 +166,7 @@ def build_signal(conclusion_override: str | None = None) -> dict[str, Any]:
                 months.append(month)
                 parts.append(("社会消费品零售", score_band(val, SCORE_RETAIL), WEIGHTS["retail"]))
 
-    # --- 克强指数(10%;三子项缺一即整体跳过) ---
-    elec = rail = None
-    df = _read_csv(base_dir / "electricity_consumption" / "electricity_consumption.csv")
-    if df is not None:
-        hit = latest_row(df)
-        if hit and "yoy_percent" in df.columns:
-            month, row = hit
-            elec = _safe_float(row["yoy_percent"])
-            if elec is not None:
-                details["electricity_yoy"] = round(elec, 1)
-                months.append(month)
-    df = _read_csv(base_dir / "railway_freight" / "railway_freight.csv")
-    if df is not None:
-        hit = latest_row(df)
-        if hit and "freight_send_yoy_percent" in df.columns:
-            month, row = hit
-            rail = _safe_float(row["freight_send_yoy_percent"])
-            if rail is not None:
-                details["railway_yoy"] = round(rail, 1)
-                months.append(month)
     latest_month = max(months) if months else None
-    credit = _credit_yoy(base_dir, latest_month) if latest_month else None
-
-    if elec is not None and rail is not None and credit is not None:
-        keqiang = (elec * KEQIANG_WEIGHTS["electricity"]
-                   + credit * KEQIANG_WEIGHTS["credit"]
-                   + rail * KEQIANG_WEIGHTS["railway"])
-        details["keqiang_index"] = round(keqiang, 1)
-        parts.append(("克强指数", score_band(keqiang, SCORE_KEQIANG), WEIGHTS["keqiang"]))
-    else:
-        logger.info("克强指数子项不全(用电量=%s 贷款同比=%s 货运=%s),跳过该指标",
-                    elec, credit, rail)
 
     # 加权总分(缺失维度按剩余权重归一化)
     total_weight = sum(w for _, _, w in parts)

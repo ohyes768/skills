@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import csv
 import logging
 import os
 import re
@@ -152,6 +153,57 @@ def write_cache(indicator: str, month: str, data: dict[str, Any]) -> None:
     path = cache_dir / f"{indicator}.json"
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     LOGGER.info("缓存写入: data/%s/%s.json", month, indicator)
+
+
+# ─── CSV 回写（JSON 缓存 → 时序 CSV，供 build_macro_signal 消费）───────────
+
+def append_csv_row(sub_dir: str, filename: str, row: dict[str, Any]) -> bool:
+    """按月份去重追加/更新一行到统一输出目录 CSV，保持月份字符串降序。
+
+    Args:
+        sub_dir:  统一输出目录下的子目录（如 "pbc_credit_balance"）
+        filename: CSV 文件名
+        row:      数据行，必须含非空 "月份" 键；同月份已存在则覆盖旧行
+    """
+    month_key = str(row.get("月份", "")).strip()
+    if not month_key:
+        LOGGER.warning("CSV 回写跳过：行缺少月份")
+        return False
+
+    csv_path = get_data_dir() / sub_dir / filename
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+
+    rows: list[dict[str, Any]] = []
+    fields: list[str] = []
+    if csv_path.exists():
+        with open(csv_path, encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+            fields = list(reader.fieldnames or [])
+
+    # 字段并集：保留现有列序，追加新行列
+    fields = fields + [c for c in row if c not in fields]
+
+    replaced = False
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        if str(r.get("月份", "")).strip() == month_key:
+            out.append(row)
+            replaced = True
+        else:
+            out.append(r)
+    if not replaced:
+        out.append(row)
+
+    # 月份字符串降序（与 akshare 指标 CSV 排序一致，latest_row 依赖首行最新）
+    out.sort(key=lambda r: str(r.get("月份", "")), reverse=True)
+
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(out)
+    LOGGER.info("CSV 回写: %s（月份=%s，%s）", csv_path.name, month_key, "更新" if replaced else "新增")
+    return True
 
 
 # ─── 发布时间判断 ────────────────────────────────────────────────────────────

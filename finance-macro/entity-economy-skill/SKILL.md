@@ -1,7 +1,7 @@
 ---
 name: entity-economy-skill
-description: 实体经济强弱判断 Skill。当用户询问"当前经济强弱"、"经济运行状态"、"经济偏冷还是偏热"、"经济评分"、"本月经济怎么样"、"经济好不好"、或要求分析"制造业PMI/工业增加值/固定资产投资/社零/克强指数"时，自动触发本 Skill。该 Skill 基于五大核心指标对实体经济进行综合评分和定性判断，输出结构化的分析报告。
-version: 0.2.0
+description: 实体经济强弱判断 Skill。当用户询问"当前经济强弱"、"经济运行状态"、"经济偏冷还是偏热"、"经济评分"、"本月经济怎么样"、"经济好不好"、或要求分析"制造业PMI/工业增加值/固定资产投资/社零"时，自动触发本 Skill。该 Skill 基于四大核心指标对实体经济进行综合评分和定性判断，输出结构化的分析报告。
+version: 0.3.0
 ---
 
 # 实体经济强弱判断 Skill
@@ -12,7 +12,7 @@ version: 0.2.0
 
 ## 核心能力
 
-1. 从本地 CSV 数据文件读取最新月份五大指标数据
+1. 从本地 CSV 数据文件读取最新月份四大指标数据
 2. 基于评分体系计算各指标得分和加权总分
 3. 输出结构化判断结论
 4. 可选：构建 `macro_signal.json` 并推送到线上 macro 后端（`run_all.py --upload`，见下文「推送到线上 macro 后端」）
@@ -28,13 +28,10 @@ version: 0.2.0
 | 工业增加值 | `output/entity-economy-skill/gyzjz/gyzjz.csv` | `同比增长` |
 | 城镇固定资产投资 | `output/entity-economy-skill/gdzctz/gdzctz.csv` | `当月`（当月同比）/ `自年初累计` |
 | 社会消费品零售总额 | `output/entity-economy-skill/consumer_retail/consumer_retail.csv` | `当月`（当月同比）/ `累计` |
-| 工业用电量增速 | `output/entity-economy-skill/electricity_consumption/electricity_consumption.csv` | `yoy_percent` |
-| 铁路货运量增速 | `output/entity-economy-skill/railway_freight/railway_freight.csv` | `freight_send_yoy_percent` |
-| 中长期贷款余额增速 | `output/entity-economy-skill/pbc_credit_balance/pbc_credit_balance.csv`（当前月份）<br>`output/entity-economy-skill/pbc_credit_balance/pbc_credit_balance_2025.csv`（历史基准，用于计算同比） | `中长期企业贷款_亿元`（用于计算企业贷款同比） |
 
 ## 评分体系
 
-### 指标一：制造业PMI（权重 30%）
+### 指标一：制造业PMI（权重 40%）
 
 | 数值区间 | 得分 | 定性 |
 |---------|------|------|
@@ -78,30 +75,9 @@ version: 0.2.0
 | 1%–2.5% | 20–40 | 偏冷 |
 | < 1% | 0–20 | 过冷 |
 
-### 指标五：克强指数（权重 10%）
-
-克强指数 = 工业用电量增速×40% + 中长期贷款余额增速×35% + 铁路货运量增速×25%
-
-**计算步骤**：
-1. 从 `output/entity-economy-skill/electricity_consumption/electricity_consumption.csv` 读取 `yoy_percent`（用电量增速）
-2. 从 `output/entity-economy-skill/railway_freight/railway_freight.csv` 读取 `freight_send_yoy_percent`（货运增速）
-3. 从 `output/entity-economy-skill/pbc_credit_balance/pbc_credit_balance.csv` 读取当前月份的 `中长期企业贷款_亿元`
-4. 从 `output/entity-economy-skill/pbc_credit_balance/pbc_credit_balance_2025.csv` 读取上年同期的 `企业中长期贷款_亿元`，计算企业贷款同比 = (本期 - 上年同期) / 上年同期 × 100%
-5. 三项代入公式加权求和
-
-注：若克强指数三子项数据不可得，跳过该指标，总权重重新分配至其余四项。
-
-| 数值区间 | 得分 | 定性 |
-|---------|------|------|
-| > 8% | 80–100 | 偏热 |
-| 5%–8% | 60–80 | 偏热/稳健 |
-| 3%–5% | 40–60 | 稳健/中性 |
-| 1%–3% | 20–40 | 偏冷 |
-| < 1% | 0–20 | 过冷 |
-
 ### 综合评分
 
-**综合评分 = PMI得分×30% + 工业增加值×20% + 固投×20% + 社零×20% + 克强指数×10%**
+**综合评分 = PMI得分×40% + 工业增加值×20% + 固投×20% + 社零×20%**
 
 ### 定性判断
 
@@ -118,11 +94,9 @@ version: 0.2.0
 1. **确定目标月份**：取各指标 CSV 中最新一条记录的月份
 2. **读取数据**：从各 CSV 读取最新月份的指标值
    - 注意：各 CSV 第一行即最新月份数据（降序排列）
-   - 克强指数需读取三个子项数据后自行计算
-3. **计算克强指数**：三子项按权重加权
-4. **计算得分**：对每个指标按评分表换算得分
-5. **计算加权总分**
-6. **输出结构化报告**
+3. **计算得分**：对每个指标按评分表换算得分
+4. **计算加权总分**
+5. **输出结构化报告**
 
 ## 输出格式
 
@@ -134,11 +108,10 @@ version: 0.2.0
 
 ### 综合评分
 - **总分：{X}分**（{定性}）
-- 制造业PMI：{X}分 × 30% = {贡献}
+- 制造业PMI：{X}分 × 40% = {贡献}
 - 工业增加值：{X}分 × 20% = {贡献}
 - 固定资产投资：{X}分 × 20% = {贡献}
 - 社零：{X}分 × 20% = {贡献}
-- 克强指数：{X}分 × 10% = {贡献}（用电量×40% + 贷款×35% + 货运×25%）
 
 ### 指标数据表
 
@@ -148,13 +121,11 @@ version: 0.2.0
 | 工业增加值 | X% | +/-X | X | X |
 | 固定资产投资 | X% | +/-X | X | X |
 | 社零 | X% | +/-X | X | X |
-| 克强指数 | X% | +/-X | X | X |
 
 ### 结构性解读
 - **景气度**：PMI 及分项新订单/生产分析
 - **生产端**：工业增加值分析
 - **需求端（固投+社零）**：固投和社零分析，说明供需格局
-- **克强指数子项**：用电量/贷款/货运三子项的增速和方向分化
 - **供需要平衡**：供给端 vs 需求端的强弱对比
 
 ### 风险提示
@@ -189,8 +160,8 @@ uv run python scripts/upload_signal.py --verify
 ```
 
 **内置规则评分**：`build_macro_signal.py` 按 SKILL.md 评分体系自动计算
-（PMI×30% + 工业增加值×20% + 固投×20% + 社零×20% + 克强指数×10%，
-缺失指标按剩余权重归一化；克强指数三子项缺一即整体跳过），
+（PMI×40% + 工业增加值×20% + 固投×20% + 社零×20%，
+缺失指标按剩余权重归一化），
 `total_score` 随推送上线。月度数据 `data_date` 落在 `YYYY-MM-01`；
 上传前自动预检（skill/file 白名单、字段结构、数据新鲜度 45 天）。
 

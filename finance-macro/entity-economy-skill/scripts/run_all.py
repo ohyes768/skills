@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-统一抓取全部5个实体经济核心指标，并输出 JSON。
+统一抓取全部4个实体经济核心指标，并输出 JSON。
 """
 
 from __future__ import annotations
@@ -9,7 +9,6 @@ import argparse
 import json
 import os
 import sys
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -44,16 +43,13 @@ if env_path.exists():
         key, value = line.split("=", 1)
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
-from fetch_common import setup_logging, to_iso_now
+from fetch_common import get_data_dir, setup_logging, to_iso_now
 
 from fetch_eastmoney_akshare import (
     fetch_indicator,
     INDICATOR_CONFIG,
     ensure_dir,
 )
-from fetch_electricity_consumption import fetch_electricity_consumption_monthly
-from fetch_railway_freight import fetch_railway_freight_monthly
-from fetch_pbc_credit_balance import fetch_pbc_credit_balance
 
 
 # 数据发布时间（每月）
@@ -62,9 +58,6 @@ PUBLISH_DAYS = {
     "gyzjz": 18,       # 每月18日
     "gdzctz": 18,      # 每月18日
     "consumer_retail": 18,  # 每月18日
-    "electricity": 20,  # 每月20日
-    "railway_freight": 7,   # 每月7日
-    "pbc_credit": 20,   # 每月20日
 }
 
 
@@ -95,30 +88,19 @@ def _fetch_all_akshare(base_dir: Path) -> dict[str, Any]:
 
 
 def fetch_all(requested_month: str | None = None) -> dict[str, Any]:
-    """统一抓取全部5个实体经济指标。"""
+    """统一抓取全部4个实体经济指标。"""
     today = datetime.now(timezone.utc)
 
     # 各指标实际月份
     pmi_month = _default_month(PUBLISH_DAYS["pmi"])
     gyzjz_month = _default_month(PUBLISH_DAYS["gyzjz"])
-    elec_month = _default_month(PUBLISH_DAYS["electricity"])
-    rail_month = _default_month(PUBLISH_DAYS["railway_freight"])
-    pbc_month = _default_month(PUBLISH_DAYS["pbc_credit"])
 
-    base_dir = _SCRIPT_DIR.parent / "data"
+    # 统一输出目录：finance-macro/output/<skill 目录名>（对齐 fetch_common.get_data_dir）
+    base_dir = get_data_dir()
     base_dir.mkdir(parents=True, exist_ok=True)
 
-    # 并行抓取（akshare 4项 + 电力 + 铁路 + 央行信贷）
-    with ThreadPoolExecutor(max_workers=7) as executor:
-        f_akshare = executor.submit(_fetch_all_akshare, base_dir)
-        f_elec = executor.submit(fetch_electricity_consumption_monthly, elec_month)
-        f_rail = executor.submit(fetch_railway_freight_monthly, rail_month)
-        f_pbc = executor.submit(fetch_pbc_credit_balance, pbc_month)
-
-        akshare_results = f_akshare.result()
-        elec_result = f_elec.result()
-        rail_result = f_rail.result()
-        pbc_result = f_pbc.result()
+    # 抓取 akshare 四项指标（PMI/工业增加值/固投/社零）
+    akshare_results = _fetch_all_akshare(base_dir)
 
     return {
         "as_of_date": today.strftime("%Y-%m-%d"),
@@ -127,16 +109,10 @@ def fetch_all(requested_month: str | None = None) -> dict[str, Any]:
         "actual_months": {
             "pmi": pmi_month,
             "gyzjz": gyzjz_month,
-            "electricity": elec_month,
-            "railway_freight": rail_month,
-            "pbc_credit": pbc_month,
         },
         "publish_days": PUBLISH_DAYS,
         "data": {
             "akshare": akshare_results,
-            "electricity": elec_result,
-            "railway_freight": rail_result,
-            "pbc_credit": pbc_result,
         },
     }
 
