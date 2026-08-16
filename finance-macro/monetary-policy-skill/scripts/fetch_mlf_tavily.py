@@ -23,18 +23,17 @@ DEFAULT_MODEL = "deepseek-chat"
 
 
 def load_env_file() -> None:
-    env_path = Path(__file__).resolve().parents[1] / ".env"
-    if not env_path.exists():
-        return
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+    """加载 .env:优先 finance-macro/.env,再 skill 根 .env;已设的环境变量不覆盖。"""
+    skill_root = Path(__file__).resolve().parents[1]
+    for env_path in [skill_root.parent / ".env", skill_root / ".env"]:
+        if not env_path.exists():
             continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        if key and key not in os.environ:
-            os.environ[key] = value
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
 def build_result_template(target_month: str | None) -> dict[str, Any]:
@@ -262,11 +261,11 @@ def fetch_mlf_monthly_net(target_month: str | None) -> dict[str, Any]:
 
     LOGGER.info("找到 %d 条结果，传给 DeepSeek 筛选", len(results))
 
-    # DeepSeek 从多结果中选择正确月份
+    # DeepSeek 从多结果中选择正确月份（用降级后的 actual_month，target_month 可能为 None）
     LOGGER.info("=== Step 2: DeepSeek 提取 ===")
     session = build_session()
     extracted = call_deepseek_extract(
-        session, deepseek_key, DEFAULT_MODEL, results, target_month
+        session, deepseek_key, DEFAULT_MODEL, results, actual_month
     )
 
     value = extracted.get("mlf_net_injection_yi")
@@ -281,12 +280,12 @@ def fetch_mlf_monthly_net(target_month: str | None) -> dict[str, Any]:
         if published_date_str:
             try:
                 pub_date = datetime.strptime(published_date_str, "%Y-%m-%d")
-                target_start = datetime.strptime(f"{target_month}-01", "%Y-%m-%d")
+                target_start = datetime.strptime(f"{actual_month}-01", "%Y-%m-%d")
                 if pub_date < target_start:
-                    result["error"] = f"文章发布于 {published_date_str}，早于目标月份 {target_month}，被过滤"
+                    result["error"] = f"文章发布于 {published_date_str}，早于目标月份 {actual_month}，被过滤"
                     result["debug"] = extracted
                     LOGGER.warning("过滤历史文章: %s (发布于 %s，早于 %s)",
-                                   extracted.get("article_title", ""), published_date_str, target_month)
+                                   extracted.get("article_title", ""), published_date_str, actual_month)
                     return result
             except ValueError:
                 LOGGER.warning("无法解析发布日期: %s", published_date_str)
@@ -298,12 +297,12 @@ def fetch_mlf_monthly_net(target_month: str | None) -> dict[str, Any]:
         result["published_at"] = published_date_str
         result["matched_article_index"] = matched_idx
         result["parse_status"] = "ok"
-        # 写入月度缓存
-        write_cache("mlf", target_month, result)
+        # 写入月度缓存（与 read_cache 一致用 actual_month 键）
+        write_cache("mlf", actual_month, result)
         LOGGER.info("MLF 净投放: %d 亿元 (来自第%d篇文章, 发布于 %s)",
                     result["value"], matched_idx, published_date_str)
     else:
-        result["error"] = f"未找到 {target_month} 月的 MLF 净投放数据"
+        result["error"] = f"未找到 {actual_month} 月的 MLF 净投放数据"
         result["debug"] = extracted
 
     return result

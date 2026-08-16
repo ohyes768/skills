@@ -54,6 +54,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Markdown 报告输出路径 (默认: {skill_dir}/exchange_rate_report.md)",
     )
+    parser.add_argument(
+        "--upload",
+        action="store_true",
+        help="抓取后构建 macro_signal.json 并推送到线上 macro 后端（token 从 finance-macro/.env 读取）",
+    )
     return parser.parse_args()
 
 
@@ -370,6 +375,35 @@ def main():
         # 保存结果
         save_results(results, output_path)
         generate_report(results, report_path)
+
+        # 构建契约结构并推送到线上 macro 后端
+        # （契约: personal-web/.trellis/spec/guides/macro-signal-upload.md 第 2.3.A 节）
+        if args.upload:
+            from build_macro_signal import build_signal
+            from upload_signal import DEFAULT_URL, UploadError, upload_signal
+
+            signal = build_signal(results)
+            if not signal["details"] or not signal["data_date"]:
+                logger.error("可用指标不足，无法构建 macro_signal.json，跳过推送")
+                sys.exit(1)
+
+            # 落盘一份 macro_signal.json，便于单独重推（upload_signal.py 默认输入）
+            signal_path = OUTPUT_DIR / "macro_signal.json"
+            with open(signal_path, "w", encoding="utf-8") as f:
+                json.dump(signal, f, ensure_ascii=False, indent=2)
+                f.write("\n")
+            logger.info(f"macro_signal.json 已保存到: {signal_path}")
+
+            token = os.environ.get("MACRO_SIGNAL_UPLOAD_TOKEN", "")
+            url = os.environ.get("MACRO_SIGNAL_UPLOAD_URL", "") or DEFAULT_URL
+            if not token:
+                logger.error("--upload 需要配置 MACRO_SIGNAL_UPLOAD_TOKEN（finance-macro/.env）")
+                sys.exit(1)
+            try:
+                upload_signal(url, token, "exchange-rate-skill", "macro_signal.json", signal)
+            except UploadError as exc:
+                logger.error(f"推送失败: {exc}")
+                sys.exit(1)
 
         logger.info("=" * 60)
         logger.info("运行完成!")

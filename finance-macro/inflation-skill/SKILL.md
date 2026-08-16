@@ -57,6 +57,9 @@ uv run scripts/fetch_all.py
 
 # 抓取指定月份数据
 uv run scripts/fetch_all.py --month 2026-03
+
+# 抓取+评分+推送到线上 macro 后端（可选，见下文「推送到线上 macro 后端」）
+uv run scripts/run_all.py --upload
 ```
 
 ## 输出说明
@@ -127,6 +130,38 @@ uv run scripts/fetch_all.py --month 2026-03
 1. **核心CPI优先** — 核心CPI代表趋势性，过滤短期扰动
 2. **PPI环比拐点信号强** — 商品价格拐点时权重优先
 3. **春节错月需备注** — 同比跳变不可视为趋势（如2月数据）
+
+## 推送到线上 macro 后端（可选）
+
+将抓取数据转换为契约结构 `macro_signal.json`（`conclusion` / `data_date` / `total_score` / `details`）并推送，web 宏观界面每个维度右上角展示评分徽章。
+对接契约见 `personal-web/.trellis/spec/guides/macro-signal-upload.md` 第 2.3.A 节。
+
+**前置配置**：在 `finance-macro/.env`（不入库）配置：
+
+```env
+MACRO_SIGNAL_UPLOAD_TOKEN=<token> # 推送鉴权，来自 personal-web 根 .env
+MACRO_SIGNAL_UPLOAD_URL=https://web.duomi77.cn:9443/api/macro/signal/upload
+MACRO_UPLOAD_SSL_VERIFY=0        # NAS 自签证书场景跳过 TLS 校验（仅限内网自建服务）
+```
+
+**方式一：抓取+评分+推送一条龙**
+
+```bash
+uv run scripts/run_all.py --upload
+```
+
+**方式二：分步执行**
+
+```bash
+uv run scripts/build_macro_signal.py    # 按评分框架计算总分并构建契约结构
+uv run scripts/upload_signal.py --dry-run
+uv run scripts/upload_signal.py --verify
+```
+
+**内置规则评分**：`build_macro_signal.py` 按 SKILL.md 评分框架自动计算
+（CPI×40% + PPI×30% + 核心CPI×30%，核心CPI 缺失时按剩余权重归一化），
+`total_score` 随推送上线。月度数据 `data_date` 落在 `YYYY-MM-01`；
+上传前自动预检（skill/file 白名单、字段结构、数据新鲜度 45 天）。
 
 ## 不处理范围
 

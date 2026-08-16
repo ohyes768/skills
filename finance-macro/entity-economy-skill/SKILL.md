@@ -15,6 +15,7 @@ version: 0.2.0
 1. 从本地 CSV 数据文件读取最新月份五大指标数据
 2. 基于评分体系计算各指标得分和加权总分
 3. 输出结构化判断结论
+4. 可选：构建 `macro_signal.json` 并推送到线上 macro 后端（`run_all.py --upload`，见下文「推送到线上 macro 后端」）
 
 ## 数据文件路径
 
@@ -159,6 +160,39 @@ version: 0.2.0
 ### 风险提示
 [如存在结构性问题在此提示]
 ```
+
+## 推送到线上 macro 后端（可选）
+
+将最新指标转换为契约结构 `macro_signal.json`（`conclusion` / `data_date` / `total_score` / `details`）并推送，web 宏观界面每个维度右上角展示评分徽章。
+对接契约见 `personal-web/.trellis/spec/guides/macro-signal-upload.md` 第 2.3.A 节。
+
+**前置配置**：在 `finance-macro/.env`（不入库）配置：
+
+```env
+MACRO_SIGNAL_UPLOAD_TOKEN=<token> # 推送鉴权，来自 personal-web 根 .env
+MACRO_SIGNAL_UPLOAD_URL=https://web.duomi77.cn:9443/api/macro/signal/upload
+MACRO_UPLOAD_SSL_VERIFY=0        # NAS 自签证书场景跳过 TLS 校验（仅限内网自建服务）
+```
+
+**方式一：抓取+评分+推送一条龙**
+
+```bash
+uv run python scripts/run_all.py --upload
+```
+
+**方式二：分步执行**
+
+```bash
+uv run python scripts/build_macro_signal.py    # 按评分体系计算总分并构建契约结构
+uv run python scripts/upload_signal.py --dry-run
+uv run python scripts/upload_signal.py --verify
+```
+
+**内置规则评分**：`build_macro_signal.py` 按 SKILL.md 评分体系自动计算
+（PMI×30% + 工业增加值×20% + 固投×20% + 社零×20% + 克强指数×10%，
+缺失指标按剩余权重归一化；克强指数三子项缺一即整体跳过），
+`total_score` 随推送上线。月度数据 `data_date` 落在 `YYYY-MM-01`；
+上传前自动预检（skill/file 白名单、字段结构、数据新鲜度 45 天）。
 
 ## 注意事项
 

@@ -46,6 +46,7 @@ uv run python scripts/run_all.py --days 30
 - `--days N`: 回溯天数，默认30日
 - `--output`: JSON 数据文件路径（默认 `finance-macro/output/exchange-rate-skill/exchange_rate_data.json`）
 - `--report`: Markdown 报告路径（默认 `finance-macro/output/exchange-rate-skill/exchange_rate_report.md`）
+- `--upload`: 抓取后构建 macro_signal.json 并推送到线上 macro 后端（需先配置 token，见第三步）
 
 ### 数据源说明
 
@@ -77,6 +78,51 @@ uv run python scripts/run_all.py --days 30
 | TED利差 | {ted_spread}% | 纽约联储银行 (SOFR) / 美国财政部 (3个月美债) |
 
 **如果数据不一致，请提供正确数值。**
+
+---
+
+### 第三步：构建契约结构并推送到线上 macro 后端（可选）
+
+将抓取数据转换为后端契约结构 `macro_signal.json`（`conclusion` / `data_date` / `total_score` / `details`）并推送，web 宏观界面维度卡右上角展示 `total_score` 评分徽章。
+对接契约见 `personal-web/.trellis/spec/guides/macro-signal-upload.md` 第 2.3.A 节。
+
+**前置配置**：在 `finance-macro/.env`（已被 .gitignore 忽略，不入库）配置：
+
+```env
+FRED_API_KEY=<key>                # 汇率/TED 数据必需
+MACRO_SIGNAL_UPLOAD_TOKEN=<token> # 推送鉴权，来自 personal-web 根 .env
+MACRO_SIGNAL_UPLOAD_URL=https://web.duomi77.cn:9443/api/macro/signal/upload
+MACRO_UPLOAD_SSL_VERIFY=0        # NAS 自签证书场景跳过 TLS 校验（仅限内网自建服务）
+```
+
+**方式一：抓取+转换+推送一条龙**
+
+```bash
+uv run python scripts/run_all.py --upload
+```
+
+**方式二：分步执行**
+
+```bash
+# 转换：抓取数据 → 契约结构 + 内置规则评分（可用 --conclusion 覆盖结论）
+uv run python scripts/build_macro_signal.py
+
+# 推送（先 dry-run 预检）
+uv run python scripts/upload_signal.py --dry-run
+uv run python scripts/upload_signal.py --verify
+```
+
+**内置规则评分**：`build_macro_signal.py` 按 SKILL.md 评分框架自动计算
+（美元指数30% + 人民币20% + 北向25% + TED25%，缺失维度按剩余权重归一化），
+高分=风险规避（注意与 risk-appetite-skill 方向相反）。agent 按框架精调后
+可用 `--conclusion` 覆盖自动结论。
+
+**上传前本地预检**（`upload_signal.py` 自动执行，不通过则不上传）：
+- skill/file 白名单与配对（exchange-rate-skill 只能推 `macro_signal.json`）
+- `conclusion`、`data_date`（取各指标最新日期的最大值）、`details` 数值字段
+- 数据日期距今超过 10 天时警告确认
+
+**错误处理**：401 → 检查 token；400 → 检查白名单/data 结构；网络错误最多重试 2 次。后端同名 file 直接覆盖（原子写），可重复推送。
 
 ---
 
@@ -298,7 +344,9 @@ exchange-rate-skill/
     ├── fetch_exchange_rates.py # 美元指数+人民币汇率（FRED DTWEXBGS/DEXCHUS）
     ├── fetch_north_flow.py     # 北向资金成交总额（东方财富 RPT_MUTUAL_DEALAMT）
     ├── fetch_ted_spread.py     # TED利差（FRED SOFR/DGS3MO）
-    └── run_all.py              # 统一入口（数据抓取）
+    ├── build_macro_signal.py   # 构建契约结构（转换+内置规则评分）
+    ├── upload_signal.py        # 推送 JSON 到线上 macro 后端（6 skill 通用）
+    └── run_all.py              # 统一入口（数据抓取，--upload 可选推送）
 
 # 运行产物统一写入（不入代码库）：
 finance-macro/output/exchange-rate-skill/

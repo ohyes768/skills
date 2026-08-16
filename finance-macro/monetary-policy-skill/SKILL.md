@@ -56,6 +56,8 @@ python /path/to/skills/monetary-policy-skill/scripts/run_all.py --month YYYY-MM
 
 **注意**：数据默认写入统一输出目录 `finance-macro/output/monetary-policy-skill/monetary_indicators_latest.json`（不入代码库）；如需自定义路径可用 `--output` 指定，不要输出到 skill 目录。
 
+**推送线上（可选）**：加 `--upload` 参数可在抓取后按评分框架自动构建 `macro_signal.json` 并推送到线上 macro 后端（见下文「推送到线上 macro 后端」）。
+
 ### 第三步：数据交叉确认（必须执行）
 
 **【重要】脚本获取的数据可能不完整或存在误差，必须引导用户核对！**
@@ -200,6 +202,39 @@ python /path/to/skills/monetary-policy-skill/scripts/run_all.py --month YYYY-MM
 
 ---
 
+## 推送到线上 macro 后端（可选）
+
+将抓取数据转换为契约结构 `macro_signal.json`（`conclusion` / `data_date` / `total_score` / `details`）并推送，web 宏观界面每个维度右上角展示评分徽章。
+对接契约见 `personal-web/.trellis/spec/guides/macro-signal-upload.md` 第 2.3.A 节。
+
+**前置配置**：在 `finance-macro/.env`（不入库）配置：
+
+```env
+MACRO_SIGNAL_UPLOAD_TOKEN=<token> # 推送鉴权，来自 personal-web 根 .env
+MACRO_SIGNAL_UPLOAD_URL=https://web.duomi77.cn:9443/api/macro/signal/upload
+MACRO_UPLOAD_SSL_VERIFY=0        # NAS 自签证书场景跳过 TLS 校验（仅限内网自建服务）
+```
+
+**方式一：抓取+评分+推送一条龙**
+
+```bash
+uv run python scripts/run_all.py --upload
+```
+
+**方式二：分步执行**
+
+```bash
+uv run python scripts/build_macro_signal.py    # 按评分框架计算总分并构建契约结构
+uv run python scripts/upload_signal.py --dry-run
+uv run python scripts/upload_signal.py --verify
+```
+
+**内置规则评分**：`build_macro_signal.py` 按 SKILL.md 评分框架自动计算
+（DR007×40% + MLF净投放×30% + LPR×30%，缺失维度按剩余权重归一化），
+`total_score` 随推送上线。上传前自动预检（skill/file 白名单、字段结构、数据新鲜度 45 天，适配月度数据）。
+
+---
+
 ## 注意事项
 
 1. **DR007 数据**：脚本获取的是最新交易日日度值，非月均值，分析时需注意日内波动
@@ -222,7 +257,9 @@ monetary-policy-skill/
     ├── fetch_dr007.py          # DR007 抓取（中国货币网）
     ├── fetch_lpr.py            # LPR 抓取（akshare）
     ├── fetch_mlf_tavily.py     # MLF 抓取（财联社+Tavily+DeepSeek 两步方案）
-    ├── run_all.py              # 统一入口
+    ├── build_macro_signal.py   # 构建契约结构（转换+内置规则评分）
+    ├── upload_signal.py        # 推送 JSON 到线上 macro 后端（6 skill 通用）
+    ├── run_all.py              # 统一入口（--upload 可选推送）
     └── run.sh                  # shell 入口
 ```
 

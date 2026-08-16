@@ -1,0 +1,5 @@
+[project]
+name = "monetary-policy-skill"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = ["akshare>=1.18.0", "requests>=2.28.0"]

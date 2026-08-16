@@ -148,6 +148,11 @@ def main() -> None:
         default=str(_SKILL_DIR.parent / "output" / _SKILL_DIR.name / "entity_economy_latest.json"),
         help="输出文件路径",
     )
+    parser.add_argument(
+        "--upload",
+        action="store_true",
+        help="抓取后从 CSV 构建 macro_signal.json 并推送到线上 macro 后端（token 从 finance-macro/.env 读取）",
+    )
     args = parser.parse_args()
 
     setup_logging()
@@ -159,6 +164,35 @@ def main() -> None:
 
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     print(f"\n输出文件: {out_path}")
+
+    # 从各 CSV 构建契约结构并推送到线上 macro 后端（模式对齐 exchange-rate-skill）
+    if args.upload:
+        import os
+
+        from build_macro_signal import build_signal
+        from upload_signal import DEFAULT_URL, UploadError, load_env_file, upload_signal
+
+        signal = build_signal()
+        if not signal["details"] or not signal["data_date"]:
+            print("[upload] 可用指标不足，无法构建 macro_signal.json，跳过推送")
+            sys.exit(1)
+
+        # 落盘一份 macro_signal.json，便于单独重推（upload_signal.py 默认输入）
+        signal_path = out_path.parent / "macro_signal.json"
+        signal_path.write_text(json.dumps(signal, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"[upload] macro_signal.json 已保存到: {signal_path}")
+
+        load_env_file()
+        token = os.environ.get("MACRO_SIGNAL_UPLOAD_TOKEN", "")
+        url = os.environ.get("MACRO_SIGNAL_UPLOAD_URL", "") or DEFAULT_URL
+        if not token:
+            print("[upload] --upload 需要配置 MACRO_SIGNAL_UPLOAD_TOKEN（finance-macro/.env）")
+            sys.exit(1)
+        try:
+            upload_signal(url, token, "entity-economy-skill", "macro_signal.json", signal)
+        except UploadError as exc:
+            print(f"[upload] 推送失败: {exc}")
+            sys.exit(1)
 
 
 if __name__ == "__main__":

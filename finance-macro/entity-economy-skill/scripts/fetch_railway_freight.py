@@ -37,17 +37,17 @@ SEARCH_URL = "https://api.tavily.com/search"
 
 
 def _load_env() -> None:
-    """加载环境变量。"""
-    skill_dir = Path(__file__).parent.parent
-    monetary_env = skill_dir.parent / "monetary-policy-skill" / ".env"
-    for line in monetary_env.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+    """加载 .env:优先 finance-macro/.env,再 skill 根 .env;已设的环境变量不覆盖。"""
+    skill_root = Path(__file__).resolve().parents[1]
+    for env_path in [skill_root.parent / ".env", skill_root / ".env"]:
+        if not env_path.exists():
             continue
-        key, val = line.split("=", 1)
-        key, val = key.strip(), val.strip().strip('"').strip("'")
-        if key:
-            os.environ.setdefault(key, val)
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, val = line.split("=", 1)
+            os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
 
 
 def month_is_valid(month: str) -> bool:

@@ -60,6 +60,8 @@ python /path/to/money-supply-skill/scripts/run_all.py --month YYYY-MM
 
 **注意**：数据默认写入统一输出目录 `finance-macro/output/money-supply-skill/money_supply_latest.json`（不入代码库）；如需自定义路径可用 `--output` 指定，不要输出到 skill 目录。
 
+**推送线上（可选）**：加 `--upload` 参数可在抓取后按评分框架自动构建 `macro_signal.json` 并推送到线上 macro 后端（见下文「推送到线上 macro 后端」）。
+
 ### 第三步：输出字段说明
 
 JSON 输出中新增字段用于标识数据可用性：
@@ -208,6 +210,40 @@ JSON 输出中新增字段用于标识数据可用性：
 
 ---
 
+## 推送到线上 macro 后端（可选）
+
+将抓取数据转换为契约结构 `macro_signal.json`（`conclusion` / `data_date` / `total_score` / `details`）并推送，web 宏观界面每个维度右上角展示评分徽章。
+对接契约见 `personal-web/.trellis/spec/guides/macro-signal-upload.md` 第 2.3.A 节。
+
+**前置配置**：在 `finance-macro/.env`（不入库）配置：
+
+```env
+MACRO_SIGNAL_UPLOAD_TOKEN=<token> # 推送鉴权，来自 personal-web 根 .env
+MACRO_SIGNAL_UPLOAD_URL=https://web.duomi77.cn:9443/api/macro/signal/upload
+MACRO_UPLOAD_SSL_VERIFY=0        # NAS 自签证书场景跳过 TLS 校验（仅限内网自建服务）
+```
+
+**方式一：抓取+评分+推送一条龙**
+
+```bash
+uv run python scripts/run_all.py --upload
+```
+
+**方式二：分步执行**
+
+```bash
+uv run python scripts/build_macro_signal.py    # 按评分框架计算总分并构建契约结构
+uv run python scripts/upload_signal.py --dry-run
+uv run python scripts/upload_signal.py --verify
+```
+
+**内置规则评分**：`build_macro_signal.py` 按 SKILL.md 评分框架自动计算
+（社融×50% + M2-M1剪刀差×50%，缺失维度按剩余权重归一化），
+`total_score` 随推送上线。月度数据 `data_date` 落在 `YYYY-MM-01`；
+上传前自动预检（skill/file 白名单、字段结构、数据新鲜度 45 天）。
+
+---
+
 ## 文件结构
 
 ```
@@ -216,8 +252,10 @@ money-supply-skill/
 └── scripts/
     ├── fetch_m1_m2.py              # M1/M2 抓取（东方财富 API）
     ├── fetch_social_financing_tavily.py  # 社融抓取（Tavily + DeepSeek）
-    ├── run_all.py                  # 统一入口
-    └── run.sh                      # shell 入口
+    ├── build_macro_signal.py        # 构建契约结构（转换+内置规则评分）
+    ├── upload_signal.py             # 推送 JSON 到线上 macro 后端（6 skill 通用）
+    ├── run_all.py                   # 统一入口（--upload 可选推送）
+    └── run.sh                       # shell 入口
 ```
 
 > **注意**：数据输出到用户工作目录，不要输出到 skill 目录。

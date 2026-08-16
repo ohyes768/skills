@@ -20,18 +20,17 @@ DEFAULT_MODEL = "deepseek-chat"
 
 
 def load_env_file() -> None:
-    env_path = Path(__file__).resolve().parents[1] / ".env"
-    if not env_path.exists():
-        return
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+    """加载 .env:优先 finance-macro/.env,再 skill 根 .env;已设的环境变量不覆盖。"""
+    skill_root = Path(__file__).resolve().parents[1]
+    for env_path in [skill_root.parent / ".env", skill_root / ".env"]:
+        if not env_path.exists():
             continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        if key and key not in os.environ:
-            os.environ[key] = value
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
 def build_result_template(target_month: str | None) -> dict[str, Any]:

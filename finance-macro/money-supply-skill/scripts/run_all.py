@@ -11,10 +11,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-# 将 monetary-policy-skill/scripts 加入路径，以复用 fetch_common
+# 借用 monetary-policy-skill/scripts 的 fetch_common（本地无此文件），追加到路径末尾，
+# 避免遮蔽本地 scripts 的同名模块（build_macro_signal 等）
 MONETARY_SKILL_DIR = Path(__file__).resolve().parents[2] / "monetary-policy-skill" / "scripts"
 if MONETARY_SKILL_DIR.exists() and str(MONETARY_SKILL_DIR) not in sys.path:
-    sys.path.insert(0, str(MONETARY_SKILL_DIR))
+    sys.path.append(str(MONETARY_SKILL_DIR))
 
 env_path = Path(__file__).resolve().parents[2] / "monetary-policy-skill" / ".env"
 if env_path.exists():
@@ -140,6 +141,11 @@ def main() -> None:
         default="",
         help="目标月份（YYYY-MM），默认查上月",
     )
+    parser.add_argument(
+        "--upload",
+        action="store_true",
+        help="抓取后构建 macro_signal.json 并推送到线上 macro 后端（token 从 finance-macro/.env 读取）",
+    )
     args = parser.parse_args()
 
     setup_logging()
@@ -157,6 +163,33 @@ def main() -> None:
 
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     print(f"\n输出文件: {out_path}")
+
+    # 构建契约结构并推送到线上 macro 后端（模式对齐 exchange-rate-skill）
+    if args.upload:
+        from build_macro_signal import build_signal
+        from upload_signal import DEFAULT_URL, UploadError, load_env_file, upload_signal
+
+        signal = build_signal(payload)
+        if not signal["details"] or not signal["data_date"]:
+            print("[upload] 可用指标不足，无法构建 macro_signal.json，跳过推送")
+            sys.exit(1)
+
+        # 落盘一份 macro_signal.json，便于单独重推（upload_signal.py 默认输入）
+        signal_path = out_path.parent / "macro_signal.json"
+        signal_path.write_text(json.dumps(signal, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"[upload] macro_signal.json 已保存到: {signal_path}")
+
+        load_env_file()
+        token = os.environ.get("MACRO_SIGNAL_UPLOAD_TOKEN", "")
+        url = os.environ.get("MACRO_SIGNAL_UPLOAD_URL", "") or DEFAULT_URL
+        if not token:
+            print("[upload] --upload 需要配置 MACRO_SIGNAL_UPLOAD_TOKEN（finance-macro/.env）")
+            sys.exit(1)
+        try:
+            upload_signal(url, token, "money-supply-skill", "macro_signal.json", signal)
+        except UploadError as exc:
+            print(f"[upload] 推送失败: {exc}")
+            sys.exit(1)
 
 
 if __name__ == "__main__":
