@@ -130,9 +130,10 @@
 
 
 
+
 {
   "version": "2.1",
-  "updated": "2026-08-12",
+  "updated": "2026-08-17",
   "description": "个人 skill 库注册表（本 HTML 为唯一数据源）。source=local 为本仓库自研；source=github 为外部仓库 skill。github 版本号用 scripts/sync_github_versions.py 刷新，安装用 scripts/sync_github_skills.py",
   "themes": {
     "finance-macro": {
@@ -158,6 +159,10 @@
     "finance-quant": {
       "label": "量化股票分析",
       "description": "量化规则、机构视角的股票/证券分析类 skill（含外部 GitHub 开源 skill）"
+    },
+    "investment-analysis": {
+      "label": "投资分析",
+      "description": "行业研究、公司基本面与投资价值判断类 skill（含外部 GitHub 开源 skill）"
     }
   },
   "skills": [
@@ -328,9 +333,9 @@
       "theme": "design",
       "status": "active",
       "summary": "UI/UX 设计智能：67 风格、96 配色、57 字体搭配、13 技术栈",
-      "latest_version": "v2.14.1",
-      "head_commit": "abb7f2f",
-      "checked_at": "2026-08-12"
+      "latest_version": "v2.15.0",
+      "head_commit": "a38d04c",
+      "checked_at": "2026-08-17"
     },
     {
       "name": "notes-deal",
@@ -348,8 +353,19 @@
       "status": "active",
       "summary": "游资（UZI）A股/港股/美股分析：22维数据×180条量化规则×17种机构分析方法，全免费数据源、零 API key",
       "latest_version": "v3.9.1",
-      "head_commit": "7bc779d",
-      "checked_at": "2026-08-12"
+      "head_commit": "b004d7a",
+      "checked_at": "2026-08-17"
+    },
+    {
+      "name": "luopan",
+      "source": "github",
+      "repo": "https://github.com/zhangxiaoqiang1991/luopan",
+      "theme": "investment-analysis",
+      "status": "active",
+      "summary": "行业研究+公司研究路由器：行业格局与产业链权力分析、公司投资/求职价值判断（腾讯自选股数据源）",
+      "latest_version": "HEAD@499eb43",
+      "head_commit": "499eb43",
+      "checked_at": "2026-08-17"
     }
   ],
   "agents": {
@@ -383,6 +399,7 @@
     }
   }
 }
+
 
 
 
