@@ -76,7 +76,7 @@ README.md
 
 | Skill | 来源仓库 | 最新版本 | 检查日期 | 主题 | 说明 | 安装到 |
 |---|---|---|---|---|---|---|
-| UZI-Skill | [wbh604/UZI-Skill](https://github.com/wbh604/UZI-Skill) | v3.9.1 | 2026-08-17 | 量化股票分析 | 游资（UZI）A股/港股/美股分析：22维数据×180条量化规则×17种机构分析方法 | — |
+| UZI-Skill | [wbh604/UZI-Skill](https://github.com/wbh604/UZI-Skill) | v3.9.1 | 2026-08-17 | 投资分析 | 游资（UZI）A股/港股/美股分析：22维数据×180条量化规则×17种机构分析方法 | — |
 | luopan | [zhangxiaoqiang1991/luopan](https://github.com/zhangxiaoqiang1991/luopan) | HEAD@499eb43 | 2026-08-17 | 投资分析 | 行业研究+公司研究路由器：行业格局与产业链权力分析、公司投资/求职价值判断（腾讯自选股数据源） | — |
 
 **刷新远程版本**：运行 `python scripts/sync_github_versions.py`（可加 `--dry-run` 只看不写）。脚本对每个 github skill 执行 `git ls-remote`（不走 GitHub REST API、无需 token），取最新 tag 回填 `latest_version`/`head_commit`/`checked_at`，并打印版本变化；无 tag 的仓库以 `HEAD@<短commit>` 记录。刷新后请同步更新上表的「最新版本/检查日期」列。
