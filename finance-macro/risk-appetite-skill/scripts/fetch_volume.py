@@ -24,6 +24,61 @@ from fetch_common import (
 )
 
 
+def fetch_turnover_month_series(month: str, end_date: str | None = None) -> list[dict[str, Any]]:
+    """逐日拉取当月上交所加权换手率，返回按读数日升序的列表。
+
+    月均口径：只取当月内实际取到的交易日读数，缺失日跳过，
+    分母为实际取到的交易日数；缓存优先（finance-macro/cache/turnover/），缺日才回源。
+    注意 fetch_sse_turnover 查非交易日会回退到前一交易日，序列按返回的读数日去重。
+    """
+    from datetime import datetime, timedelta
+
+    from fetch_volume_exchange import fetch_sse_turnover
+
+    if end_date is None:
+        end_date = datetime.now().strftime("%Y-%m-%d")
+
+    try:
+        start = datetime.strptime(f"{month}-01", "%Y-%m-%d")
+        end = datetime.strptime(end_date, "%Y-%m-%d")
+    except ValueError:
+        LOGGER.warning("换手率月序列参数非法: month=%s end_date=%s", month, end_date)
+        return []
+    if end < start:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    current = start
+    while current <= end:
+        if current.weekday() >= 5:  # 周末直接跳过，不发请求
+            current += timedelta(days=1)
+            continue
+        date_str = current.strftime("%Y-%m-%d")
+        current += timedelta(days=1)
+
+        cached = read_cache("turnover", date_str)
+        if cached and isinstance(cached.get("turnover_rate"), (int, float)):
+            read_date = cached.get("date") or date_str
+            if read_date not in seen:
+                rows.append({"date": read_date, "turnover_rate": cached["turnover_rate"]})
+                seen.add(read_date)
+            continue
+
+        sse_data = fetch_sse_turnover(date_str)
+        if sse_data.get("status") != "ok":
+            continue  # 非交易日/接口异常：跳过该日
+        read_date = sse_data.get("date") or date_str
+        if read_date not in seen:
+            rows.append({"date": read_date, "turnover_rate": sse_data["turnover_rate"]})
+            seen.add(read_date)
+            # 按读数日写缓存，与返回值自洽（回退场景避免重复回源）
+            write_cache("turnover", read_date, sse_data)
+
+    rows.sort(key=lambda r: r["date"])
+    return rows
+
+
 def fetch_turnover_rate(days: int = 5) -> dict[str, Any]:
     """
     获取换手率数据，仅使用上交所官方API加权平均换手率

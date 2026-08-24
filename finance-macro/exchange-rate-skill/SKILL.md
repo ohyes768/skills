@@ -86,6 +86,14 @@ uv run python scripts/run_all.py --days 30
 将抓取数据转换为后端契约结构 `macro_signal.json`（`conclusion` / `data_date` / `total_score` / `details`）并推送，web 宏观界面维度卡右上角展示 `total_score` 评分徽章。
 对接契约见 `personal-web/.trellis/spec/guides/macro-signal-upload.md` 第 2.3.A 节。
 
+### 日频推送契约（month_avg 与 data_date 规则）
+
+本 skill 为日频调度：**每交易日盘后**跑 `run_all.py --upload`。
+
+1. **顶层 `data_date` = 推送当日**（不是指标读数日）。后端归档月份按 data_date 提取，月初盘后推送若写上月末读数日会归错月；手动补推历史月份时用 `--data-date YYYY-MM-DD` 指定。
+2. **`indicator_meta`**：日频指标（美元指数 / 美元兑人民币 / TED利差）附带读数日、`frequency: "daily"` 与 `month_avg`（后端已上线透传，前端上月卡片展示月均值）；北向资金为 7 日均量衍生指标，不附 month_avg。
+3. **month_avg 口径**（全 skill 统一）：读数日所在月内、截至最新读数的全部交易日算术平均；只取实际取得的交易日，缺失日跳过、分母用实际取到的交易日数；当月仅 1 个读数时退化为当日值；月末最后一推自然收敛为全月均值。汇率/TED 月均由 FRED 区间序列（本就按天拉取）筛当月计算，零额外请求。
+
 **前置配置**：在 `finance-macro/.env`（已被 .gitignore 忽略，不入库）配置：
 
 ```env

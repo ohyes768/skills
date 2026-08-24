@@ -20,7 +20,7 @@ from typing import Any
 
 import requests
 
-from fetch_common import LOGGER, to_iso_now
+from fetch_common import LOGGER, read_cache, to_iso_now, write_cache
 
 # 缓存
 _sse_cache: dict[str, Any] = {}
@@ -447,6 +447,63 @@ def fetch_both_exchanges(trade_date: str | None = None) -> dict[str, Any]:
         "fetched_at": to_iso_now(),
         "status": "ok" if (sse_data.get("status") == "ok" and szse_data.get("status") == "ok") else "partial",
     }
+
+
+def fetch_volume_month_series(month: str, end_date: str | None = None) -> list[dict[str, Any]]:
+    """逐日拉取当月两市合计成交额，返回按读数日升序的列表。
+
+    月均口径：只取当月内实际取到的交易日读数，缺失日跳过（节假日 API 返回空自然跳过），
+    分母为实际取到的交易日数；缓存优先（finance-macro/cache/volume/），缺日才回源。
+
+    Args:
+        month: 目标月份 YYYY-MM
+        end_date: 截止日期 YYYY-MM-DD（默认今天），月均只统计到该日
+    """
+    if end_date is None:
+        end_date = datetime.now().strftime("%Y-%m-%d")
+
+    start = datetime.strptime(f"{month}-01", "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d")
+    if end < start:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    current = start
+    while current <= end:
+        if current.weekday() >= 5:  # 周末直接跳过，不发请求
+            current += timedelta(days=1)
+            continue
+        date_str = current.strftime("%Y-%m-%d")
+        current += timedelta(days=1)
+
+        cached = read_cache("volume", date_str)
+        if cached and isinstance(cached.get("total_amount_yi"), (int, float)):
+            if date_str not in seen:
+                rows.append({"date": date_str, "total_amount_yi": cached["total_amount_yi"]})
+                seen.add(date_str)
+            continue
+
+        # 缓存未命中才回源（单所接口不带回退，非交易日返回空即跳过）
+        sse = fetch_sse_volume(date_str)
+        szse = fetch_szse_volume(date_str)
+        if sse.get("status") != "ok" or szse.get("status") != "ok":
+            continue
+        total = round((sse.get("total_amount_yi") or 0) + (szse.get("total_amount_yi") or 0), 2)
+        if not total:
+            continue
+        write_cache("volume", date_str, {
+            "date": date_str,
+            "sh_amount_yi": sse.get("total_amount_yi"),
+            "sz_amount_yi": szse.get("total_amount_yi"),
+            "total_amount_yi": total,
+            "source": "exchange_official",
+            "fetched_at": to_iso_now(),
+        })
+        rows.append({"date": date_str, "total_amount_yi": total})
+        seen.add(date_str)
+
+    return rows
 
 
 def main() -> None:

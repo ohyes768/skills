@@ -19,6 +19,7 @@ import argparse
 import json
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -87,27 +88,39 @@ def _safe_float(value: Any) -> float | None:
     return float(value) if isinstance(value, (int, float)) else None
 
 
-def build_signal(raw: dict[str, Any], conclusion_override: str | None = None) -> dict[str, Any]:
+def build_signal(
+    raw: dict[str, Any],
+    conclusion_override: str | None = None,
+    data_date_override: str | None = None,
+) -> dict[str, Any]:
     """
     从 run_all 抓取结果构建契约结构。
 
     缺失维度按剩余权重归一化(如 MLF 抓取失败时,DR007+LPR 归一)。
-    附加字段(score_detail 等)后端不读取,仅落盘备查。
+    附加字段(score_detail / indicator_meta 等)后端不读取 details 以外的部分,仅落盘备查;
+    indicator_meta.month_avg 除外(后端已上线透传,日频指标月均卡片用)。
+
+    data_date 规则(日频推送契约): 默认填推送当日,而非指标读数日——
+    后端归档月份按 data_date 提取,月初盘后推送若写上月末读数日会归错月。
     """
     dr007_block = raw.get("dr007") or {}
     lpr_block = raw.get("lpr") or {}
     mlf_block = raw.get("mlf") or {}
 
     details: dict[str, float] = {}
-    dates: list[str] = []
     parts: list[tuple[str, float, float]] = []  # (label, score, weight)
+    indicator_meta: dict[str, dict[str, Any]] = {}
 
     # --- DR007(每日) ---
     dr007 = _safe_float(dr007_block.get("value"))
     if dr007 is not None:
         details["dr007"] = round(dr007, 4)
-        if isinstance(dr007_block.get("published_at"), str):
-            dates.append(dr007_block["published_at"][:10])
+        dr007_date = (dr007_block.get("published_at") or "")[:10] or None
+        dr007_meta: dict[str, Any] = {"data_date": dr007_date, "frequency": "daily"}
+        month_avg = _safe_float(dr007_block.get("month_avg"))
+        if month_avg is not None:
+            dr007_meta["month_avg"] = round(month_avg, 4)
+        indicator_meta["dr007"] = dr007_meta
         parts.append(("DR007", score_dr007(dr007), WEIGHTS["dr007"]))
 
     # --- LPR(每月20日;变化取 1Y,缺失回退 5Y+) ---
@@ -126,8 +139,11 @@ def build_signal(raw: dict[str, Any], conclusion_override: str | None = None) ->
     elif lpr_5y is not None and prev_5y is not None:
         change_bp = round((lpr_5y - prev_5y) * 100, 2)
     if lpr_1y is not None or lpr_5y is not None:
-        if isinstance(lpr_block.get("published_at"), str):
-            dates.append(lpr_block["published_at"][:10])
+        lpr_date = (lpr_block.get("published_at") or "")[:10] or None
+        if lpr_1y is not None:
+            indicator_meta["lpr_1y"] = {"data_date": lpr_date, "frequency": "monthly"}
+        if lpr_5y is not None:
+            indicator_meta["lpr_5y"] = {"data_date": lpr_date, "frequency": "monthly"}
         if change_bp is not None:
             parts.append(("LPR", score_lpr(change_bp), WEIGHTS["lpr"]))
         else:
@@ -138,6 +154,11 @@ def build_signal(raw: dict[str, Any], conclusion_override: str | None = None) ->
     mlf_net = _safe_float(mlf_block.get("value"))
     if mlf_net is not None:
         details["mlf_net_yi"] = round(mlf_net, 0)
+        mlf_date = (mlf_block.get("published_at") or "")[:10]
+        if not mlf_date:
+            mlf_month = mlf_block.get("actual_month")
+            mlf_date = f"{mlf_month}-01" if isinstance(mlf_month, str) and len(mlf_month) == 7 else None
+        indicator_meta["mlf_net_yi"] = {"data_date": mlf_date, "frequency": "monthly"}
         parts.append(("MLF净投放", score_mlf(mlf_net), WEIGHTS["mlf"]))
 
     # 加权总分(缺失维度按剩余权重归一化)
@@ -147,14 +168,16 @@ def build_signal(raw: dict[str, Any], conclusion_override: str | None = None) ->
     else:
         total = 0.0
 
-    valid_dates = sorted(d for d in dates if d)
-    data_date = valid_dates[-1] if valid_dates else raw.get("as_of_date")
+    # 顶层 data_date = 推送当日(日频契约): 归档月份按它提取,不用读数日;
+    # 手动补推历史月份时可用 --data-date 指定
+    data_date = data_date_override or datetime.now().strftime("%Y-%m-%d")
 
     signal: dict[str, Any] = {
         "conclusion": conclusion_override or map_conclusion(total),
         "data_date": data_date,
         "total_score": round(total, 1),
         "details": details,
+        "indicator_meta": indicator_meta,
         "score_detail": {
             "total_score": round(total, 1),
             "dimensions": [{"label": label, "score": score, "weight": weight} for label, score, weight in parts],
@@ -172,6 +195,8 @@ def main() -> int:
                         help="输出 macro_signal.json 路径")
     parser.add_argument("--conclusion", type=str, default="",
                         help="覆盖定性结论(默认按内置规则评分映射)")
+    parser.add_argument("--data-date", type=str, default="",
+                        help="覆盖顶层 data_date(默认推送当日;手动补推历史月份时指定)")
     args = parser.parse_args()
 
     input_path = Path(args.input)
@@ -182,7 +207,11 @@ def main() -> int:
     with open(input_path, encoding="utf-8") as f:
         raw = json.load(f)
 
-    signal = build_signal(raw, conclusion_override=args.conclusion or None)
+    signal = build_signal(
+        raw,
+        conclusion_override=args.conclusion or None,
+        data_date_override=(args.data_date or None),
+    )
 
     if not signal["details"]:
         logger.error("无任何可用指标(details 为空),不生成 macro_signal.json")
@@ -200,6 +229,8 @@ def main() -> int:
     logger.info("已生成 %s", output_path)
     logger.info("conclusion=%s data_date=%s 总分=%s",
                 signal["conclusion"], signal["data_date"], signal["total_score"])
+    for key, meta in signal.get("indicator_meta", {}).items():
+        logger.info("  meta %s: %s", key, meta)
     for dim in signal["score_detail"]["dimensions"]:
         logger.info("  %s: %s分 × %.0f%%", dim["label"], dim["score"], dim["weight"] * 100)
     return 0

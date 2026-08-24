@@ -33,6 +33,26 @@ OUTPUT_DIR = _SKILL_DIR.parent / "output" / _SKILL_DIR.name
 logger = get_logger(__name__)
 
 
+def latest_with_month_avg(series: pd.Series) -> dict | None:
+    """从日度序列提取最新读数 + 当月日均（月均口径：本月至今算术平均，月末自动收敛）。
+
+    只取序列中实际存在的交易日，缺失日跳过；当月仅 1 个读数时月均退化为当日值。
+    """
+    if series is None or series.empty:
+        return None
+    last_valid = series.last_valid_index()
+    if last_valid is None:
+        return None
+    item = {
+        "value": round(float(series[last_valid]), 4),
+        "date": last_valid.strftime("%Y-%m-%d"),
+    }
+    month_vals = series[series.index.to_period("M") == last_valid.to_period("M")].dropna()
+    if len(month_vals):
+        item["month_avg"] = round(float(month_vals.mean()), 4)
+    return item
+
+
 def parse_args() -> argparse.Namespace:
     """解析命令行参数"""
     parser = argparse.ArgumentParser(description="汇率与资金流向数据获取")
@@ -85,16 +105,12 @@ def run_all(days: int = 30) -> dict:
         csv_path = save_exchange_rates_to_csv(exchange_data)
         logger.info(f"汇率数据已保存到: {csv_path}")
 
-        # 提取最新值
+        # 提取最新值 + 当月日均
         latest = {}
         for name, series in exchange_data.items():
-            if not series.empty:
-                last_valid = series.last_valid_index()
-                if last_valid is not None:
-                    latest[name] = {
-                        "value": round(float(series[last_valid]), 4),
-                        "date": last_valid.strftime("%Y-%m-%d"),
-                    }
+            item = latest_with_month_avg(series)
+            if item is not None:
+                latest[name] = item
         results["data"]["exchange_rates"] = latest
 
     except Exception as e:
@@ -173,24 +189,24 @@ def run_all(days: int = 30) -> dict:
         csv_path = save_ted_spread_to_csv(ted_data)
         logger.info(f"TED利差数据已保存到: {csv_path}")
 
-        # 提取最新值
+        # 提取最新值 + 当月日均
         latest = {}
         for name, series in ted_data.items():
-            if not series.empty:
-                last_valid = series.last_valid_index()
-                if last_valid is not None:
-                    latest[name] = {
-                        "value": round(float(series[last_valid]), 4),
-                        "date": last_valid.strftime("%Y-%m-%d"),
-                    }
+            item = latest_with_month_avg(series)
+            if item is not None:
+                latest[name] = item
 
-        # 重组 TED 数据结构
+        # 重组 TED 数据结构（补读数日与月均，日频推送契约用）
         if "sofr" in latest and "us_3m" in latest and "ted_spread" in latest:
+            ted_latest = latest["ted_spread"]
             results["data"]["ted_spread"] = {
                 "sofr": latest["sofr"]["value"],
                 "us_3m": latest["us_3m"]["value"],
-                "ted_spread": latest["ted_spread"]["value"],
+                "ted_spread": ted_latest["value"],
+                "date": ted_latest["date"],
             }
+            if "month_avg" in ted_latest:
+                results["data"]["ted_spread"]["month_avg"] = ted_latest["month_avg"]
 
     except Exception as e:
         logger.error(f"获取 TED 利差数据失败: {e}")

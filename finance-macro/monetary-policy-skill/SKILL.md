@@ -207,6 +207,22 @@ python /path/to/skills/monetary-policy-skill/scripts/run_all.py --month YYYY-MM
 将抓取数据转换为契约结构 `macro_signal.json`（`conclusion` / `data_date` / `total_score` / `details`）并推送，web 宏观界面每个维度右上角展示评分徽章。
 对接契约见 `personal-web/.trellis/spec/guides/macro-signal-upload.md` 第 2.3.A 节。
 
+### 日频推送契约（month_avg 与 data_date 规则）
+
+本 skill 为日频调度：**每交易日盘后**跑 `run_all.py --upload`（MLF/LPR 自动取最新，无月份参数依赖；月度照旧的 money-supply / entity-economy / inflation 不适用本节）。
+
+1. **顶层 `data_date` = 推送当日**（不是指标读数日）。后端归档月份按 data_date 提取，月初盘后推送若写上月末读数日会归错月；手动补推历史月份时用 `--data-date YYYY-MM-DD` 指定。
+2. **`indicator_meta`**：每个 details key 附带读数日与频率元信息，日频指标额外携带 `month_avg`（后端已上线透传，前端上月卡片展示月均值）：
+
+```json
+"indicator_meta": {
+  "dr007":     { "data_date": "2026-08-14", "frequency": "daily",   "month_avg": 1.68 },
+  "lpr_1y":    { "data_date": "2026-08-20", "frequency": "monthly" }
+}
+```
+
+3. **month_avg 口径**（全 skill 统一）：该指标读数日所在月内、截至最新读数的全部交易日算术平均；只取交易日不补自然日，单日缺失跳过、分母用实际取到的交易日数；当月仅 1 个交易日时退化为当日值；月末最后一推自然收敛为全月均值，无需按当月/历史月写两套逻辑。DR007 月均由 chinamoney 全序列 CSV 直接筛当月计算，零额外请求。
+
 **前置配置**：在 `finance-macro/.env`（不入库）配置：
 
 ```env

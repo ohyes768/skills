@@ -21,8 +21,9 @@ for _p in [str(_SCRIPT_DIR)]:
 sys.path.insert(0, str(_SCRIPT_DIR))
 
 from fetch_common import setup_logging, LOGGER, to_iso_now, load_env_file
-from fetch_margin import fetch_margin_ohlc, fetch_margin_history
-from fetch_volume import fetch_market_volume, fetch_turnover_rate
+from fetch_margin import fetch_margin_ohlc, fetch_margin_history, fetch_margin_month_series
+from fetch_volume import fetch_market_volume, fetch_turnover_rate, fetch_turnover_month_series
+from fetch_volume_exchange import fetch_volume_month_series
 from upload_signal import DEFAULT_URL, UploadError, upload_signal
 
 # 统一输出目录：finance-macro/output/<skill 目录名>
@@ -404,11 +405,57 @@ def get_signal_emoji(score: float | None) -> str:
     return "❄️"
 
 
+def attach_month_avg_and_push_date(all_data: dict[str, Any], data_date: str) -> None:
+    """日频推送契约适配：
+
+    1. date 统一填推送当日（后端归档月份按 data.*.date 提取，月初盘后推送若写
+       上月末读数日会归错月）；原始读数日保留在 read_date。
+       注意融资融券是 T-1 数据（T 日 09:45 更新），盘后推送时 read_date 为前一交易日。
+    2. 三个日频指标附加 month_avg（本月至今算术平均，随日期推进自动收敛为全月均值；
+       只取实际拿到的交易日，缺日跳过，单点退化为当日值）。
+    """
+    month = data_date[:7]
+
+    for sub_key in ("volume", "turnover", "margin"):
+        block = all_data.get(sub_key)
+        if isinstance(block, dict) and block.get("date"):
+            block["read_date"] = block["date"]
+            block["date"] = data_date
+
+    try:
+        series = fetch_volume_month_series(month, data_date)
+        vals = [r["total_amount_yi"] for r in series if isinstance(r.get("total_amount_yi"), (int, float))]
+        if vals:
+            all_data.setdefault("volume", {})["month_avg"] = round(sum(vals) / len(vals), 2)
+            LOGGER.info("两市成交额月均: %.2f 亿（%d 个交易日）", all_data["volume"]["month_avg"], len(vals))
+    except Exception as exc:
+        LOGGER.warning("成交额月均计算失败: %s", exc)
+
+    try:
+        series = fetch_turnover_month_series(month, data_date)
+        vals = [r["turnover_rate"] for r in series if isinstance(r.get("turnover_rate"), (int, float))]
+        if vals:
+            all_data.setdefault("turnover", {})["month_avg"] = round(sum(vals) / len(vals), 4)
+            LOGGER.info("换手率月均: %.4f%%（%d 个交易日）", all_data["turnover"]["month_avg"], len(vals))
+    except Exception as exc:
+        LOGGER.warning("换手率月均计算失败: %s", exc)
+
+    try:
+        series = fetch_margin_month_series(month)
+        vals = [r["rzye"] for r in series if isinstance(r.get("rzye"), (int, float))]
+        if vals:
+            all_data.setdefault("margin", {})["month_avg"] = round(sum(vals) / len(vals), 2)
+            LOGGER.info("融资余额月均: %.2f 亿（%d 个交易日）", all_data["margin"]["month_avg"], len(vals))
+    except Exception as exc:
+        LOGGER.warning("融资余额月均计算失败: %s", exc)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="风险偏好判断 - 统一数据获取")
     parser.add_argument("--output", type=str, default=str(OUTPUT_DIR / "risk_data.json"), help="输出 JSON 文件路径")
     parser.add_argument("--report", type=str, default=str(OUTPUT_DIR / "risk_report.md"), help="输出文本报告路径")
     parser.add_argument("--days", type=int, default=5, help="评估区间天数（默认5日）")
+    parser.add_argument("--data-date", type=str, default="", help="覆盖推送日期（默认今天；手动补推历史月份时指定）")
     parser.add_argument("--upload", action="store_true", help="抓取+评分后推送到线上 macro 后端（token 从 finance-macro/.env 读取）")
     args = parser.parse_args()
 
@@ -416,6 +463,10 @@ def main() -> None:
 
     # 获取数据
     all_data = fetch_all(days=args.days)
+
+    # 日频推送契约：date=推送当日 + 月均注入
+    data_date = args.data_date or datetime.now().strftime("%Y-%m-%d")
+    attach_month_avg_and_push_date(all_data, data_date)
 
     # 计算评分
     score_result = calculate_score(all_data)

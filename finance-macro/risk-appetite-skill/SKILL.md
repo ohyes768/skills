@@ -81,6 +81,15 @@ uv run python scripts/run_all.py --days 5
 将 `risk_data.json` 推送到 personal-web 的宏观信号后端，供前端展示。对接契约见
 `personal-web/.trellis/spec/guides/macro-signal-upload.md`。
 
+### 日频推送契约（month_avg 与 date 规则）
+
+本 skill 为日频调度：**每交易日盘后**跑 `run_all.py --upload`。
+
+1. **`data.{volume,turnover,margin}.date` = 推送当日**（后端归档月份按它提取）；原始读数日保留在同块的 `read_date`。注意融资融券是 T-1 数据（T 日 09:45 更新），盘后推送时 `read_date` 为前一交易日——若 date 写读数日，月初第一个交易日推送会被归入上月。手动补推历史月份时用 `--data-date YYYY-MM-DD` 指定。
+2. **`data.*.month_avg`**：三个日频指标（两市成交额 / 换手率 / 融资余额）各附带当月日均（后端已上线透传，前端上月卡片展示月均值）。
+3. **month_avg 口径**（全 skill 统一）：读数日所在月内、截至最新读数的全部交易日算术平均；只取交易日不补自然日，单日缺失跳过、分母用实际取到的交易日数；当月仅 1 个交易日时退化为当日值；月末最后一推自然收敛为全月均值。存量型指标（融资余额/换手率）同样用日度简单平均，不做特殊处理。
+4. **数据来源**：融资余额直接筛 akshare 全量历史（零额外请求）；成交额/换手率通过交易所官方 API 逐日回拉当月（缓存优先写入 `finance-macro/cache/{volume,turnover}/`，缺日才回源，非交易日 API 返回空自动跳过）。
+
 **前置配置**：在 `finance-macro/.env`（已被 .gitignore 忽略，不入库）配置：
 
 ```env

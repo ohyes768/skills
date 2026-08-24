@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -111,12 +112,36 @@ def map_conclusion(total: float) -> str:
     return "极度乐观"
 
 
-def build_signal(raw: dict[str, Any], conclusion_override: str | None = None) -> dict[str, Any]:
+def _safe_float(value: Any) -> float | None:
+    return float(value) if isinstance(value, (int, float)) else None
+
+
+def _daily_meta(block: dict[str, Any]) -> dict[str, Any]:
+    """日频指标的 indicator_meta 条目：读数日 + daily + 当月日均（若有）。"""
+    meta: dict[str, Any] = {
+        "data_date": block.get("date"),
+        "frequency": "daily",
+    }
+    month_avg = _safe_float(block.get("month_avg"))
+    if month_avg is not None:
+        meta["month_avg"] = round(month_avg, 4)
+    return meta
+
+
+def build_signal(
+    raw: dict[str, Any],
+    conclusion_override: str | None = None,
+    data_date_override: str | None = None,
+) -> dict[str, Any]:
     """
     从 run_all 抓取结果构建契约结构。
 
     缺失维度按剩余权重归一化（如 FRED 失败只剩北向时，北向得分即总分）。
-    附加字段（score_detail 等）后端不读取，仅落盘备查。
+    附加字段（score_detail / indicator_meta 等）仅落盘备查，
+    其中 indicator_meta.month_avg 后端已上线透传（日频指标月均卡片用）。
+
+    data_date 规则（日频推送契约）：默认填推送当日而非读数日——
+    后端归档月份按 data_date 提取，月初盘后推送若写上月末读数日会归错月。
     """
     data = raw.get("data") or {}
     rates = data.get("exchange_rates") or {}
@@ -126,21 +151,19 @@ def build_signal(raw: dict[str, Any], conclusion_override: str | None = None) ->
     north_cum = flow.get("north_cumulative") or {}
 
     details: dict[str, float] = {}
-    dates: list[str] = []
     parts: list[tuple[str, float, float]] = []  # (label, score, weight)
+    indicator_meta: dict[str, dict[str, Any]] = {}
 
     di = rates.get("dollar_index")
-    if isinstance(di, dict) and isinstance(di.get("value"), (int, float)):
+    if isinstance(di, dict) and _safe_float(di.get("value")) is not None:
         details["dollar_index"] = round(float(di["value"]), 4)
-        if isinstance(di.get("date"), str):
-            dates.append(di["date"])
+        indicator_meta["dollar_index"] = _daily_meta(di)
         parts.append(("美元指数", score_dollar_index(di["value"]), WEIGHTS["dollar_index"]))
 
     uc = rates.get("usd_cny")
-    if isinstance(uc, dict) and isinstance(uc.get("value"), (int, float)):
+    if isinstance(uc, dict) and _safe_float(uc.get("value")) is not None:
         details["usd_cny"] = round(float(uc["value"]), 4)
-        if isinstance(uc.get("date"), str):
-            dates.append(uc["date"])
+        indicator_meta["usd_cny"] = _daily_meta(uc)
         parts.append(("人民币汇率", score_usd_cny(uc["value"]), WEIGHTS["usd_cny"]))
 
     turnover_avg = north_cum.get("turnover_7d_avg_yi")
@@ -151,13 +174,12 @@ def build_signal(raw: dict[str, Any], conclusion_override: str | None = None) ->
         if isinstance(north.get("turnover_yi"), (int, float)):
             details["north_turnover_today_yi"] = round(float(north["turnover_yi"]), 2)
         details["north_change_pct"] = round(float(change_pct), 2)
-        if isinstance(north.get("date"), str):
-            dates.append(north["date"])
         today_yi = north.get("turnover_yi") if isinstance(north.get("turnover_yi"), (int, float)) else None
         parts.append(("北向资金", score_north(change_pct, today_yi), WEIGHTS["north"]))
 
-    if isinstance(ted.get("ted_spread"), (int, float)):
+    if _safe_float(ted.get("ted_spread")) is not None:
         details["ted_spread"] = round(float(ted["ted_spread"]), 4)
+        indicator_meta["ted_spread"] = _daily_meta(ted)
         parts.append(("TED利差", score_ted_spread(ted["ted_spread"]), WEIGHTS["ted_spread"]))
 
     # 加权总分（缺失维度按剩余权重归一化）
@@ -167,14 +189,16 @@ def build_signal(raw: dict[str, Any], conclusion_override: str | None = None) ->
     else:
         total = 0.0
 
-    valid_dates = sorted(d for d in dates if d)
-    data_date = valid_dates[-1] if valid_dates else None
+    # 顶层 data_date = 推送当日（日频契约）：归档月份按它提取，不用读数日；
+    # 手动补推历史月份时可用 --data-date 指定
+    data_date = data_date_override or datetime.now().strftime("%Y-%m-%d")
 
     signal: dict[str, Any] = {
         "conclusion": conclusion_override or map_conclusion(total),
         "data_date": data_date,
         "total_score": round(total, 1),
         "details": details,
+        "indicator_meta": indicator_meta,
         "score_detail": {
             "total_score": round(total, 1),
             "dimensions": [{"label": label, "score": score, "weight": weight} for label, score, weight in parts],
@@ -193,6 +217,8 @@ def main() -> int:
                         help="输出 macro_signal.json 路径")
     parser.add_argument("--conclusion", type=str, default="",
                         help="覆盖定性结论（默认按内置规则评分映射）")
+    parser.add_argument("--data-date", type=str, default="",
+                        help="覆盖顶层 data_date（默认推送当日；手动补推历史月份时指定）")
     args = parser.parse_args()
 
     setup_logging()
@@ -205,7 +231,11 @@ def main() -> int:
     with open(input_path, encoding="utf-8") as f:
         raw = json.load(f)
 
-    signal = build_signal(raw, conclusion_override=args.conclusion or None)
+    signal = build_signal(
+        raw,
+        conclusion_override=args.conclusion or None,
+        data_date_override=(args.data_date or None),
+    )
 
     if not signal["details"]:
         logger.error("无任何可用指标（details 为空），不生成 macro_signal.json")
@@ -224,6 +254,8 @@ def main() -> int:
     logger.info("conclusion=%s data_date=%s 总分=%s",
                 signal["conclusion"], signal["data_date"],
                 signal["total_score"])
+    for key, meta in signal.get("indicator_meta", {}).items():
+        logger.info("  meta %s: %s", key, meta)
     for dim in signal["score_detail"]["dimensions"]:
         logger.info("  %s: %s分 × %.0f%%", dim["label"], dim["score"], dim["weight"] * 100)
     return 0

@@ -251,6 +251,17 @@ def fetch_margin_history(days: int = 20) -> list[dict[str, Any]]:
     return results
 
 
+def fetch_margin_month_series(month: str, days: int = 45) -> list[dict[str, Any]]:
+    """获取指定月份（YYYY-MM）的融资余额日度序列，按读数日升序返回。
+
+    月均口径：直接筛 akshare 返回的全量历史 df（升序），零额外请求；
+    单日缺失自然跳过，分母为实际取到的交易日数。
+    """
+    history = fetch_margin_history(days)  # 新→旧
+    rows = [r for r in history if str(r.get("date", "")).startswith(month)]
+    return list(reversed(rows))  # 升序
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="抓取融资融券余额数据")
     parser.add_argument("--output", type=str, default="", help="输出 JSON 文件路径")
