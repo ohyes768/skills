@@ -95,6 +95,7 @@ def fetch_sse_turnover(trade_date: str | None = None) -> dict[str, Any]:
         "date": trade_date,
         "turnover_rate": None,
         "total_turnover_rate": None,
+        "amount_yi": None,
         "source": "sse",
         "fetched_at": to_iso_now(),
         "status": "failed",
@@ -158,6 +159,7 @@ def fetch_sse_turnover(trade_date: str | None = None) -> dict[str, Any]:
             result.update({
                 "turnover_rate": round(turnover_rate, 4),
                 "total_turnover_rate": round(turnover_rate, 4),
+                "amount_yi": round(total_amount, 2),
                 "status": "ok",
             })
             LOGGER.info("上交所换手率获取成功: %.4f%% (日期=%s)", turnover_rate, trade_date)
@@ -168,6 +170,80 @@ def fetch_sse_turnover(trade_date: str | None = None) -> dict[str, Any]:
         LOGGER.warning("上交所换手率获取失败: %s", exc)
         result["error"] = str(exc)
 
+    return result
+
+
+def fetch_szse_turnover(trade_date: str | None = None) -> dict[str, Any]:
+    """
+    获取深交所全市场换手率（成交额/流通市值）。
+
+    深交所 ShowReport 接口不直接返回换手率，取"股票"合计行的
+    cjje(成交额)与 ltsz(流通市值)自行计算；当日为空自动回退上一交易日。
+    """
+    if trade_date is None:
+        trade_date = datetime.now().strftime("%Y-%m-%d")
+
+    result: dict[str, Any] = {
+        "date": trade_date,
+        "turnover_rate": None,
+        "amount_yi": None,
+        "ltsz_yi": None,
+        "source": "szse",
+        "fetched_at": to_iso_now(),
+        "status": "failed",
+    }
+
+    url = "https://www.szse.cn/api/report/ShowReport/data"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": "https://www.szse.cn/market/overview/index.html",
+    }
+
+    query_date = trade_date
+    for _attempt in range(2):  # 当日 + 回退一次
+        params = {
+            "SHOWTYPE": "JSON",
+            "CATALOGID": "1803_sczm",
+            "TABKEY": "tab1",
+            "txtQueryDate": query_date,
+        }
+        try:
+            resp = _session.get(url, params=params, headers=headers, timeout=15)
+            resp.raise_for_status()
+            import json
+
+            data = json.loads(resp.text)
+            rows = data[0].get("data") if data else None
+            stock = next(
+                (r for r in rows if _normalize_lbmc(r.get("lbmc", "")) == "股票"),
+                None,
+            ) if rows else None
+            if stock:
+                cjje = _clean_number(stock.get("cjje"))
+                ltsz = _clean_number(stock.get("ltsz"))
+                if cjje and ltsz:
+                    result.update({
+                        "date": query_date,
+                        "turnover_rate": round(cjje / ltsz * 100, 4),
+                        "amount_yi": round(cjje, 2),
+                        "ltsz_yi": round(ltsz, 2),
+                        "status": "ok",
+                    })
+                    LOGGER.info("深交所换手率获取成功: %.4f%% (日期=%s)", result["turnover_rate"], query_date)
+                    return result
+        except Exception as exc:
+            LOGGER.warning("深交所换手率获取失败: %s", exc)
+            result["error"] = str(exc)
+            return result
+
+        # 当日为空，回退上一交易日
+        prev = datetime.strptime(query_date, "%Y-%m-%d") - timedelta(days=1)
+        while prev.weekday() >= 5:
+            prev -= timedelta(days=1)
+        query_date = prev.strftime("%Y-%m-%d")
+        LOGGER.info("深交所换手率当日为空，回退到 %s", query_date)
+
+    LOGGER.warning("深交所换手率数据为空")
     return result
 
 
