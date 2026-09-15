@@ -122,7 +122,7 @@ def read_cache(indicator: str, month: str) -> dict[str, Any] | None:
     """读取指定月份的指标缓存。
 
     Args:
-        indicator: 指标名，如 "dr007"、"lpr"、"mlf"
+        indicator: 指标名，如 "lpr"、"mlf"
         month:     月份，格式 "YYYY-MM"
 
     Returns:
@@ -142,7 +142,7 @@ def write_cache(indicator: str, month: str, data: dict[str, Any]) -> None:
     """将指标数据写入指定月份的缓存。
 
     Args:
-        indicator: 指标名，如 "dr007"、"lpr"、"mlf"
+        indicator: 指标名，如 "lpr"、"mlf"
         month:     月份，格式 "YYYY-MM"
         data:      要缓存的数据（完整 JSON 输出）
     """

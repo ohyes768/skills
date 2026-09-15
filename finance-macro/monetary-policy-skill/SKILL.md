@@ -1,282 +1,56 @@
 ---
 name: monetary-policy-skill
-description: |
-  货币政策分析 Skill，当用户需要分析或询问中国人民银行货币政策的松紧立场时触发此 Skill。
-
-  具体场景：
-  - 询问"当前货币政策是宽松还是紧缩"/"银根松紧"/"放水还是收紧"
-  - 要求分析"本月/近期货币政策立场"
-  - 询问或对比 DR007、MLF、LPR 等利率指标
-  - 想了解"贷款市场报价利率"或"银行间市场利率"走势
-
-  本 Skill 不处理：财政政策、汇率、CPI/PPI、M2/社融、股票/债券分析、宏观研究报告撰写
+description: Use when analyzing the People''s Bank of China monetary-policy stance, MLF liquidity operations, or LPR financing costs.
 ---
 
 # 货币政策分析 Skill
 
-## 触发条件
+本 skill 依据 MLF 净投放和 LPR 判断中国货币政策的松紧。
 
-当用户需要分析或询问**中国人民银行货币政策的松紧立场**时触发此 Skill。
+## 数据与频率
 
-**具体场景：**
-- 询问"当前货币政策是宽松还是紧缩"/"银根松紧"/"放水还是收紧"
-- 要求分析"本月/近期货币政策立场"
-- 询问或对比 DR007、MLF、LPR 等利率指标
-- 想了解"贷款市场报价利率"或"银行间市场利率"走势
+| 指标 | 含义 | 发布时间 |
+|---|---|---|
+| MLF 净投放 | 中期流动性 | 每月 2-3 日 |
+| 1 年期 LPR | 企业融资成本 | 每月 20 日 |
+| 5 年期以上 LPR | 居民中长期融资成本 | 每月 20 日 |
 
-**本 Skill 不处理：** 财政政策、汇率、CPI/PPI、M2/社融、股票/债券分析、宏观研究报告撰写
+## 使用
 
-## 数据获取流程
-
-### 第一步：数据可用性判断
-
-脚本会自动判断各指标数据是否已发布：
-
-| 指标 | 发布时间 | 判断逻辑 |
-|------|---------|---------|
-| DR007 | **每日**（最新交易日） | 直接API获取最新值 |
-| MLF净投放 | **每月2-3日** | 当前日≥3日则查请求月，否则查上月 |
-| LPR | **每月20日**（节假日顺延） | 直接API获取最新值（自动含上月对比） |
-
-脚本运行时会输出判断结果：
-```
-[数据可用性] 请求月份: 2026-03
-[数据可用性] MLF实际获取: 2026-03 （请求月份数据）
-[数据可用性] LPR实际获取: 2026-02 （上月数据，因发布日未到）
-[数据可用性] DR007: 每日更新
-```
-
-### 第二步：脚本获取数据
-
-运行 `scripts/run_all.py` 获取初始数据：
-
-```bash
-python /path/to/skills/monetary-policy-skill/scripts/run_all.py --month YYYY-MM
-```
-
-**注意**：数据默认写入统一输出目录 `finance-macro/output/monetary-policy-skill/monetary_indicators_latest.json`（不入代码库）；如需自定义路径可用 `--output` 指定，不要输出到 skill 目录。
-
-**推送线上（可选）**：加 `--upload` 参数可在抓取后按评分框架自动构建 `macro_signal.json` 并推送到线上 macro 后端（见下文「推送到线上 macro 后端」）。
-
-### 第三步：数据交叉确认（必须执行）
-
-**【重要】脚本获取的数据可能不完整或存在误差，必须引导用户核对！**
-
-使用以下提示词引导用户确认数据：
-
----
-
-**请核对以下数据是否与官方网站一致：**
-
-| 指标 | 脚本获取值 | 官方数据来源 |
-|------|-----------|-------------|
-| DR007 | {dr007_value}% | https://www.chinamoney.com.cn/chinese/mkdatapm/?tab=2 |
-| 1年期LPR | {lpr_1y_value}% | https://www.chinamoney.com.cn/chinese/bklpr/ |
-| 5年期LPR | {lpr_5y_value}% | https://www.chinamoney.com.cn/chinese/bklpr/ |
-| MLF净投放 | {mlf_net_value}亿元 | 财联社 + Tavily 搜索 + DeepSeek LLM 提取 |
-
-**如果数据不一致，请提供正确数值。**
-
----
-
-### 第四步：分析框架
-
-确认数据后，使用以下框架进行分析：
-
----
-
-## 分析框架
-
-### 指标一：DR007（市场流动性——权重40%）
-
-- **政策基准**：7天逆回购利率（当前为 **1.5%**）
-- **数据来源**：中国货币网"质押式回购行情"页面（https://www.chinamoney.com.cn/chinese/mkdatapm/?tab=2）
-- **数据说明**：脚本获取的是最新交易日日度值，用于近似当前流动性状况
-- **判断标准**：
-  - DR007 < 1.3%（低于政策利率20BP以上）→ 流动性充裕，明显宽松（**90-100分**）
-  - DR007 1.3%-1.5%（低于或接近政策利率）→ 流动性偏松，适度宽松（**60-80分**）
-  - DR007 1.5%-1.7%（略高于政策利率）→ 流动性中性偏紧（**40-60分**）
-  - DR007 > 1.7%（显著高于政策利率）→ 流动性紧张，紧缩（**<40分**）
-
-### 指标二：MLF净投放量（中期流动性——权重30%）
-
-> 自2025年3月起，MLF改为多重价位中标方式，央行不再公布统一中标利率，以净投放量为核心指标。
-
-- **数据来源**：财联社月度净投放量（通过Tavily搜索+DeepSeek提取）
-- **数据说明**：使用财联社发布的净投放口径，非央行官方计算值
-- **判断标准**：
-  - 净投放 > 5000亿元 → 流动性充裕，宽松（**70-100分**）
-  - 净投放 0~5000亿元 → 适度宽松/中性（**40-70分**）
-  - 等量或微幅回笼（净投放接近0，或净回笼 < 1000亿元）→ 中性（**30-50分**）
-  - 净回笼 > 1000亿元 → 流动性边际收紧，紧缩（**0-30分**）
-- **辅助参考**：MLF连续加量/缩量续做的次数（连续加量可加5-10分，连续缩量扣5-10分）
-
-### 指标三：LPR（实体融资成本——权重30%）
-
-- **数据来源**：中国货币网 LPR 页面，每月20日（遇节假日顺延）9:00更新
-- **判断标准**（较上月变化）：
-  - 较上月**下调** → 实体融资成本下降，宽松（**80-100分**）
-  - 较上月**持平** → 政策维持不变（**50-60分**）
-  - 较上月**上调** → 实体融资成本上升，紧缩（**0-30分**）
-
-### 综合评分
-
-```
-加权总分 = DR007得分×40% + MLF得分×30% + LPR得分×30%
-```
-
-| 总分 | 货币政策立场 |
-|------|------------|
-| ≥80分 | 明显宽松 |
-| 60-79分 | 适度宽松 |
-| 40-59分 | 中性 |
-| 20-39分 | 适度紧缩 |
-| <20分 | 明显紧缩 |
-
-### 综合判断
-
-- 总分 ≥ 80 → 明显宽松（银根放松，融资成本显著下降）
-- 总分 60-79 → 适度宽松（银根偏松，融资成本下降）
-- 总分 40-59 → 中性（货币政策保持稳健）
-- 总分 20-39 → 适度紧缩（银根偏紧，融资成本上升）
-- 总分 < 20 → 明显紧缩（银根收紧，融资成本显著上升）
-
----
-
-## 输出格式
-
-### 文本报告
-
-```
-# [月份] 货币政策立场分析报告
-
-## 一、核心指标现状
-
-| 指标 | 最新值 | 基准/上月值 | 变化 | 信号 |
-|------|--------|------------|------|------|
-| DR007 | X.XX% | 政策利率 X.XX% | ±XXbp | 宽松/中性/紧缩 |
-| 1年期LPR | X.XX% | 上月 X.XX% | ±XXbp | 宽松/中性/紧缩 |
-| 5年期LPR | X.XX% | 上月 X.XX% | ±XXbp | 宽松/中性/紧缩 |
-| MLF净投放 | XXX亿元 | - | - | 宽松/中性/紧缩 |
-
-## 二、各指标解读
-
-[分指标展开说明]
-
-## 三、综合判断
-
-- **综合评分**：XX
-- **货币政策立场**：宽松 / 中性 / 紧缩
-- **置信度**：高 / 中 / 低
-- **结论**：[一句话总结]
-```
-
-### JSON 输出
-
-```json
-{
-  "month": "YYYY-MM",
-  "requested_month": "YYYY-MM 或 YYYY-MM（默认上月）",
-  "actual_fetched_month": {
-    "mlf": "YYYY-MM"
-  },
-  "data_month_type": {
-    "mlf": "same | prev"
-  },
-  "publish_days": {
-    "mlf": 3,
-    "lpr": "每月20日（直接API获取最新值）",
-    "dr007": "每日更新"
-  },
-  "indicators": {
-    "dr007": { "value": X.XX, "policy_rate": X.XX, "diff_bp": ±XX, "signal": -1 },
-    "lpr_1y": { "value": X.XX, "prev": X.XX, "change_bp": ±XX, "signal": -1 },
-    "lpr_5y": { "value": X.XX, "prev": X.XX, "change_bp": ±XX, "signal": -1 },
-    "mlf": { "net_injection": XXX, "unit": "亿元", "signal": -1 }
-  },
-  "total_score": 0.0,
-  "stance": "宽松/中性/紧缩",
-  "confidence": "高/中/低"
-}
-```
-
----
-
-## 推送到线上 macro 后端（可选）
-
-将抓取数据转换为契约结构 `macro_signal.json`（`conclusion` / `data_date` / `total_score` / `details`）并推送，web 宏观界面每个维度右上角展示评分徽章。
-对接契约见 `personal-web/.trellis/spec/guides/macro-signal-upload.md` 第 2.3.A 节。
-
-### 日频推送契约（month_avg 与 data_date 规则）
-
-本 skill 为日频调度：**每交易日盘后**跑 `run_all.py --upload`（MLF/LPR 自动取最新，无月份参数依赖；月度照旧的 money-supply / entity-economy / inflation 不适用本节）。
-
-1. **顶层 `data_date` = 推送当日**（不是指标读数日）。后端归档月份按 data_date 提取，月初盘后推送若写上月末读数日会归错月；手动补推历史月份时用 `--data-date YYYY-MM-DD` 指定。
-2. **`indicator_meta`**：每个 details key 附带读数日与频率元信息，日频指标额外携带 `month_avg`（后端已上线透传，前端上月卡片展示月均值）：
-
-```json
-"indicator_meta": {
-  "dr007":     { "data_date": "2026-08-14", "frequency": "daily",   "month_avg": 1.68 },
-  "lpr_1y":    { "data_date": "2026-08-20", "frequency": "monthly" }
-}
-```
-
-3. **month_avg 口径**（全 skill 统一）：该指标读数日所在月内、截至最新读数的全部交易日算术平均；只取交易日不补自然日，单日缺失跳过、分母用实际取到的交易日数；当月仅 1 个交易日时退化为当日值；月末最后一推自然收敛为全月均值，无需按当月/历史月写两套逻辑。DR007 月均由 chinamoney 全序列 CSV 直接筛当月计算，零额外请求。
-
-**前置配置**：在 `finance-macro/.env`（不入库）配置：
-
-```env
-MACRO_SIGNAL_UPLOAD_TOKEN=<token> # 推送鉴权，来自 personal-web 根 .env
-MACRO_SIGNAL_UPLOAD_URL=https://web.duomi77.cn:9443/api/macro/signal/upload
-MACRO_UPLOAD_SSL_VERIFY=0        # NAS 自签证书场景跳过 TLS 校验（仅限内网自建服务）
-```
-
-**方式一：抓取+评分+推送一条龙**
-
-```bash
+```powershell
+uv run python scripts/run_all.py --month YYYY-MM
 uv run python scripts/run_all.py --upload
 ```
 
-**方式二：分步执行**
+输出原始数据至 `finance-macro/output/monetary-policy-skill/monetary_indicators_latest.json`；加 `--upload` 会构建并发送 `macro_signal.json`。
 
-```bash
-uv run python scripts/build_macro_signal.py    # 按评分框架计算总分并构建契约结构
-uv run python scripts/upload_signal.py --dry-run
-uv run python scripts/upload_signal.py --verify
+## 评分
+
+- MLF 净投放：50%
+  - 超过 5,000 亿元：85 分
+  - 0 至 5,000 亿元：55 分
+  - -1,000 至 0 亿元：40 分
+  - 低于 -1,000 亿元：15 分
+- LPR：50%
+  - 较上月下调：90 分
+  - 持平：55 分
+  - 上调：15 分
+
+当一个维度缺失时，按剩余可用权重归一化。总分映射为：80+ 明显宽松、60-79 适度宽松、40-59 中性、20-39 适度紧缩、20 以下明显紧缩。
+
+## 推送结构
+
+```json
+{
+  "conclusion": "适度宽松",
+  "data_date": "2026-09-15",
+  "total_score": 70.0,
+  "details": {
+    "mlf_net_yi": 6000,
+    "lpr_1y": 3.0,
+    "lpr_5y": 3.5
+  }
+}
 ```
 
-**内置规则评分**：`build_macro_signal.py` 按 SKILL.md 评分框架自动计算
-（DR007×40% + MLF净投放×30% + LPR×30%，缺失维度按剩余权重归一化），
-`total_score` 随推送上线。上传前自动预检（skill/file 白名单、字段结构、数据新鲜度 45 天，适配月度数据）。
-
----
-
-## 注意事项
-
-1. **DR007 数据**：脚本获取的是最新交易日日度值，非月均值，分析时需注意日内波动
-2. **LPR 数据来源**：LPR 每月20日公布（节假日顺延），脚本通过 akshare 获取数据（数据源同中国货币网），返回值中已包含上月对比数据
-3. **LPR 变化判断**：需对比上月 LPR 数值计算变化幅度
-4. **MLF 数据**：使用财联社净投放口径，每月2-3日发布，脚本已自动判断数据所属月份
-5. **交叉验证**：可将判断结果与央行官方货币政策基调进行交叉验证，若存在矛盾应重点提示
-6. **指标分歧处理**：当指标指向不一致时，参考综合评分而非单一指标
-7. **适用范围**：仅分析中国人民银行主导的国内货币政策
-
----
-
-## 文件结构
-
-```
-monetary-policy-skill/
-├── SKILL.md           # 本文件
-└── scripts/
-    ├── fetch_common.py         # 公共工具
-    ├── fetch_dr007.py          # DR007 抓取（中国货币网）
-    ├── fetch_lpr.py            # LPR 抓取（akshare）
-    ├── fetch_mlf_tavily.py     # MLF 抓取（财联社+Tavily+DeepSeek 两步方案）
-    ├── build_macro_signal.py   # 构建契约结构（转换+内置规则评分）
-    ├── upload_signal.py        # 推送 JSON 到线上 macro 后端（6 skill 通用）
-    ├── run_all.py              # 统一入口（--upload 可选推送）
-    └── run.sh                  # shell 入口
-```
-
-> **注意**：数据输出到用户工作目录，不要输出到 skill 目录。
+使用 `MACRO_SIGNAL_UPLOAD_TOKEN`、`MACRO_SIGNAL_UPLOAD_URL` 和可选的 `MACRO_UPLOAD_SSL_VERIFY` 配置上传。上传前脚本会校验结构；后端按顶层 `data_date` 归档月份。

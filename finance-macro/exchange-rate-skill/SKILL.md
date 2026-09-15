@@ -113,19 +113,14 @@ uv run python scripts/run_all.py --upload
 
 ```bash
 # 转换：抓取数据 → 契约结构 + 内置规则评分（可用 --conclusion 覆盖结论）
-uv run python scripts/build_macro_signal.py
 
 # 推送（先 dry-run 预检）
-uv run python scripts/upload_signal.py --dry-run
-uv run python scripts/upload_signal.py --verify
 ```
 
-**内置规则评分**：`build_macro_signal.py` 按 SKILL.md 评分框架自动计算
 （美元指数30% + 人民币20% + 北向25% + TED25%，缺失维度按剩余权重归一化），
 高分=风险规避（注意与 risk-appetite-skill 方向相反）。agent 按框架精调后
 可用 `--conclusion` 覆盖自动结论。
 
-**上传前本地预检**（`upload_signal.py` 自动执行，不通过则不上传）：
 - skill/file 白名单与配对（exchange-rate-skill 只能推 `macro_signal.json`）
 - `conclusion`、`data_date`（取各指标最新日期的最大值）、`details` 数值字段
 - 数据日期距今超过 10 天时警告确认
@@ -352,8 +347,6 @@ exchange-rate-skill/
     ├── fetch_exchange_rates.py # 美元指数+人民币汇率（FRED DTWEXBGS/DEXCHUS）
     ├── fetch_north_flow.py     # 北向资金成交总额（东方财富 RPT_MUTUAL_DEALAMT）
     ├── fetch_ted_spread.py     # TED利差（FRED SOFR/DGS3MO）
-    ├── build_macro_signal.py   # 构建契约结构（转换+内置规则评分）
-    ├── upload_signal.py        # 推送 JSON 到线上 macro 后端（6 skill 通用）
     └── run_all.py              # 统一入口（数据抓取，--upload 可选推送）
 
 # 运行产物统一写入（不入代码库）：

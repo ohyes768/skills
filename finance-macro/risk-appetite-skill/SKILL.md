@@ -76,56 +76,6 @@ uv run python scripts/run_all.py --days 5
 
 ---
 
-### 第三步：推送到线上 macro 后端（可选）
-
-将 `risk_data.json` 推送到 personal-web 的宏观信号后端，供前端展示。对接契约见
-`personal-web/.trellis/spec/guides/macro-signal-upload.md`。
-
-### 日频推送契约（month_avg 与 date 规则）
-
-本 skill 为日频调度：**每交易日盘后**跑 `run_all.py --upload`。
-
-1. **`data.{volume,turnover,margin}.date` = 推送当日**（后端归档月份按它提取）；原始读数日保留在同块的 `read_date`。注意融资融券是 T-1 数据（T 日 09:45 更新），盘后推送时 `read_date` 为前一交易日——若 date 写读数日，月初第一个交易日推送会被归入上月。手动补推历史月份时用 `--data-date YYYY-MM-DD` 指定。
-2. **`data.*.month_avg`**：三个日频指标（两市成交额 / 换手率 / 融资余额）各附带当月日均（后端已上线透传，前端上月卡片展示月均值）。
-3. **month_avg 口径**（全 skill 统一）：读数日所在月内、截至最新读数的全部交易日算术平均；只取交易日不补自然日，单日缺失跳过、分母用实际取到的交易日数；当月仅 1 个交易日时退化为当日值；月末最后一推自然收敛为全月均值。存量型指标（融资余额/换手率）同样用日度简单平均，不做特殊处理。
-4. **数据来源**：融资余额直接筛 akshare 全量历史（零额外请求）；成交额/换手率通过交易所官方 API 逐日回拉当月（缓存优先写入 `finance-macro/cache/{volume,turnover}/`，缺日才回源，非交易日 API 返回空自动跳过）。
-
-**前置配置**：在 `finance-macro/.env`（已被 .gitignore 忽略，不入库）配置：
-
-```env
-MACRO_SIGNAL_UPLOAD_TOKEN=<token>   # 必填，来自 personal-web 根 .env
-MACRO_SIGNAL_UPLOAD_URL=https://web.duomi77.cn:9443/api/macro/signal/upload
-MACRO_UPLOAD_SSL_VERIFY=0           # NAS 自签证书场景跳过 TLS 校验（仅限内网自建服务）
-```
-
-**方式一：抓取+评分+推送一条龙**
-
-```bash
-uv run python scripts/run_all.py --upload
-```
-
-**方式二：单独推送已有 JSON**
-
-```bash
-# 干跑（只做本地预检，不发送）
-uv run python scripts/upload_signal.py --dry-run
-
-# 真实推送
-uv run python scripts/upload_signal.py
-
-# 推送并验证月份出现（GET /api/macro/months）
-uv run python scripts/upload_signal.py --verify
-```
-
-**上传前本地预检**（`upload_signal.py` 自动执行，不通过则不上传）：
-- skill/file 白名单与配对（risk-appetite-skill 只能推 `risk_data.json`）
-- `score.conclusion`、`data.{volume,turnover,margin}` 及各自 `date`/数值字段齐全
-- 数据日期距今超过 10 天时警告确认（后端靠 date 判断数据月份）
-
-**错误处理**：401 → 检查 token；400 → 检查白名单/data 结构；网络错误最多重试 2 次。后端同名 file 直接覆盖（原子写），可重复推送。
-
----
-
 ## 分析框架
 
 ### 指标一：交易活跃度（权重50%）
@@ -278,6 +228,5 @@ risk-appetite-skill/
 │   ├── fetch_margin.py        # 融资融券抓取（akshare 中证数据）
 │   ├── fetch_volume_exchange.py # 交易所官方API（优先数据源）
 │   ├── fetch_volume.py        # 成交额/换手率（官方API优先，akshare fallback）
-│   ├── upload_signal.py       # 推送 JSON 到线上 macro 后端（6 个 skill 通用）
 │   └── run_all.py             # 统一入口（抓取+评分，--upload 可选推送）
 ```

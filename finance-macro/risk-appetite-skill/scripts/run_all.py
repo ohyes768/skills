@@ -20,11 +20,10 @@ for _p in [str(_SCRIPT_DIR)]:
         sys.path.remove(_p)
 sys.path.insert(0, str(_SCRIPT_DIR))
 
-from fetch_common import setup_logging, LOGGER, to_iso_now, load_env_file
+from fetch_common import setup_logging, LOGGER, to_iso_now
 from fetch_margin import fetch_margin_ohlc, fetch_margin_history, fetch_margin_month_series
 from fetch_volume import fetch_market_volume, fetch_turnover_rate, fetch_turnover_month_series
 from fetch_volume_exchange import fetch_volume_month_series
-from upload_signal import DEFAULT_URL, UploadError, upload_signal
 
 # 统一输出目录：finance-macro/output/<skill 目录名>
 _SKILL_DIR = Path(__file__).resolve().parents[1]
@@ -455,8 +454,6 @@ def main() -> None:
     parser.add_argument("--output", type=str, default=str(OUTPUT_DIR / "risk_data.json"), help="输出 JSON 文件路径")
     parser.add_argument("--report", type=str, default=str(OUTPUT_DIR / "risk_report.md"), help="输出文本报告路径")
     parser.add_argument("--days", type=int, default=5, help="评估区间天数（默认5日）")
-    parser.add_argument("--data-date", type=str, default="", help="覆盖推送日期（默认今天；手动补推历史月份时指定）")
-    parser.add_argument("--upload", action="store_true", help="抓取+评分后推送到线上 macro 后端（token 从 finance-macro/.env 读取）")
     args = parser.parse_args()
 
     setup_logging()
@@ -464,9 +461,6 @@ def main() -> None:
     # 获取数据
     all_data = fetch_all(days=args.days)
 
-    # 日频推送契约：date=推送当日 + 月均注入
-    data_date = args.data_date or datetime.now().strftime("%Y-%m-%d")
-    attach_month_avg_and_push_date(all_data, data_date)
 
     # 计算评分
     score_result = calculate_score(all_data)
@@ -494,22 +488,6 @@ def main() -> None:
         with open(args.report, "w", encoding="utf-8") as f:
             f.write(report_text)
         LOGGER.info("已写入报告: %s", args.report)
-
-    # 推送到线上 macro 后端（契约: personal-web/.trellis/spec/guides/macro-signal-upload.md）
-    if args.upload:
-        import os
-
-        load_env_file()
-        token = os.environ.get("MACRO_SIGNAL_UPLOAD_TOKEN", "")
-        url = os.environ.get("MACRO_SIGNAL_UPLOAD_URL", "") or DEFAULT_URL
-        if not token:
-            LOGGER.error("--upload 需要配置 MACRO_SIGNAL_UPLOAD_TOKEN（finance-macro/.env）")
-            sys.exit(1)
-        try:
-            upload_signal(url, token, "risk-appetite-skill", "risk_data.json", result)
-        except UploadError as exc:
-            LOGGER.error("推送失败: %s", exc)
-            sys.exit(1)
 
 
 if __name__ == "__main__":
