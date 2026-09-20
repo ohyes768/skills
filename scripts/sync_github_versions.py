@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""同步 skill-agent-matrix.html 中 github skill 的最新版本。
+"""刷新 GitHub skill 的最新版本快照。
+
+注册表（registry.json）只保存 skill 清单与 agent 分配；版本快照
+（latest_version/head_commit/checked_at）是运行状态，保存在机器本地的
+.cache/github-versions.json（不入 git）。脚本对每个 github skill 执行
+git ls-remote（不走 GitHub REST API、无需 token）。
 
 用法：
     python scripts/sync_github_versions.py
@@ -7,33 +12,14 @@
 """
 
 import argparse
-import json
 import re
 import subprocess
 import sys
 from datetime import date
-from pathlib import Path
 
-HTML = Path(__file__).resolve().parent.parent / "skill-agent-matrix.html"
-BLOCK_RE = re.compile(
-    r'(<script\s+type="application/json"\s+id="registry-data"\s*>\s*)(.*?)(\s*</script>)',
-    re.DOTALL,
-)
+from registry_loader import load_registry, load_versions, save_versions
+
 TAG_RE = re.compile(r"^v?(\d+(?:\.\d+)*)(?:[-_](.+))?$")
-
-
-def load_from_html() -> dict:
-    text = HTML.read_text(encoding="utf-8")
-    m = BLOCK_RE.search(text)
-    if not m:
-        raise ValueError(f"{HTML} 中未找到 registry-data 块")
-    return json.loads(m.group(2))
-
-
-def write_to_html(data: dict) -> None:
-    text = HTML.read_text(encoding="utf-8")
-    payload = json.dumps(data, ensure_ascii=False, indent=2)
-    HTML.write_text(BLOCK_RE.sub(rf"\1\n{payload}\n\3", text, count=1), encoding="utf-8")
 
 
 def parse_tag(tag: str):
@@ -71,41 +57,45 @@ def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
-    ap = argparse.ArgumentParser(description="同步 github skill 最新版本到 HTML")
+    ap = argparse.ArgumentParser(description="刷新 github skill 版本快照（.cache/github-versions.json）")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    registry = load_from_html()
+    registry = load_registry()
+    versions = load_versions()
     today = date.today().isoformat()
     changed = 0
-    github_skills = [s for s in registry["skills"] if s.get("source") == "github"]
+    github_skills = [s for s in registry.get("skills", []) if s.get("source") == "github"]
     if not github_skills:
-        print("HTML 中没有 source=github 的 skill。")
+        print("registry.json 中没有 source=github 的 skill。")
         return 0
 
     for skill in github_skills:
-        name, repo = skill["name"], skill["repo"]
+        skill_id, repo = skill["id"], skill["repository"]
         try:
             version, head = latest_version(repo)
         except Exception as e:  # noqa: BLE001
-            print(f"[x] {name}: {e}")
-            skill["checked_at"] = today
+            print(f"[x] {skill_id}: {e}")
+            versions.setdefault("skills", {}).setdefault(skill_id, {})["checked_at"] = today
             continue
-        old = skill.get("latest_version")
-        skill["latest_version"] = version
-        skill["head_commit"] = head
-        skill["checked_at"] = today
+        old = versions.get("skills", {}).get(skill_id, {}).get("latest_version")
+        versions.setdefault("skills", {})[skill_id] = {
+            "latest_version": version,
+            "head_commit": head,
+            "checked_at": today,
+        }
         if old != version:
             changed += 1
-            print(f"[^] {name}: {old or '(无)'} -> {version}")
+            print(f"[^] {skill_id}: {old or '(无)'} -> {version}")
         else:
-            print(f"[=] {name}: {version}")
+            print(f"[=] {skill_id}: {version}")
 
+    versions["updated"] = today
     if args.dry_run:
-        print("\n--dry-run：未写回")
+        print("\n--dry-run：未写入快照")
     else:
-        write_to_html(registry)
-        print(f"\n已写回 {HTML.name}：{changed} 个有更新")
+        save_versions(versions)
+        print(f"\n已写入 .cache/github-versions.json：{changed} 个有更新")
     return 0
 
 

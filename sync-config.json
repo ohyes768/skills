@@ -1,7 +1,6 @@
 {
   "version": 1,
   "link_type": "junction",
-  "registry": "skill-agent-matrix.html",
   "agents": {
     "claudecode": {
       "enabled": true,

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """将自研 skill 以 junction 同步到各 agent 的 skills 目录。
 
-读取 sync-config.json（agent 路径与 enabled 开关）和 skill-agent-matrix.html
-（skill 清单与各 agent 勾选关系），为 source=local 的 skill 创建目录联接。
+读取 sync-config.json（agent 路径与 enabled 开关）和 registry.json
+（skill 清单与各 agent 分配），为 source=local 的 skill 创建目录联接。
 
 用法：
     python scripts/sync_skills.py
@@ -16,32 +16,20 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import shutil
 import stat
 import subprocess
 import sys
 from pathlib import Path
 
+from registry_loader import load_registry
+
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "sync-config.json"
-BLOCK_RE = re.compile(
-    r'(<script\s+type="application/json"\s+id="registry-data"\s*>\s*)(.*?)(\s*</script>)',
-    re.DOTALL,
-)
 
 
 def load_config() -> dict:
     return json.loads(CONFIG.read_text(encoding="utf-8"))
-
-
-def load_registry(config: dict) -> dict:
-    html = ROOT / config.get("registry", "skill-agent-matrix.html")
-    text = html.read_text(encoding="utf-8")
-    match = BLOCK_RE.search(text)
-    if not match:
-        raise ValueError(f"{html} 中未找到 registry-data 块")
-    return json.loads(match.group(2))
 
 
 def expand_path(raw: str) -> Path:
@@ -115,13 +103,12 @@ def create_junction(link: Path, target: Path, *, dry_run: bool) -> None:
 
 
 def local_skill_dirs(registry: dict) -> dict[str, Path]:
+    """skill id → 源库内目录（registry.json 的 path 字段）。"""
     mapping: dict[str, Path] = {}
     for skill in registry.get("skills", []):
         if skill.get("source") != "local":
             continue
-        name = skill["name"]
-        rel = skill.get("dir", name)
-        mapping[name] = (ROOT / rel).resolve()
+        mapping[skill["id"]] = (ROOT / skill["path"]).resolve()
     return mapping
 
 
@@ -215,7 +202,7 @@ def main() -> int:
     args = parser.parse_args()
 
     config = load_config()
-    registry = load_registry(config)
+    registry = load_registry()
 
     if args.status:
         return show_status(config, registry)
@@ -223,7 +210,7 @@ def main() -> int:
     rows = planned_syncs(config, registry, agent_filter=args.agent, skill_filter=args.skill)
     if not rows:
         print("没有需要同步的 skill。")
-        print("检查 sync-config.json 的 enabled 开关，以及 skill-agent-matrix.html 中的 agent 勾选。")
+        print("检查 sync-config.json 的 enabled 开关，以及 registry.json 中的 agents 分配。")
         return 0
 
     print(f"计划同步 {len(rows)} 个联接" + ("（dry-run）" if args.dry_run else ""))

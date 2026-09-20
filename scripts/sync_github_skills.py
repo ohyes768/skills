@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """将 GitHub 外部 skill clone/pull 到各 agent 的 skills 目录。
 
-仓库级缓存在 .cache/github-skills/<skill名>/，各 agent 以 junction 指向缓存
-（若注册表有 path 字段则指向缓存内子目录）。版本以注册表 latest_version /
-head_commit 为准，建议先运行 sync_github_versions.py 刷新。
+仓库级缓存在 .cache/github-skills/<skill id>/，各 agent 以 junction 指向缓存
+（若注册表有 path 字段则指向缓存内子目录）。版本以 .cache/github-versions.json
+（机器本地快照，不入 git）的 latest_version/head_commit 为准，建议先运行
+sync_github_versions.py 刷新。
 
 用法：
     python scripts/sync_github_skills.py
     python scripts/sync_github_skills.py --dry-run
     python scripts/sync_github_skills.py --status
-    python scripts/sync_github_skills.py --skill UZI-Skill --agent openclaw
+    python scripts/sync_github_skills.py --skill uzi-skill --agent openclaw
 """
 
 from __future__ import annotations
@@ -23,27 +24,16 @@ import subprocess
 import sys
 from pathlib import Path
 
+from registry_loader import load_registry, load_versions
+
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "sync-config.json"
 CACHE_ROOT = ROOT / ".cache" / "github-skills"
-BLOCK_RE = re.compile(
-    r'(<script\s+type="application/json"\s+id="registry-data"\s*>\s*)(.*?)(\s*</script>)',
-    re.DOTALL,
-)
 COMMIT_RE = re.compile(r"^[0-9a-f]{7,40}$", re.IGNORECASE)
 
 
 def load_config() -> dict:
     return json.loads(CONFIG.read_text(encoding="utf-8"))
-
-
-def load_registry(config: dict) -> dict:
-    html = ROOT / config.get("registry", "skill-agent-matrix.html")
-    text = html.read_text(encoding="utf-8")
-    match = BLOCK_RE.search(text)
-    if not match:
-        raise ValueError(f"{html} 中未找到 registry-data 块")
-    return json.loads(match.group(2))
 
 
 def expand_path(raw: str) -> Path:
@@ -133,22 +123,29 @@ def run_git(*args: str, cwd: Path | None = None) -> str:
 
 
 def github_skills(registry: dict) -> dict[str, dict]:
-    return {s["name"]: s for s in registry.get("skills", []) if s.get("source") == "github"}
+    """skill id → 条目（agents.skills 引用 id）。"""
+    return {s["id"]: s for s in registry.get("skills", []) if s.get("source") == "github"}
 
 
-def target_ref(skill: dict) -> str:
-    version = (skill.get("latest_version") or "").strip()
+def version_snapshot(skill_id: str, versions: dict) -> dict:
+    return versions.get("skills", {}).get(skill_id, {})
+
+
+def target_ref(skill_id: str, versions: dict) -> str:
+    """版本 ref 来自机器本地快照（.cache/github-versions.json），不写回注册表。"""
+    snap = version_snapshot(skill_id, versions)
+    version = (snap.get("latest_version") or "").strip()
     if version.startswith("HEAD@"):
-        return (skill.get("head_commit") or version[5:]).strip()
+        return (snap.get("head_commit") or version[5:]).strip()
     return version
 
 
-def cache_repo_dir(skill_name: str) -> Path:
-    return CACHE_ROOT / skill_name
+def cache_repo_dir(skill_id: str) -> Path:
+    return CACHE_ROOT / skill_id
 
 
 def cache_content_dir(skill: dict) -> Path:
-    repo_dir = cache_repo_dir(skill["name"])
+    repo_dir = cache_repo_dir(skill["id"])
     sub = (skill.get("path") or "").strip().replace("\\", "/").strip("/")
     return repo_dir / sub if sub else repo_dir
 
@@ -228,16 +225,18 @@ def update_repo(repo_dir: Path, repo: str, ref: str, *, dry_run: bool) -> None:
         raise
 
 
-def ensure_skill_cache(skill: dict, *, dry_run: bool) -> Path:
-    name = skill["name"]
-    repo = skill["repo"]
-    ref = target_ref(skill)
+def ensure_skill_cache(skill: dict, versions: dict, *, dry_run: bool) -> Path:
+    skill_id = skill["id"]
+    repo = skill["repository"]
+    ref = target_ref(skill_id, versions)
     if not ref:
-        raise ValueError(f"{name}: 缺少 latest_version / head_commit，请先运行 sync_github_versions.py")
+        raise ValueError(
+            f"{skill_id}: 快照中缺少 latest_version / head_commit，请先运行 sync_github_versions.py"
+        )
 
-    repo_dir = cache_repo_dir(name)
+    repo_dir = cache_repo_dir(skill_id)
     content_dir = cache_content_dir(skill)
-    print(f"\n[cache] {name}")
+    print(f"\n[cache] {skill_id}")
     print(f"    仓库: {repo}")
     print(f"    目标版本: {ref}")
     print(f"    缓存: {repo_dir}")
@@ -289,17 +288,18 @@ def planned_links(
     return rows
 
 
-def show_status(config: dict, registry: dict) -> int:
+def show_status(config: dict, registry: dict, versions: dict) -> int:
     remote = github_skills(registry)
     print(f"仓库: {ROOT}")
     print(f"GitHub skill: {len(remote)} 个")
     print(f"缓存目录: {CACHE_ROOT}\n")
 
-    for name, skill in remote.items():
-        repo_dir = cache_repo_dir(name)
+    for skill_id, skill in remote.items():
+        repo_dir = cache_repo_dir(skill_id)
         content = cache_content_dir(skill)
-        ref = target_ref(skill) or "(未知)"
-        print(f"  {name} — {skill.get('latest_version', '?')} ({ref})")
+        ref = target_ref(skill_id, versions) or "(未知)"
+        latest = version_snapshot(skill_id, versions).get("latest_version", "?")
+        print(f"  {skill_id} — {latest} ({ref})")
         if repo_dir.exists() and (repo_dir / ".git").exists():
             print(f"      缓存: {content} [{current_checkout(repo_dir)}]")
         else:
@@ -348,15 +348,16 @@ def main() -> int:
     args = parser.parse_args()
 
     config = load_config()
-    registry = load_registry(config)
+    registry = load_registry()
+    versions = load_versions()
 
     if args.status:
-        return show_status(config, registry)
+        return show_status(config, registry, versions)
 
     rows = planned_links(config, registry, agent_filter=args.agent, skill_filter=args.skill)
     if not rows:
         print("没有需要同步的 GitHub skill。")
-        print("检查 sync-config.json 的 enabled 开关，以及 skill-agent-matrix.html 中的 agent 勾选。")
+        print("检查 sync-config.json 的 enabled 开关，以及 registry.json 中的 agents 分配。")
         return 0
 
     unique_skills: dict[str, dict] = {}
@@ -368,7 +369,7 @@ def main() -> int:
     cache_targets: dict[str, Path] = {}
     for skill_name, skill in unique_skills.items():
         try:
-            cache_targets[skill_name] = ensure_skill_cache(skill, dry_run=args.dry_run)
+            cache_targets[skill_name] = ensure_skill_cache(skill, versions, dry_run=args.dry_run)
         except Exception as exc:  # noqa: BLE001
             print(f"    [x] 缓存失败: {exc}")
             return 1
