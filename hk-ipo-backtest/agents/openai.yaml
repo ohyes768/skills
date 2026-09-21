@@ -1,0 +1,4 @@
+interface:
+  display_name: "港股 IPO 严格回测"
+  short_description: "按历史数据截止点重建港股打新预测并核验暗盘与首日表现"
+  default_prompt: "使用 $hk-ipo-backtest 对今天完成首日交易的港股 IPO 做无未来数据泄漏的历史预测与回测。"

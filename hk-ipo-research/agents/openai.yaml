@@ -1,0 +1,4 @@
+interface:
+  display_name: "港股 IPO 研究助手"
+  short_description: "实时抓取孖展、券商、基石、评级、暗盘以及保荐人历史战绩"
+  default_prompt: "Use $hk-ipo-research to抓取当前港股 IPO 数据、交叉验证并给出可解释的评分报告。"
