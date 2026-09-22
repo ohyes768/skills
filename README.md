@@ -1,34 +1,30 @@
 # 个人 Skill 库
 
-统一管理个人 agent skill 的仓库。Skill 分两大类，统一通过 [registry.json](registry.json) 维护清单和各 agent 的安装配置：
+统一管理个人 agent skill 源码的仓库。Skill 分两大类：
 
 - **自研 skill**（`source: local`）：自己开发维护，按主题目录存放在本仓库；
-- **外部 skill**（`source: github`）：来自 GitHub 上的 skill 仓库，本仓库只记录链接与安装分配，不存代码。
+- **外部 skill**（`source: github`）：来自 GitHub 上的 skill 仓库，本仓库只记录来源。
+
+## 登记与发布
+
+本仓库**只存放 skill 源码与目录结构**。skill 的登记（清单/元数据）与发布（安装到 OpenClaw/Hermes）由 **skill-manager** 管理（`personal-web/backend/skill-manager`，FastAPI），登记真源为 skill-manager 的 SQLite：
+
+- 自研 skill 目录在首次访问管理台 `GET /api/skills` 时自动对账登记（元数据取 SKILL.md frontmatter）；
+- 外部 skill 在管理台按 GitHub 仓库登记，发布时缓存并检出远端 HEAD；
+- 发布目标为 OpenClaw / Hermes，支持计划预览、下架与回滚。
+
+> **遗留说明**：`git-commit-push` 已发布到 claudecode / codex 的 junction（`~/.claude/skills/git-commit-push`、`~/.codex/skills/git-commit-push`）是原 sync 工具链产物，继续存在、由各自 agent 使用，但不归 skill-manager 维护。
 
 ## 目录结构
 
 ```
-finance-macro/        # 金融宏观分析（6 个）
-dev-workflow/         # 开发工程（5 个）
-agent-methods/        # Agent 方法论（5 个）
-design/               # UI/UX 设计（1 个）
-knowledge/            # 知识管理（1 个）
-scripts/              # 维护脚本（sync_skills.py 同步自研 skill；sync_github_versions.py 刷新版本；sync_github_skills.py 安装 GitHub skill）
-registry.json         # skill 注册表真源：skill 清单 + 各 agent 安装分配（可版本控制）
-sync-config.json      # 机器本地配置：各 agent 的 skills 目录路径与 enabled 开关
-skill-agent-matrix.html  # （legacy）旧版内嵌注册表，仅作历史参考，不再维护
+finance-macro/        # 金融宏观分析
+dev-workflow/         # 开发工程
+agent-methods/        # Agent 方法论
+design/               # UI/UX 设计
+knowledge/            # 知识管理
 README.md
 ```
-
-## 注册表（registry.json）
-
-`registry.json` 是本仓库的唯一注册表真源，包含两部分：
-
-- `skills`：skill 条目清单，每条含 `id`（稳定 slug）、`name`、`source`（local/github）、`path`（local 为本仓库内相对目录，github 为仓库内相对目录，可为 `.`）、`repository`（github 必填）、`tags`（主题分类）、`summary`、`status`（active/deprecated）、可选 `depends_on`；
-- `agents`：各 agent 的安装分配（`description` + `skills` id 列表）。
-
-版本快照（`latest_version` / `head_commit` / `checked_at`）与发布历史等运行状态**不写回注册表**，由机器本地 `.cache/github-versions.json` 保存（不入 git）。
-
 
 ## 主题分类索引
 
@@ -82,65 +78,24 @@ README.md
 
 ## 外部 skill（GitHub）
 
-来自外部 GitHub skill 仓库（`source: github`），安装时直接从远程仓库拉取。[registry.json](registry.json) 中对应条目包含 `repository`（仓库地址）和 `path`（skill 目录在仓库中的相对路径，可为 `.`）。
+来自外部 GitHub skill 仓库，发布时经 skill-manager 缓存并检出远端 HEAD。实际发布目标以 skill-manager 管理台为准（下表"安装到"为历史参考）。
 
-| Skill | 来源仓库 | 主题 | 说明 | 安装到 |
-|---|---|---|---|---|
-| ui-ux-pro-max | [nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | 设计 | UI/UX 设计智能：67 风格/96 配色/57 字体搭配/13 技术栈 | hermes |
-| uzi-skill | [wbh604/UZI-Skill](https://github.com/wbh604/UZI-Skill) | 投资分析 | 游资（UZI）A股/港股/美股分析：22维数据×180条量化规则×17种机构分析方法 | openclaw、hermes |
-| luopan | [zhangxiaoqiang1991/luopan](https://github.com/zhangxiaoqiang1991/luopan) | 投资分析 | 行业研究+公司研究路由器：行业格局与产业链权力分析、公司投资/求职价值判断（腾讯自选股数据源） | — |
-
-**刷新远程版本**：运行 `python scripts/sync_github_versions.py`（可加 `--dry-run` 只看不写）。脚本对每个 github skill 执行 `git ls-remote`（不走 GitHub REST API、无需 token），把最新 tag 写入 `.cache/github-versions.json`（机器本地，不入 git），并打印版本变化；无 tag 的仓库以 `HEAD@<短commit>` 记录。
-
-**安装/更新到各 agent**：`registry.json` 的 `agents` 中配置好分配后，编辑 `sync-config.json` 开启对应 agent 的 `enabled`，然后运行：
-
-```bash
-python scripts/sync_github_versions.py   # 可选：先刷新版本快照
-python scripts/sync_github_skills.py     # clone/pull 到缓存并 junction 到各 agent
-python scripts/sync_github_skills.py --status
-python scripts/sync_github_skills.py --skill uzi-skill --agent openclaw
-```
-
-GitHub skill 缓存在本仓库 `.cache/github-skills/<skill id>/`，各 agent 以 **junction** 指向缓存（若注册表有 `path` 字段则指向子目录）。更新时重新运行 `sync_github_versions.py` + `sync_github_skills.py` 即可 checkout 到最新 tag。
-
-**同步自研 skill 到各 agent**（`source: local`）：
-
-```bash
-python scripts/sync_skills.py          # 同步所有已启用 agent
-python scripts/sync_skills.py --status # 查看 junction 状态
-python scripts/sync_skills.py --skill git-commit-push --agent claudecode
-```
-
-自研 skill 以 **junction** 链接到各 agent 的 `skills_dir`，改仓库即生效。`openclaw` / `hermes` 等 agent 路径在 `sync-config.json` 中配置，启用前请确认目录存在或允许脚本自动创建父目录。
-
-## Agent 安装配置
-
-以 [registry.json](registry.json) 的 `agents` 字段为准。agent 安装 skill 时：读取 `agents.<agent名>.skills` 中的 skill id 列表 → 在 `skills` 数组中按 `id` 匹配 → 根据 `source` 安装：`local` 按 `path` 取本仓库目录；`github` 按 `repository`（必要时加 `path`）从远程仓库安装。
-
-当前分配（以 `registry.json` 为准，此处仅概览）：
-
-| Agent | 定位 | 安装的 skill |
-|---|---|---|
-| **openclaw** | 研究/金融场景 | uzi-skill |
-| **hermes** | 开发工程场景 | uzi-skill |
-| **claudecode** | Claude Code 编码 agent | git-commit-push |
-| **codex** | Codex 编码 agent | （无） |
+| Skill | 来源仓库 | 主题 | 说明 |
+|---|---|---|---|
+| ui-ux-pro-max | [nextlevelbuilder/ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | 设计 | UI/UX 设计智能：67 风格/96 配色/57 字体搭配/13 技术栈 |
+| uzi-skill | [wbh604/UZI-Skill](https://github.com/wbh604/UZI-Skill) | 投资分析 | 游资（UZI）A股/港股/美股分析：22维数据×180条量化规则×17种机构分析方法 |
+| luopan | [zhangxiaoqiang1991/luopan](https://github.com/zhangxiaoqiang1991/luopan) | 投资分析 | 行业研究+公司研究路由器：行业格局与产业链权力分析、公司投资/求职价值判断（腾讯自选股数据源） |
 
 ## 维护指南
 
 **新增自研 skill**：
-1. 在对应主题目录下创建 `<skill名>/SKILL.md`；
-2. 在 `registry.json` 的 `skills` 中登记条目（source: local，id/name/path/tags/status/summary）；
-3. 在 `registry.json` 的 `agents` 中把 skill id 加入目标 agent 的 `skills` 列表；
-4. 运行 `python scripts/sync_skills.py`；
-5. 更新本 README 的分类索引表。
+1. 在对应主题目录下创建 `<skill名>/SKILL.md`（frontmatter 写 `name`、`description`）；
+2. 访问 skill-manager 管理台，列表会自动对账出现该 skill；
+3. 在管理台选择目标（OpenClaw / Hermes）发布；
+4. 更新本 README 的分类索引表。
 
-**新增外部 skill**：
-1. 在 `registry.json` 的 `skills` 中登记条目：`source: "github"`，并填写 `repository`、`path`（可为 `.`）、tags/status/summary；
-2. 运行 `python scripts/sync_github_versions.py` 刷新版本快照；
-3. 在 `registry.json` 的 `agents` 中配置分配，运行 `python scripts/sync_github_skills.py`；
-4. 在本 README「外部 skill（GitHub）」表中加一行。
+**新增外部 skill**：在 skill-manager 管理台按 GitHub 仓库地址扫描并登记，缓存后发布。
 
-**新增 agent**：在 `sync-config.json` 添加路径与 `enabled`，并在 `registry.json` 的 `agents` 中添加条目（description + skills 列表），同步 README。
+**下架/回滚**：在 skill-manager 管理台操作，发布历史与快照持久化在 SQLite。
 
-**修改 skill 清单**：skill 的启用/停用通过条目的 `status`（active / deprecated）标识，deprecated 的 skill 应从各 agent 的 skills 列表中移除。
+**修改 skill 清单**：启用/停用通过管理台维护；自研 skill 目录被移除时登记条目保留并提示源缺失（不自动删除）。
