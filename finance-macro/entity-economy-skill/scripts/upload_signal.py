@@ -2,13 +2,12 @@
 """
 宏观信号上传脚本 - 推送 skill JSON 到 macro 后端
 
-对接契约(对齐 exchange-rate-skill/scripts/upload_signal.py):
+对接契约：
     POST https://<host>/api/macro/signal/upload
     Header X-Upload-Token, body {"skill", "file", "data"}
 
 本脚本自包含(logging / .env 加载不依赖 fetch_common),可跨 skill 复制使用:
-    - 5 个宏观信号 skill → macro_signal.json(conclusion/data_date/total_score/details)
-    - risk-appetite-skill → risk_data.json(结构嵌套在 data.* 下)
+    - 4 个宏观信号 skill → macro_signal.json(conclusion/data_date/total_score/details)
 
 配置来源(优先 finance-macro/.env,其次 skill 根 .env):
     MACRO_SIGNAL_UPLOAD_TOKEN   # 必填,缺失直接报错退出
@@ -53,15 +52,13 @@ DEFAULT_URL = "https://web.duomi77.cn:9443/api/macro/signal/upload"
 UPLOAD_TIMEOUT = 10  # 秒
 MAX_RETRIES = 2      # 仅网络错误/5xx 重试,4xx 不重试(契约 7.6:不要无限重试)
 
-# skill → 允许推送的 file(risk-appetite 与其他 5 个结构不同,不能混传)
+# skill → 允许推送的 file
 MACRO_SKILLS = {
     "monetary-policy-skill", "money-supply-skill", "entity-economy-skill",
-    "inflation-skill", "exchange-rate-skill",
+    "inflation-skill",
 }
-RISK_SKILL = "risk-appetite-skill"
 DEFAULT_SKILL = "entity-economy-skill"
 SKILL_FILE_MAP = {skill: "macro_signal.json" for skill in MACRO_SKILLS}
-SKILL_FILE_MAP[RISK_SKILL] = "risk_data.json"
 
 
 def load_env_file() -> None:
@@ -125,7 +122,7 @@ def validate_payload(skill: str, file: str, data: Any) -> tuple[list[str], list[
     dates: list[str] = []
 
     if file == "risk_data.json":
-        # 后端 _convert_risk_appetite: score.conclusion + data.{volume,turnover,margin}.*
+        # 仅为兼容旧格式保留的结构校验分支。
         score = data.get("score")
         if not (isinstance(score, dict) and isinstance(score.get("conclusion"), str) and score.get("conclusion")):
             errors.append("缺少 score.conclusion(定性结论,后端展示用)")

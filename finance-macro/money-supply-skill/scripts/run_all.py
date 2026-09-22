@@ -164,7 +164,7 @@ def main() -> None:
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     print(f"\n输出文件: {out_path}")
 
-    # 构建契约结构并推送到线上 macro 后端（模式对齐 exchange-rate-skill）
+    # 构建契约结构并推送到线上 macro 后端
     if args.upload:
         from build_macro_signal import build_signal
         from upload_signal import DEFAULT_URL, UploadError, load_env_file, upload_signal

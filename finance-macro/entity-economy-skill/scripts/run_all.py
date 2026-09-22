@@ -141,7 +141,7 @@ def main() -> None:
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     print(f"\n输出文件: {out_path}")
 
-    # 从各 CSV 构建契约结构并推送到线上 macro 后端（模式对齐 exchange-rate-skill）
+    # 从各 CSV 构建契约结构并推送到线上 macro 后端
     if args.upload:
         import os
 

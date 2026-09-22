@@ -34,6 +34,7 @@ Desktop.ini
 *.tmp
 *.temp
 .cache/
+.worktrees/
 
 # matrix_server 自动回写备份
 registry.json.bak
@@ -49,12 +50,5 @@ finance-macro/logs/
 finance-macro/*/data/
 finance-macro/*/test_output/
 finance-macro/*/macro_signal.json
-finance-macro/a-share-macro-skill/macro_index_data.json
-finance-macro/bond-market-overview-skill/bond_index_data.json
-finance-macro/exchange-rate-skill/exchange_rate_data.json
-finance-macro/exchange-rate-skill/exchange_rate_report.md
-finance-macro/exchange-rate-skill/*.csv
-finance-macro/risk-appetite-skill/risk_data.json
-finance-macro/risk-appetite-skill/risk_report.md
 # 备份文件
 *.backup

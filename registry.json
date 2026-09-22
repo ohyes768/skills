@@ -3,44 +3,26 @@
   "updated": "2026-09-20",
   "skills": [
     {
-      "id": "macro-overview-skill",
-      "name": "macro-overview-skill",
+      "id": "bond-market-macro-impact-skill",
+      "name": "bond-market-macro-impact-skill",
       "source": "local",
-      "path": "finance-macro/a-share-macro-skill",
+      "path": "finance-macro/bond-market-macro-impact-skill",
       "repository": null,
-      "tags": [
-        "finance-macro"
-      ],
-      "summary": "A股宏观环境综合评估，计算宏观友好度指数",
+      "tags": ["finance-macro"],
+      "summary": "宏观快照 API 驱动的未来四周国内利率债及长短端影响分析",
       "status": "active",
-      "depends_on": [
-        "monetary-policy-skill",
-        "money-supply-skill",
-        "entity-economy-skill",
-        "inflation-skill",
-        "risk-appetite-skill",
-        "exchange-rate-skill"
-      ]
+      "depends_on": []
     },
     {
-      "id": "bond-market-overview-skill",
-      "name": "bond-market-overview-skill",
+      "id": "a-share-macro-impact-skill",
+      "name": "a-share-macro-impact-skill",
       "source": "local",
-      "path": "finance-macro/bond-market-overview-skill",
+      "path": "finance-macro/a-share-macro-impact-skill",
       "repository": null,
-      "tags": [
-        "finance-macro"
-      ],
-      "summary": "债市宏观环境综合评估，计算债市宏观友好度指数",
+      "tags": ["finance-macro"],
+      "summary": "读取宏观快照 API，分析未来四周 A 股整体及成长／价值风格影响",
       "status": "active",
-      "depends_on": [
-        "monetary-policy-skill",
-        "money-supply-skill",
-        "entity-economy-skill",
-        "inflation-skill",
-        "risk-appetite-skill",
-        "exchange-rate-skill"
-      ]
+      "depends_on": []
     },
     {
       "id": "monetary-policy-skill",
@@ -91,32 +73,6 @@
         "finance-macro"
       ],
       "summary": "通胀分析（CPI/PPI/核心CPI）",
-      "status": "active",
-      "depends_on": []
-    },
-    {
-      "id": "risk-appetite-skill",
-      "name": "risk-appetite-skill",
-      "source": "local",
-      "path": "finance-macro/risk-appetite-skill",
-      "repository": null,
-      "tags": [
-        "finance-macro"
-      ],
-      "summary": "A股市场风险偏好分析（成交额/换手率/两融余额）",
-      "status": "active",
-      "depends_on": []
-    },
-    {
-      "id": "exchange-rate-skill",
-      "name": "exchange-rate-skill",
-      "source": "local",
-      "path": "finance-macro/exchange-rate-skill",
-      "repository": null,
-      "tags": [
-        "finance-macro"
-      ],
-      "summary": "汇率与资金流向分析（美元指数/人民币/北向南向/TED利差）",
       "status": "active",
       "depends_on": []
     },

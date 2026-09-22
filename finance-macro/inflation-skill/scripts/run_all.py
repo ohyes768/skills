@@ -74,7 +74,7 @@ def main() -> None:
     out_path.write_text(json.dumps(combined, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"\n已写入 {out_path}")
 
-    # 构建契约结构并推送到线上 macro 后端（模式对齐 exchange-rate-skill）
+    # 构建契约结构并推送到线上 macro 后端
     if args.upload:
         import os
         import sys as _sys

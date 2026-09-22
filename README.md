@@ -8,7 +8,7 @@
 ## 目录结构
 
 ```
-finance-macro/        # 金融宏观分析（8 个）
+finance-macro/        # 金融宏观分析（6 个）
 dev-workflow/         # 开发工程（5 个）
 agent-methods/        # Agent 方法论（5 个）
 design/               # UI/UX 设计（1 个）
@@ -36,18 +36,17 @@ README.md
 
 ### 金融宏观分析 `finance-macro/`
 
+[bond-market-macro-impact-skill](finance-macro/bond-market-macro-impact-skill)：读取聚合快照 API，分析未来四周国内利率债整体及长短端差异，不涉及信用债。
+
+新增 [a-share-macro-impact-skill](finance-macro/a-share-macro-impact-skill)：只读聚合快照 API，分析未来四周 A 股整体和成长／价值风格；不依赖本地数据抓取 skill。
+
 | Skill | 说明 | 状态 |
 |---|---|---|
-| [a-share-macro-skill](finance-macro/a-share-macro-skill) | A股宏观环境综合评估（编排器，依赖下方 6 个子 skill） | active |
-| [bond-market-overview-skill](finance-macro/bond-market-overview-skill) | 债市宏观环境综合评估（编排器，依赖下方 6 个子 skill） | active |
 | [monetary-policy-skill](finance-macro/monetary-policy-skill) | 货币政策松紧分析（DR007/LPR/MLF） | active |
 | [money-supply-skill](finance-macro/money-supply-skill) | 货币供应与流动性（M1/M2/社融） | active |
 | [entity-economy-skill](finance-macro/entity-economy-skill) | 实体经济强弱判断（PMI/固投/社零） | active |
 | [inflation-skill](finance-macro/inflation-skill) | 通胀分析（CPI/PPI/核心CPI） | active |
-| [risk-appetite-skill](finance-macro/risk-appetite-skill) | 市场风险偏好（成交额/换手率/两融） | active |
-| [exchange-rate-skill](finance-macro/exchange-rate-skill) | 汇率与资金流向（美元指数/TED利差） | active |
-
-> 两个编排器 skill 需与其依赖的 6 个子 skill 一起安装才能完整运行。
+| [ARCHIVED_MACRO_DECISION_LOGIC.md](finance-macro/ARCHIVED_MACRO_DECISION_LOGIC.md) | 已下线综合模型的判断逻辑归档 | archived |
 
 ### 开发工程 `dev-workflow/`
 

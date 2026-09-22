@@ -138,7 +138,7 @@
   "themes": {
     "finance-macro": {
       "label": "金融宏观分析",
-      "description": "A股/债市宏观环境评估及其子指标 skill（货币政策、货币供应、实体经济、通胀、风险偏好、汇率）"
+      "description": "宏观数据指标 skill（货币政策、货币供应、实体经济、通胀）"
     },
     "dev-workflow": {
       "label": "开发工程",
@@ -167,36 +167,20 @@
   },
   "skills": [
     {
-      "name": "macro-overview-skill",
+      "name": "bond-market-macro-impact-skill",
       "source": "local",
-      "dir": "finance-macro/a-share-macro-skill",
+      "dir": "finance-macro/bond-market-macro-impact-skill",
       "theme": "finance-macro",
       "status": "active",
-      "summary": "A股宏观环境综合评估，计算宏观友好度指数",
-      "depends_on": [
-        "monetary-policy-skill",
-        "money-supply-skill",
-        "entity-economy-skill",
-        "inflation-skill",
-        "risk-appetite-skill",
-        "exchange-rate-skill"
-      ]
+      "summary": "未来四周国内利率债整体及长短端宏观影响分析"
     },
     {
-      "name": "bond-market-overview-skill",
+      "name": "a-share-macro-impact-skill",
       "source": "local",
-      "dir": "finance-macro/bond-market-overview-skill",
+      "dir": "finance-macro/a-share-macro-impact-skill",
       "theme": "finance-macro",
       "status": "active",
-      "summary": "债市宏观环境综合评估，计算债市宏观友好度指数",
-      "depends_on": [
-        "monetary-policy-skill",
-        "money-supply-skill",
-        "entity-economy-skill",
-        "inflation-skill",
-        "risk-appetite-skill",
-        "exchange-rate-skill"
-      ]
+      "summary": "宏观快照 API 驱动的未来四周 A 股整体及成长／价值风格分析"
     },
     {
       "name": "monetary-policy-skill",
@@ -229,22 +213,6 @@
       "theme": "finance-macro",
       "status": "active",
       "summary": "通胀分析（CPI/PPI/核心CPI）"
-    },
-    {
-      "name": "risk-appetite-skill",
-      "source": "local",
-      "dir": "finance-macro/risk-appetite-skill",
-      "theme": "finance-macro",
-      "status": "active",
-      "summary": "A股市场风险偏好分析（成交额/换手率/两融余额）"
-    },
-    {
-      "name": "exchange-rate-skill",
-      "source": "local",
-      "dir": "finance-macro/exchange-rate-skill",
-      "theme": "finance-macro",
-      "status": "active",
-      "summary": "汇率与资金流向分析（美元指数/人民币/北向南向/TED利差）"
     },
     {
       "name": "git-commit-push",
