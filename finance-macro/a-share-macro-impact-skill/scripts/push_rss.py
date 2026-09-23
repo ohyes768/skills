@@ -112,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--url", default="")
     parser.add_argument("--insecure", action="store_true")
     parser.add_argument("--report-endpoint", default=DEFAULT_REPORT_ENDPOINT, help="macro 报告看板上传接口")
-    parser.add_argument("--report-token", default=os.environ.get("MACRO_REPORT_UPLOAD_TOKEN", ""), help="macro 报告看板 token，默认读环境变量 MACRO_REPORT_UPLOAD_TOKEN")
+    parser.add_argument("--report-token", default=os.environ.get("MACRO_SIGNAL_UPLOAD_TOKEN", ""), help="macro 报告看板 token，默认读环境变量 MACRO_SIGNAL_UPLOAD_TOKEN")
     parser.add_argument("--strict", action="store_true", help="质量检查有问题时阻止推送；默认只告警")
     parser.add_argument("--force", action="store_true", help="兼容旧用法：即使 --strict 也继续推送")
     parser.add_argument("--allow-duplicate", action="store_true", help="允许同标题重复发布")
@@ -139,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
         args.report_endpoint, args.report_token, args.title, content, args.url, args.source, not args.insecure
     )
     if result["report_push"] == "skipped_no_token":
-        errors.append("未配置 MACRO_REPORT_UPLOAD_TOKEN，跳过 macro 报告看板推送")
+        errors.append("未配置 MACRO_SIGNAL_UPLOAD_TOKEN，跳过 macro 报告看板推送")
     if errors:
         result["quality_warnings"] = errors
     print(json.dumps(result, ensure_ascii=False, indent=2))

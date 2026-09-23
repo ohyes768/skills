@@ -101,7 +101,7 @@ class MainFlowTests(unittest.TestCase):
         result = json.loads(stdout.getvalue())
         self.assertTrue(result['pushed'])
         self.assertEqual(result['report_push'], 'skipped_no_token')
-        self.assertTrue(any('MACRO_REPORT_UPLOAD_TOKEN' in w for w in result.get('quality_warnings', [])))
+        self.assertTrue(any('MACRO_SIGNAL_UPLOAD_TOKEN' in w for w in result.get('quality_warnings', [])))
 
 
 if __name__ == '__main__':
