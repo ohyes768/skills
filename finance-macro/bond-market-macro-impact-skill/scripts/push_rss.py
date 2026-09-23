@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""把完成分析的 report.md 推送到 RSS Relay。标准库实现，无第三方依赖。"""
+"""把完成分析的 report.md 推送到 RSS Relay，RSS 成功后同步推送一份到 macro 报告看板。标准库实现，无第三方依赖。"""
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import ssl
 from pathlib import Path
@@ -12,6 +13,7 @@ from urllib.request import Request, urlopen
 
 DEFAULT_ENDPOINT = "https://web.duomi77.cn:9443/rss/api/rss-relay/post"
 DEFAULT_POSTS_ENDPOINT = "https://web.duomi77.cn:9443/rss/api/rss-relay/posts"
+DEFAULT_REPORT_ENDPOINT = "https://web.duomi77.cn:9443/api/macro/reports/upload"
 REPORT_START_MARKER = "<!-- MACRO_REPORT_START -->"
 SKILL_ECHO_MARKERS = (
     "债市分析框架",
@@ -25,10 +27,12 @@ DIRECTION_HINT = "标题格式应为：YYYY-MM-DD 利率债展望｜偏支持债
 MIN_CHARS = 1800
 
 
-def http_json(url: str, payload: dict | None, verify: bool, timeout: int = 20) -> dict:
+def http_json(url: str, payload: dict | None, verify: bool, timeout: int = 20, token: str | None = None) -> dict:
     context = None if verify else ssl._create_unverified_context()
     data = None
     headers = {"Content-Type": "application/json"}
+    if token:
+        headers["X-Upload-Token"] = token
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
     request = Request(url, data=data, headers=headers)
@@ -83,7 +87,22 @@ def is_duplicate(posts_endpoint: str, title: str, verify: bool) -> bool:
     return any(post.get("title") == title for post in posts)
 
 
-def main() -> int:
+def push_report(endpoint: str, token: str, title: str, content: str, url: str, source: str, verify: bool) -> str:
+    """推送报告到 macro 报告看板，返回状态字符串；任何失败都不影响已成功的 RSS 推送。"""
+    if not token:
+        return "skipped_no_token"
+    payload = {"title": title, "content": content, "url": url, "source": source}
+    try:
+        macro_response = http_json(endpoint, payload, verify, token=token)
+    except Exception as exc:  # 网络/HTTP/解析失败都不抛出，保持整体返回码不变
+        return f"failed: {exc}"
+    data = macro_response.get("data") or {}
+    if data.get("duplicate"):
+        return "duplicate"
+    return "ok"
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("markdown", help="最终 report.md 路径")
     parser.add_argument("--title", required=True)
@@ -92,10 +111,12 @@ def main() -> int:
     parser.add_argument("--source", default="bond-market-macro-impact-skill")
     parser.add_argument("--url", default="")
     parser.add_argument("--insecure", action="store_true")
+    parser.add_argument("--report-endpoint", default=DEFAULT_REPORT_ENDPOINT, help="macro 报告看板上传接口")
+    parser.add_argument("--report-token", default=os.environ.get("MACRO_REPORT_UPLOAD_TOKEN", ""), help="macro 报告看板 token，默认读环境变量 MACRO_REPORT_UPLOAD_TOKEN")
     parser.add_argument("--strict", action="store_true", help="质量检查有问题时阻止推送；默认只告警")
     parser.add_argument("--force", action="store_true", help="兼容旧用法：即使 --strict 也继续推送")
     parser.add_argument("--allow-duplicate", action="store_true", help="允许同标题重复发布")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     raw_content = Path(args.markdown).read_text(encoding="utf-8")
     content, sanitize_warnings = sanitize_report(raw_content)
@@ -114,6 +135,11 @@ def main() -> int:
         not args.insecure,
     )
     result = {"pushed": True, "response": response}
+    result["report_push"] = push_report(
+        args.report_endpoint, args.report_token, args.title, content, args.url, args.source, not args.insecure
+    )
+    if result["report_push"] == "skipped_no_token":
+        errors.append("未配置 MACRO_REPORT_UPLOAD_TOKEN，跳过 macro 报告看板推送")
     if errors:
         result["quality_warnings"] = errors
     print(json.dumps(result, ensure_ascii=False, indent=2))
