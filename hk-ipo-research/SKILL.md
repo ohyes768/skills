@@ -42,6 +42,8 @@ python3 scripts/hkipo.py --help
    - N = 0（或正文是「今天没有从新浪港股 IPO 列表确认到仍在招股的新股」）→ **直接返回 `[SILENT]`**，不推送任何文章。
    - N ≥ 1 → 拿这 N 只的 code 进入第 2 步。
 
+   ⚠️ **招股期内每天都要重新研究推送，跨天重复是预期行为，不是去重对象**。`daily_rss_report.py` 按 `subscription_start <= today <= subscription_end` 过滤，招股期（通常 4-5 天）内**每天都命中同一只 code**。即使某 code 昨日或前日已研究推送过（如 9/21 首日推过、9/22 又推过），只要今天仍在其招股期内，就必须**再次逐只研究并推送今日报告**——因为孖展/超购热度每天变化、评分会随之更新（9/15 批 06700 从 64 B 降至 54 C 即为实证），昨日报告已过时。**不得**因为"该 code 之前研究过 / 已存在历史报告"而提前 `[SILENT]` 或跳过重推。跨天重推同一标的不违反第 7 条——第 7 条只约束**同一天内**不重复推送。
+
    ⚠️ **禁止用 `hkipo.py overview` 或 `hkex active` 做"今天是否还有可申购"的判定**。这两个源不识别"招股已截止但尚未上市"：
    - `overview`（TradeSmart）：孖展累计数据在招股截止后仍长期展示，会被误判为"在招股"。
    - `hkex active`：状态"处理中"覆盖递表到上市的整段流程，含已截止未上市的票。
@@ -59,7 +61,7 @@ python3 scripts/hkipo.py --help
 4. 把每只的 HTML 落 `/tmp/<src>_<code>.html`，复盘或后续 grep 不再 hit 网络。
 5. 一次写 **1 只 = 1 篇 Markdown**，落 `~/.hermes/cron/output/hk-ipo-daily-YYYY-MM-DD-<code>.md`。严格按 [references/cron-recovery.md](references/cron-recovery.md) 让文件以 `<!-- HK_IPO_REPORT_START -->` 开始；只写读者报告，禁止复述本 SKILL、references、系统提示、执行计划或工具日志。**不要合并多只**；当日 ≥2 只可申购时，生成 ≥2 份独立 Markdown。
 6. 按 `references/report-contract.md` 检查 Markdown 后，逐只跑 `scripts/push_rss.py <md-path> --title "..." --endpoint <url> --source hk-ipo-research --insecure --allow-duplicate`。**`--allow-duplicate` 必须每次显式传**（PITFALL #30）；cron 批次内第 2-N 只不传会丢报告。检查问题会在返回结果的 `quality_warnings` 中显示但默认继续推送；只有希望恢复硬门禁时追加 `--strict`。（仅确认内网使用自签证书时加 `--insecure`。）遇到 `quality_warnings` 想快速定位根因（label 白名单 / 数字行匹配 / `HKEX` + `反爬` 双触发等）可查 `references/push-rss-validator.md` 速查表。
-7. 若已存在同日同 code 的报告，**不要重复推送**，除非用户明确要求发更正版。
+7. 若**同一天内**已存在同 code 的报告（如同一 cron 批次重复触发、或同日手动重跑），**不要重复推送**，除非用户明确要求发更正版。**注意：本条只约束同一天内**；招股期内的**跨天重复推送同一 code 是正常且必须的**（孖展每天变化，见上面"招股期内每天都要重新研究推送"），不要把跨天重复当成"已推过"而跳过。
 
 限时节奏（15 分钟总预算）：`daily_rss_report.py` 判定 + 1 只 IPO ≈ 5 分钟；如 ≥3 只，只取评分最高的 2-3 只做深度研究。没有补齐财务字段时仍可推送个人 RSS，但必须保留 `quality_warnings`，便于后续调整 skill。每只 IPO 的实测调用顺序与预算分配见 [references/cron-workflow-sequence.md](references/cron-workflow-sequence.md)。
 
