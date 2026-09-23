@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 import json
 import math
 from pathlib import Path
+import ssl
 import sys
 from urllib.parse import urlencode
 from urllib.request import urlopen
@@ -39,7 +40,8 @@ def parse_day(value):
 
 
 def fetch(params):
-    with urlopen(URL + '?' + urlencode(params), timeout=30) as response:
+    ctx = ssl._create_unverified_context()
+    with urlopen(URL + '?' + urlencode(params), timeout=30, context=ctx) as response:
         payload = json.load(response)
     return validate(payload)
 
