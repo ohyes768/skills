@@ -1,0 +1,4 @@
+interface:
+  display_name: "B站字幕转 RSS"
+  short_description: "提取 B站视频完整字幕并按停顿分段，查重推送到现有 RSS 文字稿服务"
+  default_prompt: "使用 $bilibili-subtitle-rss 提取这个 B站视频的完整字幕，合并为易读段落并推送到 RSS。"

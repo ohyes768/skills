@@ -75,6 +75,7 @@ README.md
 | Skill | 说明 | 状态 |
 |---|---|---|
 | [notes-deal](knowledge/notes-deal) | 浏览器采集知识点的自动分类整理 | active |
+| [bilibili-subtitle-rss](bilibili-subtitle-rss) | 提取 B站完整字幕、按停顿和字数合并分段，并查重推送到 RSS Relay；已安装到 Codex | active |
 
 ## 外部 skill（GitHub）
 
