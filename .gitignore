@@ -54,5 +54,7 @@ finance-macro/logs/
 finance-macro/*/data/
 finance-macro/*/test_output/
 finance-macro/*/macro_signal.json
+# waytoagi-update-log 推送回执（本机状态，不入库）
+waytoagi-update-log/data/
 # 备份文件
 *.backup

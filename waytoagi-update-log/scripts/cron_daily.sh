@@ -2,7 +2,7 @@
 # WaytoAGI 每日更新推送 - 定时脚本
 # 仅在有数据时推送钉钉
 
-SKILL_DIR="$HOME/.openclaw/workspace/skills/waytoagi-update-log"
+SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # 读取 .env 中的 DINGTALK_WEBHOOK（避免 token 入 git）
 if [ -f "$SKILL_DIR/.env" ]; then

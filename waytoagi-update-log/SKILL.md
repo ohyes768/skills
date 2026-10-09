@@ -20,11 +20,19 @@ description: 自动追踪WaytoAGI知识库近7日更新日志，整理指定日�
 
 ## 工作流程
 
-### Step 1：确定目标日期
+### Step 1：确定待推送文章（增量查重，核心规则）
 
-- **"昨日"** → 取近7日更新日志中**最新一个有内容的日期**
-- **指定日期（如"5月6日"）** → 直接定位该日期章节
-- **"近7日"** → 遍历全部日期章节
+**禁止**用"最新一个有内容日期"作为推送目标——waytoagi 假期可能连续多天不更新，回退会导致同一批文章每天重复推送（2026-10 国庆曾连续 4 天重推同一批 8 篇）。
+
+正确逻辑：
+
+1. 遍历「近 7 日更新日志」**全部日期章节**，收集每篇文章的 `mention-doc` token
+2. 读取已推回执（skill 目录下 `data/pushed_articles.json`），**过滤掉已推送的 token**
+3. 剩余未推送的文章才是本次推送目标，按日期分组输出
+4. 若没有未推送的文章 → 静默退出，不推送任何内容
+
+- **指定日期（如"5月6日"）** → 只在原文档该日期章节内做上述过滤
+- 已推文章即使被划进其他日期章节也必须跳过（token 是文章唯一标识，比日期章节更可靠）
 
 ### Step 2：获取主文档
 
@@ -102,9 +110,9 @@ set -a; . "$(dirname $(readlink -f $0))/.env" 2>/dev/null; set +a
 WEBHOOK=$(grep ^DINGTALK_WEBHOOK .env | cut -d= -f2-)
 ```
 
-**调用脚本：**
+**调用脚本**（在 skill 目录下执行）：
 ```bash
-node ~/.openclaw/workspace/skills/waytoagi-update-log/scripts/send_dingtalk.js \
+node scripts/send_dingtalk.js \
   "$DINGTALK_WEBHOOK" \
   "<完整markdown内容>"
 ```
@@ -115,6 +123,25 @@ node ~/.openclaw/workspace/skills/waytoagi-update-log/scripts/send_dingtalk.js \
 - 脚本会自动将 Markdown 包装为钉钉 `msgtype: markdown` 格式
 - 标题自动渲染，链接 `[]()` 格式可点击
 - 图片行（`![]()`）钉钉不支持自动忽略
+
+### Step 7：推送成功后记录回执（必做，防重复的核心）
+
+任一渠道（RSS / 钉钉）推送成功后，**立即**把这批文章的 mention-doc token 写入回执文件 `data/pushed_articles.json`（相对 skill 目录，`data/` 目录不存在则创建）：
+
+```json
+{
+  "articles": {
+    "<wiki_node_token_1>": "2026-10-07T10:03:00+08:00",
+    "<wiki_node_token_2>": "2026-10-07T10:03:00+08:00"
+  }
+}
+```
+
+规则：
+- key 是文章的 `mention-doc` token，value 是推送时间（ISO 8601）
+- 更新时**保留**文件里已有的其他 token，只新增本次的
+- 漏记回执 = 下次必然重复推送，推送成功但未写回执视为任务失败
+- 回执只增不删；用户明确要求重推某篇时，先征得同意再删除对应 token
 
 ## 配置参考
 
