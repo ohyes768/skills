@@ -41,6 +41,10 @@ registry.json.bak
 
 # Environment files (all subprojects)
 */.env
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.sample
 
 # finance-macro 运行产物（统一输出/缓存/日志，不入代码库）
 finance-macro/output/
