@@ -111,7 +111,8 @@ def build_post(envelope, bvid):
         raise ValueError('字幕内容为空；未推送')
     for paragraph in merge_segments_to_paragraphs(segments):
         lines.extend([escape_text(paragraph), ''])
-    return {'title': f'B站文字稿｜{title}', 'content': '\n'.join(lines), 'url': url, 'source': 'bilibili'}
+    return {'title': f'B站文字稿｜{title}', 'content': '\n'.join(lines),
+            'channel': 'bilinote', 'source': 'my-bot', 'url': url}
 
 
 def extract(bvid, timeout):

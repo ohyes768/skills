@@ -43,7 +43,9 @@ class SubtitleTests(unittest.TestCase):
 
     def test_renders_every_segment_and_escapes_markup(self):
         post = m.build_post(fixture(), BV)
-        self.assertEqual(post['source'], 'bilibili')
+        self.assertEqual(post['source'], 'my-bot')
+        self.assertEqual(post['channel'], 'bilinote')
+        self.assertEqual(set(post), {'title', 'content', 'channel', 'source', 'url'})
         self.assertIn('完整第一句', post['content'])
         self.assertNotIn('01:00:01.000', post['content'])
         self.assertNotIn(' → ', post['content'])
@@ -123,6 +125,9 @@ class SubtitleTests(unittest.TestCase):
             self.assertEqual(again['status'], 'duplicate')
             self.assertEqual(request.call_count, 2)
             self.assertEqual(request.call_args_list[1].kwargs['method'], 'POST')
+            payload = request.call_args_list[1].kwargs['payload']
+            self.assertEqual(payload['channel'], 'bilinote')
+            self.assertEqual(payload['source'], 'my-bot')
 
     def test_ambiguous_post_failure_not_retried_or_recorded(self):
         with tempfile.TemporaryDirectory(dir=TEST_TEMP) as folder, patch.object(m, 'request_json', side_effect=[
