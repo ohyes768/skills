@@ -97,7 +97,29 @@ description: 自动追踪WaytoAGI知识库近7日更新日志，整理指定日�
 
 **汇总标题行格式**：`## 📅 WaytoAGI 更新日志 · X月X日 更新 N 篇`
 
-### Step 6：发送至钉钉（可选）
+### Step 6：推送
+
+**RSS 推送（默认渠道）：**
+
+接口：`POST https://web.duomi77.cn:9443/rss/api/rss-relay/post`（与 bilibili-subtitle-rss 同一 RSS Relay）
+
+**每篇文章一条请求**，JSON body：
+
+```json
+{
+  "title": "《文章标题》",
+  "content": "📝 说明文字\n\n🔗 微信原文：https://mp.weixin.qq.com/...\n\n🔗 飞书Wiki：https://waytoagi.feishu.cn/wiki/...",
+  "channel": "waytoagi",
+  "source": "waytoagi-daily",
+  "url": "https://mp.weixin.qq.com/..."
+}
+```
+
+- `channel` 固定 `waytoagi`、`source` 固定 `waytoagi-daily`，不要用其他值
+- `title` 为文章标题；`content` 按 Step 5 条目格式（说明 + 链接）；`url` 按链接策略填微信原文链接或 Wiki 链接
+- 成功判定：HTTP 201 且响应含非空 `id`；没拿到 `id` 不要直接重试，先查远端是否已创建（超时盲重试会造成重复）
+
+**钉钉推送（可选）：**
 
 当用户明确要求"发送到钉钉"或"推送到钉钉"时，执行发送：
 
