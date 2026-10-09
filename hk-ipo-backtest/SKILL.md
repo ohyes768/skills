@@ -132,11 +132,14 @@ TradeSmart 实时 API 返回的孖展快照 `observed_at` 时间戳是**当前�
 
 从本 skill 根目录运行：
 
+RSS Relay 使用 JSON 五字段：`title`（报告标题）、`content`（完整 Markdown 正文）、`channel`（`hkipo`）、`source`（`hk-ipo-backtest`）、`url`（来源/原文链接，无链接时传空字符串）。研究和回测进入同一频道，通过 `source` 区分来源；示例中的 `my-bot` 可通过 `--source` 自定义。共享脚本默认发送 `channel=hkipo`，可用 `--channel` 覆盖，原文链接用 `--url` 指定。
+
 ```bash
 python3 ../hk-ipo-research/scripts/push_rss.py /tmp/hk-ipo-backtest-final.md \
   --report-type backtest \
   --title "YYYY-MM-DD 港股IPO回测｜公司名（00000.HK）｜预测命中" \
   --endpoint https://web.duomi77.cn:9443/rss/api/rss-relay/post \
+  --channel hkipo \
   --source hk-ipo-backtest
 ```
 

@@ -30,6 +30,22 @@ python3 scripts/hkipo.py --help
 - RSS 最终报告按 `references/report-contract.md` 检查。采集骨架不等于分析报告；先由 agent 尽量补齐财务、基石、保荐人、股东、估值和风险，再运行 `scripts/push_rss.py`。质量问题默认只告警，不阻断个人 RSS 推送。
 - 当天有 N 只仍可申购的新股时，按 code 循环研究并生成 N 份 Markdown，推送 N 篇 RSS。不要合并成一篇；没有新股则不推送。
 
+## RSS Relay 请求格式
+
+最终推送使用 JSON 五字段：`title`（报告标题）、`content`（完整 Markdown 正文）、`channel`（默认 `hkipo`）、`source`（本 skill 使用 `hk-ipo-research`）、`url`（来源/原文链接，无链接时传空字符串）。`channel` 用于频道归类，`source` 用于区分生成来源；不要把 source 当作 channel。示例中的 `my-bot` 是来源名称示例，可通过 `--source` 覆盖。
+
+```json
+{
+  "title": "今日内容",
+  "content": "# 今日内容\n\n正文 markdown",
+  "channel": "hkipo",
+  "source": "hk-ipo-research",
+  "url": ""
+}
+```
+
+`scripts/push_rss.py` 默认发送 `channel=hkipo`，支持 `--channel hkipo`、`--source <来源>`、`--url <链接>`。`daily_rss_report.py` 的骨架推送入口也默认发送 `channel=hkipo`，支持 `--channel`；最终报告仍须使用 `push_rss.py`。
+
 ## 每日 RSS / cron path（15 分钟预算）
 
 被 cron 触发时（无用户在场），按以下分支走：
@@ -79,6 +95,7 @@ python3 scripts/daily_rss_report.py --output /tmp/hk-ipo-daily.md
 python3 scripts/push_rss.py /tmp/hk-ipo-final.md \
   --title "YYYY-MM-DD 港股打新｜公司名（00000.HK）｜66分 B" \
   --endpoint https://web.duomi77.cn:9443/rss/api/rss-relay/post \
+  --channel hkipo \
   --source hk-ipo-research \
   --insecure
 ```

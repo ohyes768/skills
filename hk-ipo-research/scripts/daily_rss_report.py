@@ -221,8 +221,9 @@ def push_report(
     source: str,
     url: str = "",
     verify_tls: bool = True,
+    channel: str = "hkipo",
 ) -> dict[str, Any]:
-    payload = {"title": title, "content": content, "url": url, "source": source}
+    payload = {"title": title, "content": content, "channel": channel, "source": source, "url": url}
     response = httpx.post(endpoint, json=payload, timeout=20, verify=verify_tls)
     response.raise_for_status()
     try:
@@ -239,6 +240,7 @@ def main() -> int:
     parser.add_argument("--allow-incomplete", action="store_true", help="允许推送数据骨架；默认禁止")
     parser.add_argument("--endpoint", default=DEFAULT_RELAY)
     parser.add_argument("--source", default="hk-ipo-research")
+    parser.add_argument("--channel", default="hkipo", help="RSS 频道；默认 hkipo")
     parser.add_argument("--insecure", action="store_true", help="仅对自签名内网 Relay 关闭 TLS 证书校验")
     parser.add_argument("--analysis-timeout", type=int, default=45)
     args = parser.parse_args()
@@ -257,7 +259,7 @@ def main() -> int:
                 "使用 scripts/push_rss.py 推送最终 Markdown。"
             )
         title = f"{as_of.isoformat()} 港股打新研究（{len(stocks)}只）"
-        result = push_report(args.endpoint, title, markdown, args.source, verify_tls=not args.insecure)
+        result = push_report(args.endpoint, title, markdown, args.source, verify_tls=not args.insecure, channel=args.channel)
         print(json.dumps({"pushed": True, "response": result}, ensure_ascii=False), file=sys.stderr)
     return 0
 

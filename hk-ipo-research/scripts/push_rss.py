@@ -194,6 +194,7 @@ def main() -> int:
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     parser.add_argument("--posts-endpoint", default=DEFAULT_POSTS_ENDPOINT)
     parser.add_argument("--source", default="hk-ipo-research")
+    parser.add_argument("--channel", default="hkipo", help="RSS 频道；港股研究和回测默认 hkipo")
     parser.add_argument("--report-type", choices=("research", "backtest"), default="research")
     parser.add_argument("--url", default="")
     parser.add_argument("--insecure", action="store_true")
@@ -217,7 +218,7 @@ def main() -> int:
 
     response = httpx.post(
         args.endpoint,
-        json={"title": args.title, "content": content, "url": args.url, "source": args.source},
+        json={"title": args.title, "content": content, "channel": args.channel, "source": args.source, "url": args.url},
         timeout=20,
         verify=not args.insecure,
     )
