@@ -40,3 +40,21 @@ description: 读取宏观聚合快照 API，分析未来四周国内利率债整
 6. **数据限制和复盘**：说明影响哪些结论的缺口；比较上次主要驱动如何变化。信用债不纳入结论。
 
 若增长通胀背景和资金／收益率证据均不足，不给整体方向；只有局部缺失时限制相应部分。收益率下降一般支持固定现金流债券价格，但总回报还受票息、持有期、融资成本等影响，不能把二者等同。
+
+## RSS Relay：macro 频道
+
+发布接口为 `POST https://web.duomi77.cn:9443/rss/api/rss-relay/post`。两个宏观展望报告统一发布到 `macro` 频道，请求结构如下：
+
+```json
+{
+  "title": "报告标题",
+  "content": "# 报告标题\n\n正文 markdown",
+  "channel": "macro",
+  "source": "my-bot",
+  "url": ""
+}
+```
+
+`title` 使用流程规定的标题，`content` 为最终报告 Markdown；`channel` 固定为 `macro`，`source` 默认 `my-bot`（可用 `--source` 覆盖），`url` 默认空字符串（可用 `--url` 指定）。查重请求为 `GET /rss/api/rss-relay/posts?limit=100&channel=macro`，只检查本频道的同标题条目。
+
+订阅地址为 `https://web.duomi77.cn:9443/rss/api/rss-relay/rss.xml?token=<订阅token>&channel=macro`，使用用户提供的订阅 token。`rss.xml` 用于阅读，不用于 POST；订阅 token 不写入报告正文，也不作为 macro 报告看板的上传 token。

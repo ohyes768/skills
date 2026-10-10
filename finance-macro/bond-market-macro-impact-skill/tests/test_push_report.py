@@ -50,6 +50,17 @@ class MainFlowTests(unittest.TestCase):
         md.write_text('正文', encoding='utf-8')
         return str(md)
 
+    def test_macro_relay_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(push_rss, 'http_json', return_value={'posts': []}) as http, contextlib.redirect_stdout(io.StringIO()):
+                code = push_rss.main([self.write_report(tmp), '--title', 'T', '--report-token', ''])
+        self.assertEqual(code, 0)
+        get_call, post_call = http.call_args_list
+        self.assertIn('channel=macro', get_call.args[0])
+        self.assertEqual(post_call.args[0], push_rss.DEFAULT_ENDPOINT)
+        self.assertEqual(post_call.args[1], {
+            'title': 'T', 'content': '正文', 'channel': 'macro', 'source': 'my-bot', 'url': ''})
+
     def test_rss_duplicate_blocks_macro_push(self):
         with tempfile.TemporaryDirectory() as tmp:
             with patch.object(push_rss, 'http_json', return_value={'posts': [{'title': 'T'}]}), \

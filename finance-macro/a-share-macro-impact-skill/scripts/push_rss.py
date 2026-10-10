@@ -82,7 +82,7 @@ def validate_title(title: str, content: str) -> list[str]:
 
 
 def is_duplicate(posts_endpoint: str, title: str, verify: bool) -> bool:
-    payload = http_json(posts_endpoint + "?" + urlencode({"limit": 100}), None, verify)
+    payload = http_json(posts_endpoint + "?" + urlencode({"limit": 100, "channel": "macro"}), None, verify)
     posts = payload.get("posts", [])
     return any(post.get("title") == title for post in posts)
 
@@ -108,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--title", required=True)
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     parser.add_argument("--posts-endpoint", default=DEFAULT_POSTS_ENDPOINT)
-    parser.add_argument("--source", default="a-share-macro-impact-skill")
+    parser.add_argument("--source", default="my-bot")
     parser.add_argument("--url", default="")
     parser.add_argument("--insecure", action="store_true")
     parser.add_argument("--report-endpoint", default=DEFAULT_REPORT_ENDPOINT, help="macro 报告看板上传接口")
@@ -131,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
 
     response = http_json(
         args.endpoint,
-        {"title": args.title, "content": content, "url": args.url, "source": args.source},
+        {"title": args.title, "content": content, "channel": "macro", "source": args.source, "url": args.url},
         not args.insecure,
     )
     result = {"pushed": True, "response": response}

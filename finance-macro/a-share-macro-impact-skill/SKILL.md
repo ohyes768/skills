@@ -39,3 +39,21 @@ description: 基于宏观聚合快照 API，分析未来四周宏观经济对 A 
 6. **数据限制与复盘**：缺失、滞后、回退、日期冲突及其影响；与上次结论的变化和依据；不以宏观报告代替短线行情预测。
 
 核心月度背景及金融条件均缺乏有效证据时，不给整体方向结论，输出数据缺口。局部缺失只限制对应判断；脚本或 API 失败时不生成看似有数据支持的报告。
+
+## RSS Relay：macro 频道
+
+发布接口为 `POST https://web.duomi77.cn:9443/rss/api/rss-relay/post`。两个宏观展望报告统一发布到 `macro` 频道，请求结构如下：
+
+```json
+{
+  "title": "报告标题",
+  "content": "# 报告标题\n\n正文 markdown",
+  "channel": "macro",
+  "source": "my-bot",
+  "url": ""
+}
+```
+
+`title` 使用流程规定的标题，`content` 为最终报告 Markdown；`channel` 固定为 `macro`，`source` 默认 `my-bot`（可用 `--source` 覆盖），`url` 默认空字符串（可用 `--url` 指定）。查重请求为 `GET /rss/api/rss-relay/posts?limit=100&channel=macro`，只检查本频道的同标题条目。
+
+订阅地址为 `https://web.duomi77.cn:9443/rss/api/rss-relay/rss.xml?token=<订阅token>&channel=macro`，使用用户提供的订阅 token。`rss.xml` 用于阅读，不用于 POST；订阅 token 不写入报告正文，也不作为 macro 报告看板的上传 token。
