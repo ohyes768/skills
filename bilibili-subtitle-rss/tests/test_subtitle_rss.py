@@ -1,5 +1,6 @@
 import importlib.util
 import copy
+import ssl
 from pathlib import Path
 import tempfile
 import unittest
@@ -24,6 +25,32 @@ def fixture():
 
 
 class SubtitleTests(unittest.TestCase):
+    def test_tls_verified_by_default_and_disabled_only_on_request(self):
+        with patch.object(m, 'urlopen') as open_url, patch.object(m.json, 'load', return_value={}):
+            m.request_json('https://example.test/posts')
+            secure = open_url.call_args.kwargs['context']
+            self.assertTrue(secure.check_hostname)
+            self.assertEqual(secure.verify_mode, ssl.CERT_REQUIRED)
+            m.request_json('https://example.test/posts', insecure=True)
+            insecure = open_url.call_args.kwargs['context']
+            self.assertFalse(insecure.check_hostname)
+            self.assertEqual(insecure.verify_mode, ssl.CERT_NONE)
+
+    def test_insecure_applies_to_duplicate_check_and_post(self):
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP) as folder, patch.object(m, 'request_json', side_effect=[
+            {'posts': []}, {'id': 'tls-test'}
+        ]) as request:
+            m.publish(m.build_post(fixture(), BV), m.DEFAULT_ENDPOINT, Path(folder), insecure=True)
+            self.assertEqual(request.call_count, 2)
+            self.assertTrue(all(call.kwargs['insecure'] for call in request.call_args_list))
+
+    def test_cli_passes_insecure_to_publish(self):
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP) as folder, patch.object(m, 'extract', return_value=fixture()), \
+                patch.object(m, 'publish', return_value={'status': 'published', 'id': 'cli-test'}) as publish, \
+                patch('builtins.print'):
+            self.assertEqual(m.main([BV, '--push', '--insecure', '--output-dir', folder]), 0)
+            self.assertTrue(publish.call_args.kwargs['insecure'])
+
     def test_normalizes_links_and_drops_tracking(self):
         for value in (BV, f'https://www.bilibili.com/video/{BV}/?p=1&spm_id_from=foo'):
             self.assertEqual(m.resolve_video(value), (BV, f'https://www.bilibili.com/video/{BV}'))

@@ -129,13 +129,16 @@ def extract(bvid, timeout):
         raise ValueError('bili CLI 输出不是有效 JSON；未推送') from exc
 
 
-def request_json(url, *, method='GET', payload=None, ca_file=None):
+def request_json(url, *, method='GET', payload=None, ca_file=None, insecure=False):
     body = json.dumps(payload, ensure_ascii=False).encode('utf-8') if payload is not None else None
     req = Request(url, data=body, method=method, headers={
         'Accept': 'application/json', 'Content-Type': 'application/json; charset=utf-8',
         'User-Agent': 'bilibili-subtitle-rss/1.0',
     })
     context = ssl.create_default_context(cafile=ca_file)
+    if insecure:
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
     with urlopen(req, timeout=30, context=context) as response:
         if method == 'POST' and response.status != 201:
             raise ValueError(f'RSS 接口返回 {response.status}，未确认创建成功；请查远端后再试')
@@ -147,7 +150,7 @@ def receipt_path(post, endpoint, output):
     return output / f'{key}.receipt.json'
 
 
-def publish(post, endpoint, output, ca_file=None):
+def publish(post, endpoint, output, ca_file=None, *, insecure=False):
     parsed = urlsplit(endpoint)
     if parsed.scheme not in {'http', 'https'} or not parsed.netloc or parsed.query or parsed.fragment or not endpoint.endswith('/post'):
         raise ValueError('--endpoint 应为完整 /post 接口地址，不带 query 或 fragment')
@@ -157,7 +160,7 @@ def publish(post, endpoint, output, ca_file=None):
         saved = json.loads(receipt.read_text(encoding='utf-8'))
         return {'status': 'duplicate', 'id': saved['id'], 'matched': 'local-receipt'}
     # Fail closed: do not publish if the duplicate check fails.
-    remote = request_json(endpoint[:-4] + 'posts?limit=200', ca_file=ca_file)
+    remote = request_json(endpoint[:-4] + 'posts?limit=200', ca_file=ca_file, insecure=insecure)
     if not isinstance(remote, dict) or not isinstance(remote.get('posts'), list):
         raise ValueError('RSS 列表响应格式无效，无法查重；未推送')
     bvid = post['url'].rsplit('/', 1)[-1]
@@ -178,7 +181,7 @@ def publish(post, endpoint, output, ca_file=None):
             receipt.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
             return result
     # Exactly one POST. A timeout may mean the server accepted it: never retry automatically.
-    created = request_json(endpoint, method='POST', payload=post, ca_file=ca_file)
+    created = request_json(endpoint, method='POST', payload=post, ca_file=ca_file, insecure=insecure)
     if not isinstance(created, dict) or not isinstance(created.get('id'), str) or not created['id']:
         raise ValueError('POST 响应缺少有效 id；请检查远端是否已创建，勿直接重试')
     result = {'status': 'published', 'id': created['id'], 'url': post['url'], 'endpoint': endpoint}
@@ -195,11 +198,12 @@ def main(argv=None):
     parser.add_argument('--input-json', type=Path, help='复用本次视频已保存的 CLI JSON，避免重复提取')
     parser.add_argument('--timeout', type=int, default=180, help='CLI 超时秒数')
     parser.add_argument('--ca-file', help='自定义受信任 CA 证书文件；默认验证 TLS')
+    parser.add_argument('--insecure', action='store_true', help='跳过 RSS 接口 TLS 证书和主机名验证')
     args = parser.parse_args(argv)
     try:
         bvid, _ = resolve_video(args.video)
         if args.push and receipt_path({'url': f'https://www.bilibili.com/video/{bvid}'}, args.endpoint, args.output_dir).exists():
-            result = publish({'url': f'https://www.bilibili.com/video/{bvid}'}, args.endpoint, args.output_dir, args.ca_file)
+            result = publish({'url': f'https://www.bilibili.com/video/{bvid}'}, args.endpoint, args.output_dir, args.ca_file, insecure=args.insecure)
             print(json.dumps(result, ensure_ascii=False))
             return 0
         envelope = json.loads(args.input_json.read_text(encoding='utf-8-sig')) if args.input_json else extract(bvid, args.timeout)
@@ -210,7 +214,7 @@ def main(argv=None):
         markdown_file = args.output_dir / f'{bvid}.md'
         markdown_file.write_text(post['content'], encoding='utf-8')
         (args.output_dir / f'{bvid}.post.json').write_text(json.dumps(post, ensure_ascii=False, indent=2), encoding='utf-8')
-        result = publish(post, args.endpoint, args.output_dir, args.ca_file) if args.push else {'status': 'saved'}
+        result = publish(post, args.endpoint, args.output_dir, args.ca_file, insecure=args.insecure) if args.push else {'status': 'saved'}
         result['markdown'] = str(markdown_file.resolve())
         print(json.dumps(result, ensure_ascii=False))
         return 0

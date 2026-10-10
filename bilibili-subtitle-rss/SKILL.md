@@ -64,6 +64,14 @@ python "<skill-dir>/scripts/subtitle_rss.py" "BV1dnbV6TEMy" --input-json "<outpu
 
 更新排版不会自动修改已发布文章；重新生成本地 Markdown 时省略 `--push`，可通过 `--input-json` 使用已保存字幕。不要为了更新格式绕过查重重复发布。旧 RSS 文章的替换需另行按用户要求处理。
 
-POST 不自动重试。超时或异常响应可能发生在服务端已创建之后，应先查询远端，确认没有创建后再重试。默认验证 TLS；私有证书可用 `--ca-file` 提供可信 CA，不要默认关闭证书验证。
+POST 不自动重试。超时或异常响应可能发生在服务端已创建之后，应先查询远端，确认没有创建后再重试。默认验证 TLS；私有证书可用 `--ca-file` 提供可信 CA。
+
+用户要求跳过证书验证或明确选择 `--insecure` 时，可执行：
+
+```powershell
+python "<skill-dir>/scripts/subtitle_rss.py" "BV1dnbV6TEMy" --push --insecure
+```
+
+`--insecure` 仅关闭 RSS 接口的证书与主机名验证，同时用于查重 GET 和发布 POST；不改变 B 站 CLI 或短链接解析的 TLS 行为。默认不添加此参数。发布后的读回核对也应使用相同 TLS 设置，例如通过脚本的 `request_json(..., insecure=True)`。
 
 `status=saved` 只代表本地稿件生成；`status=published` 必须有服务端返回的 `id`。发布后用 `/posts?limit=200` 核对该 `id`、BV 链接和完整正文，再报告已推送。若核对失败，只报告“接口已接受，但读回未确认”，不要重复 POST。最终提供视频标题、本地 Markdown 链接和推送/查重结果；不要输出 RSS 订阅 token。
