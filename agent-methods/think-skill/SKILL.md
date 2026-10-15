@@ -1,6 +1,6 @@
 ---
-name: think
-description: 深度分析模式，用于复杂问题排查、方案设计讨论、技术咨询建议。核心原则：先思考后行动，分析阶段禁止生成业务代码。触发方式：/think 或用户面临复杂 bug、架构决策、技术选型等场景。
+name: think-skill
+description: 深度分析模式，用于复杂问题排查、方案设计讨论、技术咨询建议。核心原则：先思考后行动，分析阶段禁止生成业务代码。触发方式：/think-skill 或用户面临复杂 bug、架构决策、技术选型等场景。
 allowed-tools: AskUserQuestion
 ---
 
@@ -227,7 +227,7 @@ allowed-tools: AskUserQuestion
 **示例 1：复杂 Bug 排查**
 
 ```
-用户：/think 线上 API 偶尔返回 500，日志没报错，帮我分析下
+用户：/think-skill 线上 API 偶尔返回 500，日志没报错，帮我分析下
 
 Claude：
 ## 问题理解
@@ -276,7 +276,7 @@ Claude：
 **示例 2：技术选型咨询**
 
 ```
-用户：/think 新项目选 Next.js 还是 Nuxt，团队主要写 Vue
+用户：/think-skill 新项目选 Next.js 还是 Nuxt，团队主要写 Vue
 
 Claude：
 ## 问题理解
@@ -324,7 +324,7 @@ Claude：
 **示例 3：方案设计讨论**
 
 ```
-用户：/think 想做个文件上传功能，支持断点续传，怎么设计比较好
+用户：/think-skill 想做个文件上传功能，支持断点续传，怎么设计比较好
 
 Claude：
 ## 问题理解
