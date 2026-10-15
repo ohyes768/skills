@@ -1,132 +1,95 @@
 ---
 name: git-commit-push
 description: >
-  分析 git 改动，生成 Conventional Commits 风格的中文 commit message，并在用户明确要求时执行
-  git add、commit、push。用户说提交代码、commit、推送、保存到 git、上传 GitHub、生成 commit message、
-  帮我提交、commit and push 时必须使用本 skill——即使用户未提及 conventional commits 或本 skill 名称。
-  仅 review 代码、讨论改动、或用户未明确要提交/推送时，不要执行 git 操作。用户只说 commit 时不要
-  自动 push；只有明确说 push/推送/上传 GitHub 时才推送。
+  用于用户要求生成 Git commit message、提交代码、commit、推送、push、保存到 Git、上传 GitHub
+  或 commit and push 时。仅评审 skill、讨论改动不代表授权提交；只要求 commit 不自动 push，
+  只要求 push 不自动创建 commit。
 allowed-tools: Shell, Read, Grep, Write
 ---
 
 # Git 自动提交和推送
 
-分析改动、生成规范 commit message，按用户意图执行 git 操作。
+识别模式 → 检查状态 → 只读本次提交范围 → 简单 message 直接提交 → 按要求推送 → 精简确认结果。
 
-## 模式选择
+必需环境仅为 Git 和当前系统已有的 shell。Windows 使用当前 PowerShell，macOS 使用当前 Bash/zsh；不要求安装或检查 `gh`、Python、Node.js，不为本流程切换 shell。GitHub PR 等操作不属于本 skill。
 
-根据用户措辞判断，**不要默认一条龙**：
+## 1. 识别模式
 
 | 用户意图 | 行为 |
 |----------|------|
-| 「写 commit message」「拟提交说明」「先别提交」 | 只输出 message，不执行 git |
-| 「提交」「commit」「帮我提交代码」（未提 push） | `git add` + `git commit`，**不 push** |
-| 「提交并推送」「commit and push」「推到 GitHub」 | add + commit + push |
+| 「写 commit message」「拟提交说明」「先别提交」 | 可只读检查，输出 message；不 add、commit、push |
+| 「提交」「commit」「帮我提交代码」 | 按范围 add（需要时）+ commit；不 push |
+| 「只推送」「push 已有提交」 | 只检查推送目标并 push；不 add、commit，不分析工作区 diff |
+| 「提交并推送」「commit and push」「把这些改动推到 GitHub」 | 按范围提交，再 push |
 
-## 处理流程
+单独要求「推送」默认只推已有提交；若措辞无法确定是否包含提交工作区改动，先只读检查再澄清，不擅自扩大范围。
 
-### 1. 并行检查（同一轮工具调用）
+## 2. 检查状态
 
-```bash
-git status
-git diff
-git diff --staged
-git log -5 --oneline
+```sh
+git status --porcelain=v1 --branch --untracked-files=normal
 ```
 
-- 无改动 → 告知「工作目录干净，无需提交」，停止
-- 已有 staged 改动 → 尊重用户暂存，不要无脑 `git add .`
-- 参考 `git log` 匹配项目既有 commit 风格
+- 区分 `##` 分支头与文件条目；只有分支头表示工作区干净。ahead/behind 是本地跟踪信息，不保证远程实时状态。
+- 工作区干净只表示无需创建 commit；用户要求 push 时仍进入第 5 步。仅 push 模式在检查目标后直接进入第 5 步，即使工作区有未提交改动。
+- 发现冲突或尚未完成的 merge/rebase，先说明状态，不自行继续操作或新建普通提交。detached HEAD 不自行选择推送分支。
+- 仅在需要判断提交风格且上下文尚未提供时，读取 `git --no-pager log -3 --format='%s'`；全新仓库没有历史是正常情况。
 
-### 2. 安全检查
+独立只读检查可合并到一轮工具调用。不要固定并行读取所有 diff；add、commit、push 有依赖，必须顺序执行并检查各自退出码。
 
-改动涉及 `.env`、`credentials.json`、`*.pem`、`secrets.*` 等敏感文件时，**警告用户并暂停提交**，除非用户明确确认。
+## 3. 只读本次提交范围
 
-### 3. 生成 commit message
+- 用户指定路径或暂存区时，以该范围为准。未指定范围且已有 staged 改动，默认只提交现有暂存内容，跳过 add；尤其不要对部分暂存文件重新 add。
+- 用户指定范围与现有暂存范围不一致时，先澄清；普通 `git commit` 会提交整个暂存区，不自动 reset 暂存区或用其他命令替用户改变选择。
+- 没有 staged 改动时，从状态确定本次候选路径；未跟踪目录需按需展开，读取拟加入的新文件内容，普通 `git diff` 不包含它们。
+- 小改动直接读取目标 diff；大改动才先看同一范围的 `--name-status` / `--stat`，再按路径阅读。避免机械地先统计再完整读取全部内容；输出被截断时按文件补读，不据此猜测。
 
-遵循 [Conventional Commits](https://www.conventionalcommits.org/)，中文 subject，匹配仓库风格。
-
-- type / scope / subject 规则 → 读 `references/commit-types.md`
-- 各类型 body 模板 → 读 `references/templates.md`
-- 完整示例 → 读 `references/examples.md`
-
-正文聚焦「为什么」而非罗列文件名。简单改动可只用一行 subject，不必强行写 body。
-
-### 4. 暂存与提交
-
-按改动范围选择性 `git add`（优先 staged 文件或用户指定路径，避免盲目 `git add .`）。
-
-**跨平台提交**：用临时文件 + `git commit -F`，不要在 PowerShell 里用 Bash HEREDOC。
-
-**PowerShell（Windows 默认）：**
-
-```powershell
-$msg = @"
-feat(scope): 简短描述
-
-- 主要变更点
-
-"@
-$msg | Out-File -FilePath .git/COMMIT_EDITMSG_SKILL -Encoding utf8NoBOM
-git commit -F .git/COMMIT_EDITMSG_SKILL
-Remove-Item .git/COMMIT_EDITMSG_SKILL -ErrorAction SilentlyContinue
+```sh
+# 已暂存：只读暂存区内容
+git --no-pager diff --cached --no-ext-diff --no-textconv
+# 未暂存：将下列示例路径替换为本次候选路径
+git --no-pager diff --no-ext-diff --no-textconv -- 'src/main.ts' 'README.md'
 ```
 
-**Bash / Git Bash：**
+禁用外部 diff/textconv 可避免额外程序；如本次包含需转换才能理解的二进制文件，按需单独检查。`--stat` 主要缩减输出，不保证计算更快；不默认使用隐藏新文件的 `status -uno`。脚本解析路径时用 `-z` 并正确处理 NUL，不按空格拆分文件名。
 
-```bash
-cat > .git/COMMIT_EDITMSG_SKILL <<'EOF'
-feat(scope): 简短描述
+只对本次拟提交内容检查敏感信息；涉及 `.env`、`credentials.json`、`*.pem`、`secrets.*` 等文件时列出路径并暂停，除非用户已明确确认。不要在输出中展示密钥内容。
 
-- 主要变更点
+## 4. 简单 message 直接提交
 
-EOF
-git commit -F .git/COMMIT_EDITMSG_SKILL
-rm -f .git/COMMIT_EDITMSG_SKILL
+使用 Conventional Commits：`type(scope): 中文简短描述`，scope 可省略，正文仅在需要解释原因时添加。常用 type：`feat`、`fix`、`docs`、`refactor`、`perf`、`test`、`chore`；参考仓库已有风格。
+
+只在有待加入的授权路径时，一次执行 `git add -- '路径1' '路径2'`，不要逐文件启动 Git，也不要盲目 `git add .` / `git add -A`。add 成功后核对本次 staged 路径与范围；已有 diff 仍准确时不重复全文读取，有变化则补读相关 staged diff。文件名含通配符时使用 `git --literal-pathspecs add -- ...`。
+
+简单说明直接使用 `-m`，例如以下命令可用于 PowerShell、Bash 和 zsh：
+
+```sh
+git commit -m 'docs(skill): 优化提交流程'
 ```
 
-多行 message 统一写入 `.git/COMMIT_EDITMSG_SKILL` 再 `git commit -F`，比 `-m` 更可靠。
+多个简单段落可重复 `-m`。含复杂引号、变量符号、反引号或多行正文时，读取 [references/commit-message-shell.md](references/commit-message-shell.md)，使用 UTF-8 无 BOM 的系统临时文件 + `git commit -F`；不写死 `.git/...`，以兼容 worktree。按当前 shell 正确转义，不把 message 当可执行脚本拼接。
 
-### 5. 推送（仅在被要求时）
+仅按需读取格式参考：[type / scope / subject](references/commit-types.md)（规则不确定时）、[body 模板](references/templates.md)（需要结构化正文时）、[完整示例](references/examples.md)（需要示例时），不默认全部加载。
 
-```bash
-git remote -v          # 确认远程存在
-git push               # 或 git push -u origin HEAD（新分支）
-```
+commit 失败立即停止后续 push，并保留原始失败状态；清理临时文件不能掩盖失败。hook 失败先检查 HEAD 是否已变化及 hook 是否修改文件；需要修复时重新审阅、暂存相关内容，再正常重试 commit，不擅自 amend 或绕过 hook。
 
-push 失败时提示可能原因（认证、远程有新提交、网络），建议先 `git pull --rebase` 再重试。
+## 5. 按要求推送
 
-### 6. 确认结果
+仅在用户要求 push 时执行。当前分支、目标远程与目标分支已明确且符合用户意图时，使用 `git push`；目标尚不明确时，按需读取远程和分支配置，不每次固定执行 `git remote -v`，也不先增加一次网络请求来探测远程。
 
-```bash
-git status
-git log -1 --pretty=full
-```
+新分支无 upstream 时，在已确认远程和分支符合用户意图后用 `git push -u <remote> HEAD`，不要默认远程一定叫 `origin`。缺少目标信息时询问，不自动添加远程。已有 upstream 不保证默认 push 配置只推一个分支；有自定义 push refspec 等情况时使用明确的远程和 refspec。
 
-向用户报告：commit hash、message 摘要、是否已推送。
+根据实际错误处理：认证失败检查凭据，网络失败报告连接问题；只有 non-fast-forward 时才检查远程历史并讨论合并/rebase，不对所有失败统一建议 `git pull --rebase`，不盲目循环重试。
+
+## 6. 精简确认结果
+
+提交后运行 `git status --porcelain=v1 --untracked-files=normal` 核对剩余改动；需要获取 hash 和摘要时运行 `git --no-pager show -s --format='%h %s' HEAD`，不读取完整作者和日期信息。push 以退出码和远程返回结果为依据，不额外 fetch / ls-remote 验证；失败就明确报告未推送。
+
+最终只报告 commit hash、message 摘要、是否推送；有剩余改动或失败时补充实际情况。只生成 message 模式直接输出说明；只 push 模式无需重新读取提交全文。
 
 ## 安全约束
 
-- **未明确要求不 commit、不 push**
-- 禁止修改 `git config`
-- 禁止 `--no-verify`、`--no-gpg-sign`（除非用户明确要求）
-- 禁止 `git commit --amend`（除非用户明确要求且符合 amend 条件）
-- 禁止交互式 git 命令（`-i` 系列）
-- pre-commit hook 失败 → 修复后**新建 commit**，不要 amend
-
-## 错误处理
-
-| 情况 | 响应 |
-|------|------|
-| 无改动 | 「工作目录是干净的，无需提交。」 |
-| 无远程仓库 | 提示 `git remote add origin <url>` |
-| push 失败 | 列出认证/冲突/网络等可能原因 |
-| 敏感文件 | 列出文件，建议加入 `.gitignore`，等待用户确认 |
-
-## 参考文件
-
-| 文件 | 何时读取 |
-|------|----------|
-| `references/commit-types.md` | 不确定 type/scope/subject 格式时 |
-| `references/templates.md` | 需要结构化 body 时 |
-| `references/examples.md` | 需要参考完整 message 时 |
+- 未明确要求不 commit、不 push；不通过创建分支、安装工具等方式扩大任务范围。
+- 不修改 Git 配置，不为提速关闭 hook、签名或安全检查。
+- 禁止默认使用 `--force`、`--no-verify`、`--no-gpg-sign`、`commit --amend`；仅在用户明确授权对应操作且条件适用时例外。
+- 不使用交互式 Git 命令；保留用户的部分暂存选择和范围外改动。
