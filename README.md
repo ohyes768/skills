@@ -42,6 +42,7 @@ README.md
 | [money-supply-skill](finance-macro/money-supply-skill) | 货币供应与流动性（M1/M2/社融） | active |
 | [entity-economy-skill](finance-macro/entity-economy-skill) | 实体经济强弱判断（PMI/固投/社零） | active |
 | [inflation-skill](finance-macro/inflation-skill) | 通胀分析（CPI/PPI/核心CPI） | active |
+| [financial-statement-analysis](finance-macro/financial-statement-analysis) | A 股财报 PDF 深度分析：输入 PDF 链接，输出带页码证据的中文报告（本地索引、按需读取、勾稽校验）；验收记录见其 [acceptance.md](finance-macro/financial-statement-analysis/acceptance.md) | active |
 | [ARCHIVED_MACRO_DECISION_LOGIC.md](finance-macro/ARCHIVED_MACRO_DECISION_LOGIC.md) | 已下线综合模型的判断逻辑归档 | archived |
 
 ### 开发工程 `dev-workflow/`
