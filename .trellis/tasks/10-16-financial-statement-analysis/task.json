@@ -1,0 +1,44 @@
+{
+  "id": "financial-statement-analysis",
+  "name": "financial-statement-analysis",
+  "title": "A 股财报 PDF 分析 Skill",
+  "description": "输入单份财报 PDF 链接，输出带页码证据的中文 Markdown；A 股优先，本地提取计算与模型分析分工，并验证上下文消耗。",
+  "status": "in_progress",
+  "dev_type": "backend",
+  "scope": "financial-statement-analysis",
+  "package": null,
+  "priority": "P1",
+  "creator": "codex",
+  "assignee": "codex",
+  "createdAt": "2026-10-16",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    ".trellis/tasks/10-16-financial-statement-analysis/prd.md",
+    ".trellis/tasks/10-16-financial-statement-analysis/design.md",
+    ".trellis/tasks/10-16-financial-statement-analysis/implement.md",
+    ".trellis/tasks/10-16-financial-statement-analysis/research/planning-evidence.md",
+    "docs/superpowers/specs/2026-10-16-financial-statement-analysis-design.md"
+  ],
+  "notes": "开发与验收已完成（2026-10-17）：101 例测试通过，ruff/quick_validate 通过；茅台 143 页真实年报全链路验收（勾稽残差 0.00、上下文削减 78.3%），四份真实样本降级行为符合预期。验收明细见 finance-macro/financial-statement-analysis/acceptance.md。",
+  "meta": {
+    "planning_date": "2026-10-16",
+    "milestones": [
+      "PDF 数据准备",
+      "财务事实与计算",
+      "Skill 与报告",
+      "样本及成本验收"
+    ],
+    "execution_tasks": 10,
+    "implementation_started": true,
+    "completed_date": "2026-10-17",
+    "acceptance": "A01-A10 passed; see finance-macro/financial-statement-analysis/acceptance.md"
+  }
+}
