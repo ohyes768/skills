@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "samples": [
+    {
+      "run_id": "600519-2024",
+      "url": "http://static.cninfo.com.cn/finalpage/2025-04-03/1222993920.PDF",
+      "company": "贵州茅台酒股份有限公司",
+      "stock_code": "600519",
+      "period": "2024年度",
+      "report_type": "annual",
+      "sha256": "5299f4940e2ce4e91084b73dc457d558b9d335fa76fbfee6227e4254eb7f4a30",
+      "size_bytes": 3626217,
+      "pages": 143,
+      "observed": {
+        "report_type": "annual",
+        "audit_status": "audited",
+        "framework": "general"
+      }
+    },
+    {
+      "run_id": "300001-2024",
+      "url": "http://static.cninfo.com.cn/finalpage/2025-04-22/1223194600.PDF",
+      "company": "青岛特锐德电气股份有限公司",
+      "stock_code": "300001",
+      "period": "2024年度",
+      "report_type": "annual",
+      "sha256": "e7c3c59e03dc5ffff9984dbd1fe00bd677bf95ba7738cb5ada6e5b3d0daefdfb",
+      "size_bytes": 7878143,
+      "pages": 286,
+      "observed": {
+        "report_type": "annual",
+        "audit_status": "audited",
+        "framework": "general"
+      }
+    },
+    {
+      "run_id": "300001-2024h1",
+      "url": "http://static.cninfo.com.cn/finalpage/2024-08-27/1220987147.PDF",
+      "company": "青岛特锐德电气股份有限公司",
+      "stock_code": "300001",
+      "period": "2024半年度",
+      "report_type": "semi_annual",
+      "sha256": "549ad058a774e3ceea6a49bf571e05609534d0bea397d74c2b80166463f3009b",
+      "size_bytes": 6750892,
+      "pages": 234,
+      "observed": {
+        "report_type": "semi_annual",
+        "audit_status": "unaudited",
+        "framework": "general"
+      }
+    },
+    {
+      "run_id": "600036-2024",
+      "url": "http://static.cninfo.com.cn/finalpage/2025-03-26/1222895154.PDF",
+      "company": "招商银行股份有限公司",
+      "stock_code": "600036",
+      "period": "2024年度",
+      "report_type": "annual",
+      "sha256": "44a8759c94e1ba92f1d96897ca3778592d9a7eb33b53420c19268f0b140d81c3",
+      "size_bytes": 6215121,
+      "pages": 362,
+      "observed": {
+        "report_type": "annual",
+        "audit_status": "audited",
+        "framework": "financial_institution"
+      }
+    }
+  ]
+}

@@ -1,0 +1,165 @@
+# Artifact Contracts
+
+All JSON artifacts are written UTF-8 (`ensure_ascii=False`, indent 2) via `scripts/artifacts.py::write_json`.
+Optional values are `null`, never absent keys. Amounts use decimal strings; floats are forbidden in
+financial amount fields. Every artifact file lists `schema_version` unless noted.
+
+Script stdout carries exactly one status line from `emit_status`: `{"status": ..., "artifacts": {...}, "issues": [...]}`.
+Detailed logs go to stderr or files. Exit codes: 0 success/complete, 1 fatal fetch or contract error,
+2 deliverable but incomplete (agent must read `issues` and downgrade affected conclusions).
+
+## source.json — fetch_pdf.py
+
+| Field | Type | Notes |
+|---|---|---|
+| schema_version | int | |
+| requested_url | string | original input |
+| final_url | string | after redirects |
+| downloaded_at | string ISO-8601 | UTC |
+| sha256 | string | of stored file |
+| size_bytes | int | |
+| etag | string \| null | from response headers |
+| last_modified | string \| null | from response headers |
+| parser_version | string | PDF library + version used for validation |
+
+## document.json — inspect_pdf.py
+
+| Field | Type | Notes |
+|---|---|---|
+| schema_version | int | |
+| company_name | string \| null | |
+| stock_code | string \| null | |
+| report_type | string | annual / semi_annual / q1 / q3 / summary / unknown |
+| period | object | same shape as `financials.json` period |
+| is_full_text | bool \| null | full report vs abstract; null when undetermined |
+| accounting_standard | string \| null | e.g. CAS |
+| currency | string \| null | original currency, no conversion |
+| audit_status | string | audited / unaudited / unknown |
+| page_count | int | 1-based physical pages |
+| metadata_conflicts | list[object] | {field, values, pages} when cover/TOC/body disagree |
+| applicability | object | which analysis frameworks this document supports (general/financial, full/summary) |
+
+## pages.jsonl — inspect_pdf.py (one JSON object per line)
+
+| Field | Type | Notes |
+|---|---|---|
+| pdf_page | int | 1-based physical page |
+| printed_page | int \| null | page number printed on the page |
+| blocks | list[object] | {text, bbox} text blocks with coordinates |
+| text_quality | string | native / poor_text / scanned |
+| scanned_region_ratio | number \| null | 0-1, null for pure native |
+| heading_candidates | list[string] | heading-like lines found on the page |
+
+Full text lives only in this local index; never printed to stdout or returned as tool output.
+
+## sections.json — inspect_pdf.py
+
+| Field | Type | Notes |
+|---|---|---|
+| schema_version | int | |
+| sections | list[object] | each: see below |
+
+Section object fields: `section_id` (stable, e.g. `s-consolidated-balance-sheet`),
+`title`, `start_page`, `end_page` (inclusive, 1-based), `priority` (int, lower = earlier),
+`location_basis` (bookmark / printed_toc / keyword_scan), `verified` (bool — keyword hits alone
+are never verified=true).
+
+## extraction_manifest.json — extract_sections.py
+
+| Field | Type | Notes |
+|---|---|---|
+| schema_version | int | |
+| evidences | list[object] | each: see below |
+
+Evidence object fields: `evidence_id` (stable, e.g. `ev-0001`), `section_id` \| null,
+`pdf_pages` (list[int]), `kind` (text / table / image_crop), `file` (path under `excerpts/`),
+`method` (pymupdf_text / pdfplumber_table / ocr / image_crop), `complete` (bool),
+`issues` (list[string], e.g. cross-page header mismatch, OCR unavailable).
+
+## financials.json — written by agent, validated by financial_schema.py
+
+Top level: `schema_version`, `document_sha256`, `facts` (list).
+
+Each fact:
+
+| Field | Type | Notes |
+|---|---|---|
+| fact_id | string | stable, e.g. `f-0001` |
+| metric | string | normalized metric name, e.g. `revenue`, `net_profit_group` |
+| raw_label | string | as printed in the PDF |
+| raw_value | string \| null | as printed |
+| raw_unit | string \| null | 元/千元/万元/亿元 |
+| value | string \| null | decimal string in base unit of `currency`, or null |
+| unit | string | base unit, e.g. 元 |
+| currency | string | original currency kept, no conversion |
+| scope | string | consolidated / parent |
+| attribution | string | group / owners / not_applicable |
+| period | object | see below |
+| basis | string | as_reported / restated |
+| evidence_ids | list[string] | required when value is not null; must be parseable |
+| review_status | string | verified / ambiguous / missing / conflict |
+| missing_reason | string \| null | required when value is null; null for normal values |
+
+Period object: `kind` (instant/duration), `start` (ISO date, nullable for instant), `end` (ISO date),
+`frequency` (annual/half_year/quarter), `aggregation` (instant/cumulative/single_period).
+
+Rules: consolidated/parent, group/owners, cumulative/single_period, as_reported/restated must never be
+mixed silently. Missing is never zero. A null value with empty `missing_reason` is a contract violation;
+fabricated evidence for null values is a fatal error.
+
+### financial_schema.py API
+
+- `parse_amount(raw_value, raw_unit) -> Decimal | None` — converts the printed string to the base
+  unit (元) as `Decimal`; supports 元/千元/万元/亿元, thousands separators, and parenthesized
+  negatives; dashes, blanks and unknown units return `None`. Floats never enter the amount path.
+- `validate_financials(document) -> list[dict]` — returns a list of
+  `{"fact_id", "field", "error"}`; an empty list means the document conforms. Violations (bad enums,
+  float values, null value without `missing_reason`, value without evidence, duplicate ids) must
+  never pass silently.
+- `select_facts(document, metric, scope, attribution, aggregation) -> list[dict]` — returns ALL
+  matching candidates across periods and bases; the caller must resolve period/version itself and
+  must not default to the first item when candidates conflict.
+
+## metrics.json — calculate_metrics.py
+
+Each entry: `metric_id`, `value` (decimal string \| null), `status`
+(computed / not_applicable / insufficient_data / conflict), `formula`, `input_fact_ids` (list),
+`source_pages` (list[int]), `reason` (null when computed).
+
+## validation.json — calculate_metrics.py
+
+Each entry: `check_id`, `status` (passed / failed / not_applicable), `input_fact_ids`, `residual`
+(decimal string \| null), `tolerance` (decimal string \| null), `issues`. Extraction conflicts are
+reported here as data problems, independent of financial risk conclusions.
+
+## report_claims.json — written by agent
+
+Each entry: `claim_id`, `report_anchor` (markdown heading or location in analysis.md), `text`,
+`fact_ids` (list), `metric_ids` (list), `evidence_ids` (list), `source_pages` (list[int]),
+`claim_type` (fact / calculation / inference / company_explanation).
+
+## report_validation.json — validate_report.py
+
+| Field | Type | Notes |
+|---|---|---|
+| schema_version | int | |
+| unknown_fact_ids | list[string] | cited but not in financials.json |
+| unknown_metric_ids | list[string] | cited but not in metrics.json |
+| unknown_evidence_ids | list[string] | cited but not in extraction_manifest.json |
+| out_of_range_pages | list[object] | {claim_id, page} beyond page_count |
+| value_mismatches | list[object] | {claim_id, report_value, metric_value} |
+| missing_evidence_claims | list[string] | risk/fact claims without evidence |
+| passed | bool | machine checks only; semantic review is separate |
+
+## context_usage.jsonl — pack_context.py (one JSON object per line, append-only)
+
+`request_id`, `stage` (locate/map/analyze/review), `packet_sha256`, `evidence_ids`,
+`character_count`, `byte_count`, `cursor` (null for first page of a packet). Re-reads append new
+lines; total delivered characters accumulate — repeats are never subtracted.
+
+## model_usage.json — optional
+
+Written only when the host exposes request-level usage: `input_tokens`, `output_tokens`,
+`cached_tokens`, `requests_covered`. When unavailable, the file records `null` values with
+`"available": false` note. Tool-side character counts must never be presented as model token usage;
+tokenizer-derived numbers are always labeled `estimated_input_tokens` with tokenizer name/version.
