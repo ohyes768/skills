@@ -1,59 +1,88 @@
-"""报告校验：引用存在性、页码范围、计算值一致与证据完整性（机器可验证部分）。"""
+"""核验实际交付正文、财务显示值与 claim→metric→fact→evidence 来源链。"""
 
 from __future__ import annotations
 
 import argparse
 import re
 import sys
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from artifacts import emit_status, read_json, write_json
+from report_values import NUMBER_RE, matches_number, plain_text
+from report_values import text_contains_value as _text_contains_value
 
 _CLAIM_TYPES = {"fact", "calculation", "inference", "company_explanation"}
-_NUMBER_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
+_ISSUE_KEYS = (
+    "unknown_fact_ids", "unknown_metric_ids", "unknown_evidence_ids", "out_of_range_pages",
+    "value_mismatches", "missing_evidence_claims", "body_mismatches", "unclaimed_numeric_lines",
+    "invalid_support", "page_mismatches",
+)
 
 
-def _value_variants(value: Decimal) -> set[str]:
-    variants = {format(value, "f")}
-    pct = value * 100
-    for digits in (0, 1):
-        quantized = pct.quantize(Decimal(1).scaleb(-digits), rounding=ROUND_HALF_UP)
-        normalized = format(quantized, "f").rstrip("0").rstrip(".") or "0"
-        variants.add(f"{normalized}%")
-        variants.add(normalized)
-    return variants
-
-
-def _text_contains_value(text: str, value: Decimal) -> bool:
-    variants = _value_variants(value)
-    for match in _NUMBER_RE.finditer(text):
-        candidate = match.group(0).replace(",", "")
-        try:
-            number = Decimal(candidate)
-        except Exception:  # noqa: BLE001, S112 - 文本片段中混有非数字，跳过即可
+def _section(body: str, anchor: str) -> str | None:
+    """Resolve a Markdown heading to its section, respecting nested headings."""
+    lines = body.splitlines()
+    for index, line in enumerate(lines):
+        if plain_text(line) != plain_text(anchor):
             continue
-        if format(number, "f") in variants:
-            return True
-        if number == value:
-            return True
-        pct_candidate = (number / 100).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
-        if pct_candidate == value.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP):
-            return True
-    return False
+        heading = re.match(r"^(#{1,6})\s+", line)
+        if heading:
+            depth = len(heading[1])
+            for end in range(index + 1, len(lines)):
+                other = re.match(r"^(#{1,6})\s+", lines[end])
+                if other and len(other[1]) <= depth:
+                    return "\n".join(lines[index:end])
+        return "\n".join(lines[index:])
+    return None
 
 
-def _empty_result() -> dict:
-    return {
-        "schema_version": 1,
-        "unknown_fact_ids": [],
-        "unknown_metric_ids": [],
-        "unknown_evidence_ids": [],
-        "out_of_range_pages": [],
-        "value_mismatches": [],
-        "missing_evidence_claims": [],
-        "passed": False,
-    }
+def _decimal(record: dict) -> Decimal | None:
+    try:
+        value = Decimal(record["value"])
+        return value if value.is_finite() else None
+    except (KeyError, InvalidOperation, TypeError, ValueError):
+        return None
+
+
+def _body_coverage(body: str, claims: list[dict], document: dict) -> list[str]:
+    """Numeric statements require ledger coverage; document metadata is exempt."""
+    covered = [(plain_text(c["text"]), set(c.get("source_pages", [])))
+               for c in claims if c.get("text")]
+    issues = []
+    for line in body.splitlines():
+        # Only a whole, syntactically constrained source line is metadata.
+        if re.fullmatch(r"[-*]\s*来源[:：]\s*https?://[^\s<>（）]+"
+                        r"(?:（SHA-256 前 8 位：[0-9a-fA-F]{8}）)?", line):
+            continue
+        if not NUMBER_RE.search(plain_text(line)):
+            continue
+        normalized = re.sub(r"^#{1,6}", "", plain_text(line))
+        normalized = re.sub(r"^\d+[.)、]", "", normalized)
+        if line.startswith("# "):
+            # The document title may contain its verified stock code and period.
+            company, code = document.get("company_name"), document.get("stock_code")
+            end = (document.get("period") or {}).get("end", "")
+            if company and code and end:
+                expected = f"{company}（{code}）{end[:4]}分析"
+                if normalized == plain_text(expected):
+                    continue
+        remaining = normalized
+        allowed_pages = set()
+        for text, pages in covered:
+            if text in normalized:
+                remaining = remaining.replace(text, "")
+                allowed_pages.update(pages)
+            elif normalized in text:
+                remaining = ""
+                allowed_pages.update(pages)
+        def remove_citation(match, allowed=allowed_pages):
+            page = int(match.group(1))
+            return "" if page in allowed else match.group(0)
+        remaining = re.sub(r"PDF第(\d+)页", remove_citation, remaining)
+        if remaining and NUMBER_RE.search(remaining):
+            issues.append(line[:200])
+    return issues
 
 
 def validate_report(run_dir: Path) -> dict:
@@ -62,90 +91,125 @@ def validate_report(run_dir: Path) -> dict:
     financials = read_json(run_dir / "financials.json")
     metrics_doc = read_json(run_dir / "metrics.json")
     manifest = read_json(run_dir / "extraction_manifest.json")
-    claims_doc = read_json(run_dir / "report_claims.json")
+    claims = read_json(run_dir / "report_claims.json").get("claims", [])
+    body = (run_dir / "analysis.md").read_text(encoding="utf-8")
     page_count = int(document.get("page_count", 0))
+    facts = {f["fact_id"]: f for f in financials.get("facts", [])}
+    metrics = {m["metric_id"]: m for m in metrics_doc.get("metrics", [])}
+    evidences = {e["evidence_id"]: e for e in manifest.get("evidences", [])}
+    result = {"schema_version": 1, **{key: [] for key in _ISSUE_KEYS}, "passed": False}
+    if not claims or not body.strip():
+        result["body_mismatches"].append("nonempty report and claims are required")
+    source_path = run_dir / "source.json"
+    source_sha = read_json(source_path).get("sha256") if source_path.exists() else None
+    bound_sha = manifest.get("document_sha256")
+    if ((source_sha and financials.get("document_sha256") != source_sha)
+            or (bound_sha and financials.get("document_sha256") != bound_sha)):
+        result["invalid_support"].append("financials and source document versions differ")
 
-    fact_ids = {f["fact_id"] for f in financials.get("facts", [])}
-    metric_ids = {m["metric_id"] for m in metrics_doc.get("metrics", [])}
-    metric_values = {
-        m["metric_id"]: Decimal(m["value"])
-        for m in metrics_doc.get("metrics", [])
-        if m.get("value") is not None and m.get("status") == "computed"
-    }
-    evidence_ids = {e["evidence_id"] for e in manifest.get("evidences", [])}
-
-    result = _empty_result()
-    seen_claim_ids: set[str] = set()
-
-    for claim in claims_doc.get("claims", []):
-        claim_id = claim.get("claim_id", "<missing>")
-        if claim_id in seen_claim_ids:
-            result["missing_evidence_claims"].append(claim_id)
-        seen_claim_ids.add(claim_id)
-
-        for fid in claim.get("fact_ids", []):
-            if fid not in fact_ids and fid not in result["unknown_fact_ids"]:
-                result["unknown_fact_ids"].append(fid)
-        for mid in claim.get("metric_ids", []):
-            if mid not in metric_ids and mid not in result["unknown_metric_ids"]:
-                result["unknown_metric_ids"].append(mid)
-        for eid in claim.get("evidence_ids", []):
-            if eid not in evidence_ids and eid not in result["unknown_evidence_ids"]:
-                result["unknown_evidence_ids"].append(eid)
-
-        for page in claim.get("source_pages", []):
-            if not (1 <= int(page) <= page_count):
-                result["out_of_range_pages"].append({"claim_id": claim_id, "page": page})
-
-        claim_type = claim.get("claim_type")
+    seen = set()
+    for claim in claims:
+        cid = claim.get("claim_id", "<missing>")
+        if cid in seen:
+            result["missing_evidence_claims"].append(cid)
+        seen.add(cid)
         text = claim.get("text", "")
+        section = _section(body, claim.get("report_anchor", ""))
+        if not text.strip() or section is None or plain_text(text) not in plain_text(section):
+            result["body_mismatches"].append(cid)
+        claim_type = claim.get("claim_type")
         if claim_type not in _CLAIM_TYPES:
-            result["missing_evidence_claims"].append(claim_id)
+            result["missing_evidence_claims"].append(cid)
             continue
 
-        has_support = any(
-            claim.get(key) for key in ("fact_ids", "metric_ids", "evidence_ids")
-        )
-        if not has_support:
-            result["missing_evidence_claims"].append(claim_id)
-            continue
+        fids = set(claim.get("fact_ids", []))
+        mids = set(claim.get("metric_ids", []))
+        eids = set(claim.get("evidence_ids", []))
+        required_values = []
+        all_values = []
+        for mid in mids:
+            if mid not in metrics:
+                result["unknown_metric_ids"].append(mid)
+                continue
+            metric = metrics[mid]
+            value = _decimal(metric)
+            if metric.get("status") != "computed" or value is None:
+                result["invalid_support"].append(f"{cid}: unusable metric {mid}")
+            else:
+                kind = "amount" if mid == "simplified_fcf" else "ratio"
+                required_values.append((value, kind))
+                all_values.append((value, kind))
+            fids.update(metric.get("input_fact_ids", []))
 
-        matched_metrics = [
-            metric_values[mid]
-            for mid in claim.get("metric_ids", [])
-            if mid in metric_values
-        ]
-        if matched_metrics and not any(
-            _text_contains_value(text, value) for value in matched_metrics
-        ):
-            result["value_mismatches"].append(
-                {
-                    "claim_id": claim_id,
-                    "report_text_fragment": text[:80],
-                    "metric_values": [format(v, "f") for v in matched_metrics],
-                }
-            )
+        allowed_years = set()
+        for fid in fids:
+            if fid not in facts:
+                result["unknown_fact_ids"].append(fid)
+                continue
+            fact = facts[fid]
+            value = _decimal(fact)
+            if fact.get("review_status", "verified") != "verified" or value is None:
+                result["invalid_support"].append(f"{cid}: unusable fact {fid}")
+            else:
+                kind = "ratio" if fact.get("unit") in ("ratio", "%", "％") else "amount"
+                all_values.append((value, kind))
+                if claim_type == "fact":
+                    required_values.append((value, kind))
+            source_ids = fact.get("evidence_ids", [])
+            if not source_ids:
+                result["invalid_support"].append(f"{cid}: fact {fid} has no evidence")
+            eids.update(source_ids)
+            for field in ("start", "end"):
+                day = fact.get("period", {}).get(field)
+                if day:
+                    allowed_years.add(day[:4])
 
-    result["passed"] = not any(
-        result[key]
-        for key in (
-            "unknown_fact_ids",
-            "unknown_metric_ids",
-            "unknown_evidence_ids",
-            "out_of_range_pages",
-            "value_mismatches",
-            "missing_evidence_claims",
-        )
-    )
+        expected_pages = set()
+        for eid in eids:
+            if eid not in evidences:
+                result["unknown_evidence_ids"].append(eid)
+            else:
+                expected_pages.update(evidences[eid].get("pdf_pages", []))
+        for page in claim.get("source_pages", []):
+            if not isinstance(page, int) or isinstance(page, bool) or not 1 <= page <= page_count:
+                result["out_of_range_pages"].append({"claim_id": cid, "page": page})
+        if set(claim.get("source_pages", [])) != expected_pages:
+            result["page_mismatches"].append(cid)
+        cited_pages = {int(match[1]) for match in re.finditer(
+            r"(?:PDF\s*第\s*|p\.\s*)(\d+)", text, re.IGNORECASE)}
+        if not cited_pages <= expected_pages:
+            result["page_mismatches"].append(cid)
+        if not eids or (claim_type == "calculation" and not mids):
+            result["missing_evidence_claims"].append(cid)
+        if claim_type == "fact" and NUMBER_RE.search(text) and not fids:
+            result["missing_evidence_claims"].append(cid)
+
+        display_unit = claim.get("display_unit")
+        if any(not _text_contains_value(text, value, display_unit, kind)
+               for value, kind in required_values):
+            result["value_mismatches"].append({"claim_id": cid, "report_text_fragment": text[:100]})
+        if claim_type in _CLAIM_TYPES:
+            for number in NUMBER_RE.finditer(text):
+                literal = number.group("number").replace(",", "")
+                prefix = text[max(0, number.start() - 8):number.start()]
+                suffix = text[number.end():]
+                is_year = literal in allowed_years and not number.group("unit") and re.match(r"\s*年", suffix)
+                if is_year or re.search(r"(?:PDF\s*第|p\.)\s*$", prefix):
+                    continue
+                if not any(matches_number(number, value, display_unit, kind)
+                           for value, kind in all_values):
+                    result["value_mismatches"].append({"claim_id": cid, "unbound_number": literal})
+
+    result["unclaimed_numeric_lines"] = _body_coverage(body, claims, document)
+    result["passed"] = not any(result[key] for key in _ISSUE_KEYS)
     write_json(run_dir / "report_validation.json", result)
     return result
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="校验 analysis.md 引用与台账一致性")
+    parser = argparse.ArgumentParser(description="校验 analysis.md 正文、数值与来源")
     parser.add_argument("--run-dir", required=True)
     args = parser.parse_args(argv)
-
     run_dir = Path(args.run_dir)
     required = ["document.json", "financials.json", "metrics.json",
                 "extraction_manifest.json", "report_claims.json", "analysis.md"]
@@ -153,17 +217,10 @@ def main(argv: list[str] | None = None) -> int:
     if missing:
         print(f"validate_report failed: missing artifacts: {missing}", file=sys.stderr)
         raise SystemExit(1)
-
     result = validate_report(run_dir)
-    issues = []
-    for key in ("unknown_fact_ids", "unknown_metric_ids", "unknown_evidence_ids",
-                "out_of_range_pages", "value_mismatches", "missing_evidence_claims"):
-        issues.extend(f"{key}: {item}" for item in result[key])
-    emit_status(
-        "ok" if result["passed"] else "partial",
-        {"report_validation": str(run_dir / "report_validation.json")},
-        issues,
-    )
+    issues = [f"{key}: {item}" for key in _ISSUE_KEYS for item in result[key]]
+    emit_status("ok" if result["passed"] else "partial",
+                {"report_validation": str(run_dir / "report_validation.json")}, issues)
     if not result["passed"]:
         raise SystemExit(2)
     return 0

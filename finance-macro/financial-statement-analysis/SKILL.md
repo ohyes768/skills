@@ -19,13 +19,13 @@ description: A 股财报 PDF 深度分析。输入一份财报 PDF 链接（年�
 1. `fetch_pdf.py --url <URL> --output-dir <运行目录>` — 下载与缓存。失败时诊断 HTML/失效/超限/损坏，不生成假报告。
 2. `inspect_pdf.py --run-dir <运行目录>` — 生成 `document.json`（公司、期间、审计状态、适用框架）、`pages.jsonl`（逐页索引）、`sections.json`（章节候选）。`verified: false` 的章节仅是候选。
 3. `pack_context.py --run-dir <运行目录> --stage locate --request-id locate-01` — 读章节索引，确定重点章节：财务摘要、管理层讨论与分析、合并三表、审计报告。
-4. `extract_sections.py --run-dir <运行目录> --sections <重点章节ID>` — 提取证据。扫描页缺 OCR 能力时退出 2，把未提取页列入报告"未验证事项"。
-5. `pack_context.py --stage map --request-id map-01 --sections ...` — 读证据内容（每包 ≤12,000 字符；`next_cursor` 非空则继续 `--cursor` 续读，重复读取计入交付台账，避免无谓复读）。
+4. `extract_sections.py --run-dir <运行目录> --sections <重点章节ID>` — 增量提取证据，保留旧 ID 与文件。换 PDF 或旧 manifest 未绑定文档哈希时使用新运行目录。扫描页缺 OCR 能力时退出 2，把未提取页列入报告"未验证事项"。
+5. `pack_context.py --run-dir <运行目录> --stage map --request-id map-01 --sections ...` — 读证据内容（每包 ≤12,000 字符；`next_cursor` 非空则继续 `--cursor` 续读，重复读取计入交付台账，避免无谓复读）。`image_crop` 返回图片路径与 `requires_visual_review`，必须实际查看图片；未查看或不可辨认时不得据其确认数字。
 6. 写 `financials.json` — 按产物合同映射事实：合并/母公司、集团/归母、累计/单季、调整前后不得混用；每个数值带 `evidence_ids`；缺失写 `missing_reason`，**缺失不是零**；破折号与空白保持缺失。
 7. `calculate_metrics.py --run-dir <运行目录>` — 脚本计算同比、盈利质量、简化自由现金流、杜邦与勾稽。exit 1 = 事实合同错误，必须修复；exit 2 = 勾稽未过，先回查证据（页码、列映射、单位），不得为凑平改数字。
 8. 分析与回查 — 基于 metrics 与证据分析；初始发现按[分析框架](references/analysis-framework.md)回查表定向补提（`extract_sections.py --pages N-M`），**最多两轮**，仍未解决就保留不确定性。
 9. 写 `analysis.md`（按[报告模板](references/report-template.md)）和 `report_claims.json` — 每条关键陈述登记 claim：fact/calculation/inference/company_explanation 四类，fact 与 calculation 必须能追溯到 evidence/fact/metric。
-10. `validate_report.py --run-dir <运行目录>` — 机器校验引用与页码。exit 2 时修复 claims 后重跑，通过后再做语义复核（因果、管理层解释充分性），机器通过不等于语义正确。
+10. `validate_report.py --run-dir <运行目录>` — 同时校验 analysis.md 正文、台账、数值单位与证据页码。每个 claim 的 text 必须出现在指定标题章节；数字陈述（包括标题、公司解释和推断）必须绑定事实或已算出的指标。exit 2 时回查证据并修复正文及 claims 后重跑，通过后再做语义复核（因果、管理层解释充分性），机器通过不等于语义正确。
 
 ## 降级规则
 

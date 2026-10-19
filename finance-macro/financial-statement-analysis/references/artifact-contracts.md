@@ -66,6 +66,11 @@ are never verified=true).
 
 ## extraction_manifest.json — extract_sections.py
 
+`document_sha256` binds the manifest to the exact source PDF. Extraction appends evidence;
+existing IDs and files are immutable. `source_key` identifies identical source/content selections
+so repeated requests reuse prior records. A changed PDF or a legacy nonempty manifest without
+this binding requires a new run directory; never rebind existing claims to a new document.
+
 | Field | Type | Notes |
 |---|---|---|
 | schema_version | int | |
@@ -75,6 +80,10 @@ Evidence object fields: `evidence_id` (stable, e.g. `ev-0001`), `section_id` \| 
 `pdf_pages` (list[int]), `kind` (text / table / image_crop), `file` (path under `excerpts/`),
 `method` (pymupdf_text / pdfplumber_table / ocr / image_crop), `complete` (bool),
 `issues` (list[string], e.g. cross-page header mismatch, OCR unavailable).
+
+Image crops are `complete: false` until visually reviewed; context packets contain `file`
+(absolute image path), `requires_visual_review: true`, IDs and pages, never decoded PNG text.
+The initial `locate` packet works before any extraction manifest exists.
 
 ## financials.json — written by agent, validated by financial_schema.py
 
@@ -122,6 +131,13 @@ fabricated evidence for null values is a fatal error.
 
 ## metrics.json — calculate_metrics.py
 
+All operands share the document target period, scope, currency, base unit and reporting basis.
+If no target period is supplied, infer it once from consolidated duration facts. YoY requires
+the same start/end interval one year earlier. Opening balances are at the day before that
+interval starts, closing balances at its end; parent balances never enter group calculations.
+Null/unverified inputs produce `insufficient_data`; explicit or dimension conflicts produce
+`conflict`, with no numeric output. Equivalent verified duplicates may be deduplicated.
+
 Each entry: `metric_id`, `value` (decimal string \| null), `status`
 (computed / not_applicable / insufficient_data / conflict), `formula`, `input_fact_ids` (list),
 `source_pages` (list[int]), `reason` (null when computed).
@@ -134,9 +150,23 @@ reported here as data problems, independent of financial risk conclusions.
 
 ## report_claims.json — written by agent
 
-Each entry: `claim_id`, `report_anchor` (markdown heading or location in analysis.md), `text`,
+Each entry: `claim_id`, `report_anchor` (exact Markdown heading in analysis.md), `text`,
 `fact_ids` (list), `metric_ids` (list), `evidence_ids` (list), `source_pages` (list[int]),
 `claim_type` (fact / calculation / inference / company_explanation).
+
+The nonempty claim text must occur in that heading's section. Cover every numeric statement,
+including table rows, headings, explanations and inferences. `fact` values must be verified;
+`calculation` metrics must be computed and finite. All declared required values must appear,
+and extra numeric values need support even in explanations/inferences. `source_pages` equals
+the union of pages resolved through claim → metrics → facts → evidence; inline PDF citations
+must use those pages. Use separate `（PDF 第 N 页）` citations for multiple pages.
+
+Amounts are compared in base units with explicit 元/千元/万元/亿元 or yuan scaling;
+percentages divide by 100 and cannot represent amounts. Display rounding uses the displayed
+decimal precision (ROUND_HALF_UP). Optional `display_unit` supplies a shared table-row unit.
+Years are exempt only as actual `YYYY年` dates in the supporting facts' periods. Machine
+checks bind values and references; they do not verify that a sentence names the correct metric
+or establishes a causal relationship. Semantic review remains required.
 
 ## report_validation.json — validate_report.py
 
@@ -147,8 +177,12 @@ Each entry: `claim_id`, `report_anchor` (markdown heading or location in analysi
 | unknown_metric_ids | list[string] | cited but not in metrics.json |
 | unknown_evidence_ids | list[string] | cited but not in extraction_manifest.json |
 | out_of_range_pages | list[object] | {claim_id, page} beyond page_count |
-| value_mismatches | list[object] | {claim_id, report_value, metric_value} |
+| value_mismatches | list[object] | claim_id plus fragment or unbound_number |
 | missing_evidence_claims | list[string] | risk/fact claims without evidence |
+| body_mismatches | list[string] | empty report/ledger or claim absent at anchor |
+| unclaimed_numeric_lines | list[string] | uncovered numeric Markdown lines |
+| invalid_support | list[string] | unusable inputs or document-version mismatch |
+| page_mismatches | list[string] | declared/cited pages differ from resolved evidence |
 | passed | bool | machine checks only; semantic review is separate |
 
 ## context_usage.jsonl — pack_context.py (one JSON object per line, append-only)

@@ -115,6 +115,15 @@ def _build_blocks(run_dir: Path, section_ids, pages) -> tuple[list[dict], list[s
         if evidence["kind"] == "table":
             table = read_json(path)
             blocks.extend(_split_table_blocks(evidence, table))
+        elif evidence["kind"] == "image_crop":
+            blocks.append({
+                "evidence_id": evidence["evidence_id"],
+                "kind": "image_crop",
+                "pdf_pages": evidence["pdf_pages"],
+                "file": str(path.resolve()),
+                "requires_visual_review": True,
+                "issues": evidence.get("issues", []),
+            })
         else:
             text = path.read_text(encoding="utf-8")
             blocks.extend(_split_text_blocks(evidence, text))
@@ -129,7 +138,11 @@ def _locate_items(run_dir: Path, section_ids, pages) -> tuple[list[dict], list[s
         if section_ids and section["section_id"] not in set(section_ids):
             continue
         items.append({**section, "kind": "section_index"})
-    for evidence in _sorted_evidences(run_dir, section_ids, pages):
+    evidences = (
+        _sorted_evidences(run_dir, section_ids, pages)
+        if (run_dir / "extraction_manifest.json").exists() else []
+    )
+    for evidence in evidences:
         evidence_ids.append(evidence["evidence_id"])
         items.append(
             {

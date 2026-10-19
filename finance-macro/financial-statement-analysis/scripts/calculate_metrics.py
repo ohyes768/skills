@@ -8,27 +8,21 @@ from decimal import Decimal
 from pathlib import Path
 
 from artifacts import emit_status, read_json, write_json
+from fact_selection import FactSelection, pick_usable
 from financial_schema import validate_financials
 
 ZERO = Decimal(0)
 
 
 def _f(
-    facts: list[dict],
+    facts: FactSelection,
     metric: str,
     *,
     scope: str = "consolidated",
     attribution: str = "group",
     aggregation: str = "cumulative",
 ) -> list[dict]:
-    return [
-        f
-        for f in facts
-        if f["metric"] == metric
-        and f["scope"] == scope
-        and f["attribution"] == attribution
-        and (f["period"]["kind"] == "instant" or f["period"]["aggregation"] == aggregation)
-    ]
+    return facts.flows(metric, scope=scope, attribution=attribution, aggregation=aggregation)
 
 
 def _entry(
@@ -64,60 +58,21 @@ def _insufficient(metric_id: str, formula: str, metric: str, aggregation: str) -
 
 def _pick_single(candidates: list[dict]) -> tuple[dict | None, str | None, str | None]:
     """取唯一本期值；同期间多条不同值即冲突，不默认取第一项。"""
-    if not candidates:
-        return None, "insufficient_data", "fact not available"
-    by_end: dict[str, list[dict]] = {}
-    for fact in candidates:
-        by_end.setdefault(fact["period"]["end"], []).append(fact)
-    latest = by_end[max(by_end)]
-    if len({f["value"] for f in latest}) > 1:
-        return None, "conflict", f"multiple conflicting values for period {latest[0]['period']['end']}"
-    return latest[0], None, None
-
-
-def _current_and_prior(
-    candidates: list[dict],
-) -> tuple[dict | None, dict | None, str | None, str | None]:
-    if not candidates:
-        return None, None, "insufficient_data", "fact not available"
-    by_end: dict[str, list[dict]] = {}
-    for fact in candidates:
-        by_end.setdefault(fact["period"]["end"], []).append(fact)
-    ends = sorted(by_end, reverse=True)
-    if len(ends) < 2:
-        return None, None, "insufficient_data", "no prior period for comparison"
-    current_list = by_end[ends[0]]
-    if len({f["value"] for f in current_list}) > 1:
-        return None, None, "conflict", f"multiple conflicting values for period {ends[0]}"
-    current = current_list[0]
-    prior_list = [f for f in by_end[ends[1]] if f["basis"] == current["basis"]]
-    if not prior_list:
-        return None, None, "insufficient_data", (
-            f"no same-basis prior period (basis={current['basis']})"
-        )
-    return current, prior_list[0], None, None
+    return pick_usable(candidates)
 
 
 def _avg_balance(
-    facts: list[dict], metric: str
+    facts: FactSelection, metric: str
 ) -> tuple[Decimal | None, list[str], str | None, str | None]:
-    instants = [
-        f for f in facts if f["metric"] == metric and f["period"]["kind"] == "instant"
-    ]
-    if len(instants) < 2:
-        return None, [], "insufficient_data", f"insufficient data for average {metric}"
-    by_end: dict[str, list[dict]] = {}
-    for fact in instants:
-        by_end.setdefault(fact["period"]["end"], []).append(fact)
-    ends = sorted(by_end, reverse=True)
-    current_list = by_end[ends[0]]
-    if len({f["value"] for f in current_list}) > 1:
-        return None, [], "conflict", f"multiple conflicting {metric} values for {ends[0]}"
-    current = current_list[0]
-    prior_list = [f for f in by_end[ends[1]] if f["basis"] == current["basis"]]
-    if not prior_list:
-        return None, [], "insufficient_data", f"no same-basis prior {metric}"
-    prior = prior_list[0]
+    current, status, reason = facts.balance(metric)
+    if status:
+        return None, [], status, f"average {metric}: {reason}"
+    prior, status, reason = facts.balance(metric, opening=True)
+    if status:
+        return None, [], status, f"average {metric}: {reason}"
+    mismatch = facts.measurement_error([current["fact_id"], prior["fact_id"]])
+    if mismatch:
+        return None, [], "conflict", mismatch
     avg = (Decimal(current["value"]) + Decimal(prior["value"])) / 2
     return avg, [current["fact_id"], prior["fact_id"]], None, None
 
@@ -130,12 +85,13 @@ def _divide(num: Decimal, den: Decimal, zero_label: str = "zero denominator") ->
     return num / den, None, None
 
 
-def _yoy(facts: list[dict], metric: str, metric_id: str) -> dict:
+def _yoy(facts: FactSelection, metric: str, metric_id: str) -> dict:
     formula = f"({metric}_cur - {metric}_prev) / {metric}_prev"
     attribution = "owners" if metric.endswith("_owners") else "group"
-    cur, prior, status, reason = _current_and_prior(
-        _f(facts, metric, attribution=attribution)
-    )
+    cur, status, reason = _pick_single(_f(facts, metric, attribution=attribution))
+    if status is not None:
+        return _entry(metric_id, None, status, formula, [], reason)
+    prior, status, reason = _pick_single(facts.flows(metric, attribution=attribution, prior=True))
     if status is not None:
         return _entry(metric_id, None, status, formula, [], reason)
     cur_v, prior_v = Decimal(cur["value"]), Decimal(prior["value"])
@@ -150,7 +106,7 @@ def _yoy(facts: list[dict], metric: str, metric_id: str) -> dict:
 
 
 def _simple_ratio(
-    facts: list[dict],
+    facts: FactSelection,
     metric_id: str,
     num_spec: tuple[str, str],
     den_spec: tuple[str, str],
@@ -173,7 +129,7 @@ def _simple_ratio(
                   [num["fact_id"], den["fact_id"]], reason)
 
 
-def _dupont(facts: list[dict]) -> list[dict]:
+def _dupont(facts: FactSelection) -> list[dict]:
     entries: list[dict] = []
     margin = _simple_ratio(
         facts, "dupont_net_margin", ("net_profit_group", "group"), ("revenue", "group"),
@@ -198,9 +154,6 @@ def _dupont(facts: list[dict]) -> list[dict]:
         multiplier = _entry("dupont_equity_multiplier", None,
                             status or eq_status or "insufficient_data",
                             "average total_assets / average total_equity", [], reason or eq_reason)
-    elif turnover["value"] is None:
-        multiplier = _entry("dupont_equity_multiplier", None, "insufficient_data",
-                            "average total_assets / average total_equity", [])
     else:
         value, status2, reason2 = _divide(avg_assets, avg_equity)
         multiplier = _entry("dupont_equity_multiplier", value, status2 or "computed",
@@ -226,13 +179,14 @@ def _dupont(facts: list[dict]) -> list[dict]:
         parts = [margin, turnover, multiplier]
         reason = next((p["reason"] for p in parts if p["reason"]), None)
         entries.append(
-            _entry("roe_dupont", None, "insufficient_data",
+            _entry("roe_dupont", None,
+                   "conflict" if any(p["status"] == "conflict" for p in parts) else "insufficient_data",
                    "dupont_net_margin * dupont_asset_turnover * dupont_equity_multiplier", [], reason)
         )
     return entries
 
 
-def _simplified_fcf(facts: list[dict]) -> dict:
+def _simplified_fcf(facts: FactSelection) -> dict:
     formula = "cfo - capex_purchase_fixed_assets"
     cfo, status, reason = _pick_single(_f(facts, "cfo"))
     if status is not None:
@@ -245,7 +199,7 @@ def _simplified_fcf(facts: list[dict]) -> dict:
                   [cfo["fact_id"], capex["fact_id"]])
 
 
-def _roe_simple(facts: list[dict]) -> dict:
+def _roe_simple(facts: FactSelection) -> dict:
     formula = "net_profit_group / average total_equity"
     profit, status, reason = _pick_single(_f(facts, "net_profit_group"))
     if status is not None:
@@ -258,7 +212,7 @@ def _roe_simple(facts: list[dict]) -> dict:
                   [profit["fact_id"]] + ids, reason)
 
 
-def _accrual_ratio(facts: list[dict]) -> dict:
+def _accrual_ratio(facts: FactSelection) -> dict:
     formula = "(net_profit_group - cfo) / average total_assets"
     profit, status, reason = _pick_single(_f(facts, "net_profit_group"))
     if status is not None:
@@ -276,7 +230,7 @@ def _accrual_ratio(facts: list[dict]) -> dict:
 
 
 def _turnover(
-    facts: list[dict], metric_id: str, flow: str, balance: str
+    facts: FactSelection, metric_id: str, flow: str, balance: str
 ) -> dict:
     formula = f"{flow} / average {balance}"
     flow_pick, status, reason = _pick_single(_f(facts, flow))
@@ -295,7 +249,7 @@ def _tolerance(values: list[Decimal]) -> Decimal:
     return Decimal(1).scaleb(coarsest) / 2
 
 
-def _cash_reconciliation(facts: list[dict]) -> dict:
+def _cash_reconciliation(facts: FactSelection) -> dict:
     entry = {
         "check_id": "cash_reconciliation",
         "status": "not_applicable",
@@ -304,29 +258,15 @@ def _cash_reconciliation(facts: list[dict]) -> dict:
         "tolerance": None,
         "issues": [],
     }
-    instants = [
-        f for f in facts
-        if f["metric"] == "cash_equivalents" and f["period"]["kind"] == "instant"
-    ]
-    if len(instants) < 2:
-        entry["issues"] = ["cash_reconciliation needs opening and closing cash_equivalents"]
+    closing, status, reason = facts.balance("cash_equivalents")
+    opening, open_status, open_reason = facts.balance("cash_equivalents", opening=True)
+    if status or open_status:
+        entry["status"] = "conflict" if "conflict" in (status, open_status) else "not_applicable"
+        entry["issues"] = [
+            "cash_reconciliation needs opening and closing cash_equivalents",
+            reason or open_reason,
+        ]
         return entry
-    by_end: dict[str, list[dict]] = {}
-    for fact in instants:
-        by_end.setdefault(fact["period"]["end"], []).append(fact)
-    ends = sorted(by_end, reverse=True)
-    closing_list = by_end[ends[0]]
-    if len({f["value"] for f in closing_list}) > 1:
-        entry["status"] = "conflict"
-        entry["issues"] = [f"multiple closing cash_equivalents values for {ends[0]}"]
-        return entry
-    closing = closing_list[0]
-    opening_list = [f for f in by_end[ends[1]] if f["basis"] == closing["basis"]]
-    if not opening_list:
-        entry["status"] = "not_applicable"
-        entry["issues"] = ["no same-basis opening cash_equivalents"]
-        return entry
-    opening = opening_list[0]
 
     input_ids = [opening["fact_id"], closing["fact_id"]]
     flows: dict[str, Decimal] = {}
@@ -365,6 +305,10 @@ def _cash_reconciliation(facts: list[dict]) -> dict:
         issues.append("fx_effect_on_cash not disclosed; treated as 0")
 
     expected = Decimal(opening["value"]) + flows["cfo"] + flows["cfi"] + flows["cff"] + fx
+    mismatch = facts.measurement_error(input_ids)
+    if mismatch:
+        entry.update(status="conflict", input_fact_ids=input_ids, issues=[mismatch])
+        return entry
     closing_v = Decimal(closing["value"])
     residual = closing_v - expected
     tolerance = _tolerance(
@@ -383,7 +327,7 @@ def _cash_reconciliation(facts: list[dict]) -> dict:
 
 
 def calculate_metrics(document: dict) -> dict:
-    facts = document.get("facts", [])
+    facts = FactSelection(document)
     metrics: list[dict] = [
         _yoy(facts, "revenue", "revenue_yoy"),
         _yoy(facts, "net_profit_group", "net_profit_group_yoy"),
@@ -405,6 +349,11 @@ def calculate_metrics(document: dict) -> dict:
     metrics.append(_turnover(facts, "receivable_turnover", "revenue", "accounts_receivable"))
     metrics.append(_turnover(facts, "inventory_turnover", "cost_of_sales", "inventory"))
     metrics.append(_accrual_ratio(facts))
+    for metric in metrics:
+        if metric["status"] == "computed":
+            mismatch = facts.measurement_error(metric["input_fact_ids"])
+            if mismatch:
+                metric.update(value=None, status="conflict", reason=mismatch)
     validation = [_cash_reconciliation(facts)]
     return {"schema_version": 1, "metrics": metrics, "validation": validation}
 
@@ -421,6 +370,9 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(1)
 
     document = read_json(financials_path)
+    report_path = run_dir / "document.json"
+    if report_path.exists():
+        document = {**document, "period": read_json(report_path).get("period") or document.get("period")}
     errors = validate_financials(document)
     if errors:
         for error in errors:

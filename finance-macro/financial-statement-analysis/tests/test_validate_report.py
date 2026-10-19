@@ -5,7 +5,7 @@ import pytest
 import validate_report
 
 
-def prepare_run(run_dir: Path, claims: list[dict], analysis_md: str = "# 分析\n\n正文。\n") -> None:
+def prepare_run(run_dir: Path, claims: list[dict], analysis_md: str | None = None) -> None:
     (run_dir / "document.json").write_text(
         json.dumps({"schema_version": 1, "page_count": 17}, ensure_ascii=False), encoding="utf-8"
     )
@@ -72,6 +72,8 @@ def prepare_run(run_dir: Path, claims: list[dict], analysis_md: str = "# 分析\
     (run_dir / "report_claims.json").write_text(
         json.dumps({"schema_version": 1, "claims": claims}, ensure_ascii=False), encoding="utf-8"
     )
+    if analysis_md is None:
+        analysis_md = "# 分析\n\n" + "\n\n".join(claim["text"] for claim in claims) + "\n"
     (run_dir / "analysis.md").write_text(analysis_md, encoding="utf-8")
 
 

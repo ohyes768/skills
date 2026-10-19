@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import itertools
 import json
 import re
@@ -127,10 +128,18 @@ def extract_sections(
 
     excerpts = run_dir / "excerpts"
     excerpts.mkdir(exist_ok=True)
-    for old in excerpts.iterdir():
-        old.unlink()
-
-    counter = itertools.count(1)
+    digest = hashlib.sha256()
+    with open(run_dir / "source.pdf", "rb") as source:
+        for chunk in iter(lambda: source.read(65536), b""):
+            digest.update(chunk)
+    source_sha = digest.hexdigest()
+    manifest_path = run_dir / "extraction_manifest.json"
+    previous = read_json(manifest_path) if manifest_path.exists() else {}
+    existing = previous.get("evidences", [])
+    if existing and previous.get("document_sha256") != source_sha:
+        raise ValueError("document version changed or legacy source is unbound; use a new run directory")
+    highest_id = max((int(e["evidence_id"].removeprefix("ev-")) for e in existing), default=0)
+    counter = itertools.count(highest_id + 1)
     evidences: list[dict] = []
 
     if ocr_runner is None:
@@ -192,7 +201,7 @@ def extract_sections(
                             "kind": "image_crop",
                             "file": f"excerpts/{png_path.name}",
                             "method": "image_crop",
-                            "complete": True,
+                            "complete": False,
                             "issues": [
                                 f"page {page_no}: image region saved; OCR not attempted on crop"
                             ],
@@ -265,10 +274,28 @@ def extract_sections(
                         }
                     )
 
+    # New files never replace an existing ID. Repeated identical extractions
+    # reuse the original evidence; additions preserve all earlier references.
+    known = {e["source_key"]: e for e in existing}
+    merged = list(existing)
+    for evidence in evidences:
+        payload = (run_dir / evidence["file"]).read_bytes()
+        identity = json.dumps(
+            [source_sha, evidence["kind"], evidence["pdf_pages"],
+             evidence["section_id"], evidence["method"], hashlib.sha256(payload).hexdigest()],
+            ensure_ascii=False,
+        )
+        evidence["source_key"] = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+        if evidence["source_key"] in known:
+            (run_dir / evidence["file"]).unlink()
+        else:
+            known[evidence["source_key"]] = evidence
+            merged.append(evidence)
     manifest = {
         "schema_version": 1,
+        "document_sha256": source_sha,
         "page_count": document["page_count"],
-        "evidences": evidences,
+        "evidences": merged,
     }
     write_json(run_dir / "extraction_manifest.json", manifest)
     return manifest
@@ -287,7 +314,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         manifest = extract_sections(run_dir, section_ids=section_ids, pages=pages)
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, ValueError) as exc:
         print(f"extract_sections failed: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
 
