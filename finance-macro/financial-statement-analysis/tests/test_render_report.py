@@ -164,7 +164,8 @@ def test_static_numbers_in_free_text_rejected(run_dir):
          "paragraphs": ["公司第3大客户贡献突出。"]},
     ]}
     _, _, issues = render_report.render_report(run_dir, inputs)
-    assert any("static number" in issue["error"] for issue in issues)
+    assert any("must not contain numbers" in issue["error"] for issue in issues)
+    assert issues[0]["paragraph_index"] == 1
 
 
 def test_year_in_template_allowed(run_dir):
@@ -235,3 +236,30 @@ def test_render_issues_carry_positions(run_dir):
     assert any(i.get("statement_index") == 2 for i in issues)
     assert any(i.get("paragraph_index") == 1 for i in issues)
     assert any(i.get("row_label") == "不存在的事实" for i in issues)
+
+
+def test_paragraph_year_and_citation_rejected_strictly(run_dir):
+    """定性段落禁止一切数字：年份与页码引用都不放行，与验收器规则一致。"""
+    prepare_render_run(run_dir)
+    inputs = {"schema_version": 1, "sections": [
+        {"anchor": "## 经营分析", "statements": [], "paragraphs": [],
+         },
+    ]}
+    for text in ("2026上半年需求收缩明显。", "成因详见 PDF第23页。"):
+        inputs["sections"][0]["paragraphs"] = [text]
+        _, _, issues = render_report.render_report(run_dir, inputs)
+        assert issues, f"paragraph with number must be rejected: {text}"
+        assert "statements/tables" in issues[0]["error"]
+        assert issues[0]["paragraph_index"] == 1
+
+
+def test_plain_qualitative_paragraph_passes(run_dir):
+    prepare_render_run(run_dir)
+    inputs = {"schema_version": 1, "sections": [
+        {"anchor": "## 经营分析", "statements": [], "paragraphs": [
+            "收入下滑主要受行业需求收缩影响，公司未给出量化归因，需后续跟踪。",
+        ]},
+    ]}
+    markdown, _, issues = render_report.render_report(run_dir, inputs)
+    assert issues == []
+    assert "需求收缩" in markdown

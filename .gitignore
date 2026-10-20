@@ -58,3 +58,6 @@ finance-macro/*/macro_signal.json
 waytoagi-update-log/data/
 # 备份文件
 *.backup
+
+# pytest basetemp（本机测试临时目录，不入库）
+.pytest-tmp/

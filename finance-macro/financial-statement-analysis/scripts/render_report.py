@@ -134,17 +134,22 @@ def _resolve_with_ctx(ledger: _Ledger, binding: dict, ctx: dict):
         raise RenderIssue(error, **merged) from exc
 
 
-def _check_static_text(text: str, context: dict) -> None:
-    """自由文字中的静态数字只允许年份与页码引用。"""
+def _check_static_text(text: str, context: dict, *, strict: bool = False) -> None:
+    """模板静态数字只允许年份与页码引用；定性段落（strict）禁止一切数字，
+    与验收器的正文覆盖规则保持一致，避免渲染通过而验收失败。"""
     for number in NUMBER_RE.finditer(text):
         literal = number.group("number").replace(",", "")
-        prefix = text[max(0, number.start() - 8):number.start()]
-        if literal.isdigit() and re.search(r"(?:PDF\s*第|p\.)\s*$", prefix):
-            continue
-        if literal.isdigit() and len(literal) == 4 and period_year_suffix(text, number):
-            continue
-        raise RenderIssue(f"static number {literal!r} in free text must be a year or page citation",
-                          **context)
+        if not strict:
+            prefix = text[max(0, number.start() - 8):number.start()]
+            if literal.isdigit() and re.search(r"(?:PDF\s*第|p\.)\s*$", prefix):
+                continue
+            if literal.isdigit() and len(literal) == 4 and period_year_suffix(text, number):
+                continue
+        reason = ("qualitative paragraphs must not contain numbers; "
+                  "move quantitative content to statements/tables"
+                  if strict else
+                  "static number in free text must be a year or page citation")
+        raise RenderIssue(f"number {literal!r}: {reason}", **context)
 
 
 def _render_statement(ledger: _Ledger, anchor: str, statement: dict,
@@ -310,7 +315,7 @@ def render_report(run_dir: Path, inputs: dict) -> tuple[str | None, list[dict] |
         for paragraph_no, paragraph in enumerate(section.get("paragraphs") or [], start=1):
             try:
                 _check_static_text(paragraph, {"anchor": anchor,
-                                               "paragraph_index": paragraph_no})
+                                               "paragraph_index": paragraph_no}, strict=True)
             except RenderIssue as exc:
                 issues.append(exc.issue)
                 continue
