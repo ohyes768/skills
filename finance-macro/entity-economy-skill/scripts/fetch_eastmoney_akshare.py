@@ -97,11 +97,13 @@ def save_incremental(
     existing_months: set[str],
     indicator: str,
 ) -> int:
-    """增量写入：跳过已有月份，返回新增行数。"""
+    """增量写入：跳过已有月份，返回新增行数。
+
+    写完后必须整表按月份降序重排：build_macro_signal.latest_row() 取的是
+    CSV 第一行（假定最新月在首），纯 append 会把新月追加到文件末尾，
+    导致 macro_signal.json 永远读到旧月份。
+    """
     new_rows = [r for r in df_rows if r.get("月份", "").strip() not in existing_months]
-    if not new_rows:
-        LOGGER.info("  %s: 无新数据，跳过写入", csv_path.name)
-        return 0
 
     fieldnames = list(df_rows[0].keys()) + ["fetched_at", "indicator"]
     fetched_at = to_iso_now()
@@ -110,14 +112,33 @@ def save_incremental(
         row["fetched_at"] = fetched_at
         row["indicator"] = indicator
 
-    file_exists = csv_path.exists()
-    with open(csv_path, "a", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        if not file_exists:
-            writer.writeheader()
-        writer.writerows(new_rows)
+    # 读回既有数据，与新行合并后整体重排
+    rows: list[dict[str, Any]] = []
+    if csv_path.exists():
+        with open(csv_path, encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+            # 保留既有列序，追加新出现的列
+            for col in fieldnames:
+                if col not in (reader.fieldnames or []):
+                    fieldnames.append(col)
 
-    LOGGER.info("  %s: 新增 %d 行 → %s", csv_path.name, len(new_rows), csv_path)
+    for row in new_rows:
+        rows.append({k: row.get(k, "") for k in fieldnames})
+
+    # 月份降序（最新月在首），latest_row 依赖首行最新
+    rows.sort(key=lambda r: str(r.get("月份", "")), reverse=True)
+
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+
+    if not new_rows:
+        LOGGER.info("  %s: 无新数据，已重排（%d 行总） → %s", csv_path.name, len(rows), csv_path)
+        return 0
+
+    LOGGER.info("  %s: 新增 %d 行（已重排，%d 行总） → %s", csv_path.name, len(new_rows), len(rows), csv_path)
     return len(new_rows)
 
 
