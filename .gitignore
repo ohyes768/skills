@@ -61,3 +61,6 @@ waytoagi-update-log/data/
 
 # pytest basetemp（本机测试临时目录，不入库）
 .pytest-tmp/
+
+# Codex 本机配置（Trellis 生成的 agents/hooks，团队各自不同，不入库）
+.codex/
