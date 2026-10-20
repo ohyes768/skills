@@ -145,3 +145,45 @@ def test_cli_exit_2_when_ocr_unavailable(run_dir, capsys, monkeypatch):
     payload = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert payload["status"] == "partial"
     assert payload["issues"], "unextracted pages must be listed in issues"
+
+
+def test_extract_page_table_counts_and_returns_first_only():
+    """同页多表：报告合格表格总数，但只提取第一张——计数供主循环产生告警。"""
+
+    class FakePage:
+        def extract_tables(self):
+            return [
+                [["项目", "期末余额"], ["货币资金", "150.00"], ["应收账款", "80.00"]],
+                [["项目", "本期金额"], ["营业总收入", "230.73"], ["营业总成本", "190.00"]],
+                [["单行表", "被忽略"]],
+            ]
+
+    class FakePdf:
+        def __init__(self):
+            self.pages = [FakePage()]
+
+    rows, method, count = extract_sections._extract_page_table(FakePdf(), {"blocks": []}, 1)
+    assert count == 2
+    assert method == "pdfplumber_table"
+    assert rows[0] == ["项目", "期末余额"], "only the first usable table is returned"
+    assert ["营业总收入", "230.73"] not in rows, "second table must not leak into the first"
+
+
+def test_multiple_table_warning_reaches_manifest(run_dir, monkeypatch):
+    """主循环把同页多表计数转成 evidence issues，写入 manifest。"""
+    prepare(run_dir)
+    real = extract_sections._extract_page_table
+
+    def fake(plumber_pdf, page_data, page_no):
+        rows, method, count = real(plumber_pdf, page_data, page_no)
+        return rows, method, max(count, 2)
+
+    monkeypatch.setattr(extract_sections, "_extract_page_table", fake)
+    result = extract_sections.extract_sections(
+        run_dir, section_ids=["s-consolidated-balance-sheet"]
+    )
+    tables = by_kind(result, "table")
+    assert tables, "table evidence must still be produced"
+    assert any(
+        "multiple tables" in issue for t in tables for issue in t["issues"]
+    ), "multiple-tables warning must reach evidence issues"

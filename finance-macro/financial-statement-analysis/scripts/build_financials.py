@@ -31,6 +31,9 @@ _AGGREGATIONS = {"cumulative", "single_period"}
 _REVIEW_STATUSES = {"verified", "ambiguous", "missing", "conflict"}
 _PERIOD_REFS = {"duration": {"current", "prior"}, "instant": {"closing", "opening"}}
 _RAW_UNITS = {"元", "千元", "万元", "亿元"}
+# inspect_pdf 把文档类型写入 period.frequency（如 semi_annual）；事实合同的
+# frequency 值域是 annual/half_year/quarter，构造时归一化，不让 agent 改 document.json。
+_FREQUENCY_ALIASES = {"semi_annual": "half_year", "q1": "quarter", "q3": "quarter"}
 
 
 def _normalize_label(label: str) -> str:
@@ -60,6 +63,7 @@ def _resolve_period(document: dict, period_kind: str, period_ref: str,
     if not isinstance(base, dict) or not base.get("end"):
         return None, "document.json has no usable period; clarify before mapping"
     frequency = base.get("frequency") or "annual"
+    frequency = _FREQUENCY_ALIASES.get(frequency, frequency)
     if period_kind == "duration":
         start, end = base.get("start"), base["end"]
         if period_ref == "prior":

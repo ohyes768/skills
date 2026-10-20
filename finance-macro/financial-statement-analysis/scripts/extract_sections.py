@@ -31,16 +31,24 @@ def _normalize_rows(rows: list[list[str]]) -> list[list[str]]:
 
 def _extract_page_table(
     plumber_pdf: pdfplumber.PDF, page_data: dict, page_no: int
-) -> tuple[list[list[str]] | None, str | None]:
+) -> tuple[list[list[str]] | None, str | None, int]:
+    """返回 (首个合格表格, 方法, 该页合格表格总数)；同页多表只提取第一张。"""
     try:
         raw_tables = plumber_pdf.pages[page_no - 1].extract_tables()
     except Exception:  # noqa: BLE001 - pdfplumber 对个别页面可能抛任意解析异常
         raw_tables = []
+    usable_tables = 0
+    rows = method = None
     for raw in raw_tables or []:
         cleaned = [[(cell or "").strip() for cell in row] for row in raw]
         cleaned = [r for r in cleaned if any(r)]
         if len(cleaned) >= 2:
-            return _normalize_rows(cleaned), "pdfplumber_table"
+            usable_tables += 1
+            if rows is None:
+                rows, method = _normalize_rows(cleaned), "pdfplumber_table"
+
+    if rows is not None:
+        return rows, method, usable_tables
 
     candidate = []
     for block in page_data["blocks"]:
@@ -48,8 +56,8 @@ def _extract_page_table(
         if len(cells) >= 2:
             candidate.append(cells)
     if len(candidate) >= 2:
-        return _normalize_rows(candidate), "text_lines"
-    return None, None
+        return _normalize_rows(candidate), "text_lines", 1
+    return None, None, 0
 
 
 def _detect_tesseract() -> str | None:
@@ -223,7 +231,9 @@ def extract_sections(
                 merged: list[dict] = []
                 for page_no in section_groups[sid]:
                     page_data = pages_index[page_no - 1]
-                    rows, method = _extract_page_table(plumber_pdf, page_data, page_no)
+                    rows, method, table_count = _extract_page_table(
+                        plumber_pdf, page_data, page_no
+                    )
                     if rows is None:
                         continue
                     headers, body = rows[0], rows[1:]
@@ -237,6 +247,11 @@ def extract_sections(
                         prev["pdf_pages"].append(page_no)
                         continue
                     issues = []
+                    if table_count > 1:
+                        issues.append(
+                            f"page {page_no}: multiple tables ({table_count}) detected; "
+                            "only the first was extracted; second table needs a separate --pages run"
+                        )
                     if (
                         prev is not None
                         and prev["headers"] != headers

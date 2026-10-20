@@ -68,3 +68,33 @@ Matching rules:
   OCR; without OCR capability this degrades visibly instead of silently producing empty sections.
 - OCR output is marked `method: ocr` in the evidence so downstream steps can weigh its
   reliability separately from native text.
+
+## Same-page dual tables and cross-page main tables (field lesson, 2026-10)
+
+A-share interim reports do not map physical pages to statements one-to-one: one page can
+carry the tail of the previous statement and the header of the next. Choose evidence by
+content attribution, never by page attribution.
+
+Known behavior:
+
+- `extract_tables()` sees every recognizable table on the page, but `extract_sections`
+  keeps only the first usable one (>= 2 rows). When more than one usable table exists,
+  the produced table evidence carries an explicit `multiple tables ... only the first was
+  extracted` issue; the second table is a known limitation, not an extraction failure.
+- The tail of a consolidated statement typically sits on the page carrying the NEXT
+  statement's title: consolidated balance-sheet tail before "母公司资产负债表",
+  consolidated income-statement tail before "母公司利润表", consolidated cash-flow tail
+  before "母公司现金流量表".
+
+Rules for the agent:
+
+1. Before picking an evidence page, confirm from the pages index which statement the page
+   actually carries; then decide between table and text evidence.
+2. Attribution requires title + column headers + account rows to agree; a page (or
+   `section_id`) alone never assigns statement scope.
+3. When one page holds two statements, prefer text evidence (`kind=text` with
+   `locator.line`) for the non-first table; a `kind=table` evidence may point at the
+   other statement (consolidated vs parent amounts differ wildly — misusing it corrupts
+   the analysis silently).
+4. If the target table was not extracted, re-extract with `--pages` and verify content
+   attribution yourself; never reuse the requested `section_id` as content attribution.

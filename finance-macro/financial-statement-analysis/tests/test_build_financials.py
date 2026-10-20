@@ -262,3 +262,16 @@ def test_cli_writes_artifacts_and_exit_codes(run_dir, capsys):
     except SystemExit as exc:
         raised = exc.code == 2
     assert raised, "cell mismatch must exit 2 (repairable)"
+
+
+def test_inspect_frequency_semi_annual_is_normalized(run_dir):
+    """inspect_pdf 真实输出 period.frequency=semi_annual，构造时必须归一化为 half_year。"""
+    prepare_build_run(run_dir, document_period={
+        "kind": "duration", "start": "2026-01-01", "end": "2026-06-30",
+        "frequency": "semi_annual", "aggregation": "cumulative",
+    })
+    inputs = {"schema_version": 1, "facts": [fact_input()]}
+    financials, validation = build_financials.build_financials(run_dir, inputs)
+    assert financials is not None, validation["issues"]
+    assert financials["facts"][0]["period"]["frequency"] == "half_year"
+    assert validate_financials(financials) == []

@@ -81,6 +81,13 @@ Evidence object fields: `evidence_id` (stable, e.g. `ev-0001`), `section_id` \| 
 `method` (pymupdf_text / pdfplumber_table / ocr / image_crop), `complete` (bool),
 `issues` (list[string], e.g. cross-page header mismatch, OCR unavailable).
 
+Semantic constraints learned from real runs: `pdf_pages` is where the content physically
+sits; `section_id` reflects the extraction REQUEST, not the content's statement. When a
+page carries multiple statements, a `kind=table` evidence is that page's FIRST usable
+table only — other tables produce no table evidence (an explicit `multiple tables` issue
+is recorded instead). Consumers must verify content attribution (title + headers + account
+rows) and never infer consolidated/parent scope from `section_id` alone.
+
 Image crops are `complete: false` until visually reviewed; context packets contain `file`
 (absolute image path), `requires_visual_review: true`, IDs and pages, never decoded PNG text.
 The initial `locate` packet works before any extraction manifest exists.

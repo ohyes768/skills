@@ -19,8 +19,9 @@ description: A 股财报 PDF 深度分析。输入一份财报 PDF 链接（年�
 日常分析用 `run_pipeline.py`（prepare/compute/report/review）；`extract_sections.py` 与 `pack_context.py` 仍直接调用。
 
 1. `run_pipeline.py prepare --url <URL> --run-dir <运行目录>` — 下载、缓存（核对 URL 与哈希，防误复用旧 PDF）、生成 `document.json`/`sections.json`，返回章节定位摘要。`run-dir` 不得指向 Skill 源码目录。
-2. `extract_sections.py --run-dir <运行目录> --sections <重点章节ID>` — 增量提取证据，保留旧 ID 与文件。扫描页缺 OCR 能力时退出 2，把未提取页列入报告"未验证事项"。
+2. `extract_sections.py --run-dir <运行目录> --sections <重点章节ID>` — 增量提取证据，保留旧 ID 与文件。半年报 `document.json` 的 `period.frequency` 是 `semi_annual`，`compute` 阶段会自动归一化为合同值 `half_year`，无需也不得手工修改 `document.json`。同页多表只提取第一张并记录 `multiple tables` 告警，其余表按[提取规则](references/extraction-rules.md)的"同页双表"规则处理。扫描页缺 OCR 能力时退出 2，把未提取页列入报告"未验证事项"。
 3. `pack_context.py --run-dir <运行目录> --stage map --request-id map-01 --sections ...` — 读证据内容（每包 ≤12,000 字符；`--pages` 支持 `1,3,5-9` 范围语法；`next_cursor` 非空则继续 `--cursor` 续读）。`image_crop` 必须实际查看图片；未查看或不可辨认时不得据其确认数字。
+3a. 跨页主表（合并资产负债表/利润表/现金流量表）尾部常落在下一张表标题页（如合并利润表尾在"母公司利润表"标题之前）；选定证据页以内容归属（表标题+列头+科目行）判断，不要信 section 边界或 `section_id` 推断合并/母公司口径，详见[提取规则](references/extraction-rules.md)。
 4. 写 `fact_inputs.json`（合同与示例见[fact-inputs-example](references/fact-inputs-example.md)）— 只提交指标映射、原文值与证据定位；归属维度、期间结构、`missing_reason` 由程序推导，**缺失不是零**。
 5. `run_pipeline.py compute --run-dir <运行目录>` — 表格 cell/文本 label 逐项核对后构造 `financials.json`，计算指标与勾稽。exit 2 返回 `mapping_validation.json` 定位修复；按 `input_index` 修改 `fact_inputs.json` 重跑。**初检 + 最多两次修复**，预算持久化在 `run_state.json`，相同输入重跑不消耗预算，重启不重置；预算耗尽后须新建运行目录或申请维护。
 6. 分析与回查 — 基于 metrics 与证据分析；初始发现按[分析框架](references/analysis-framework.md)回查表定向补提（`extract_sections.py --pages N-M`），**最多两轮**，仍未解决就保留不确定性。

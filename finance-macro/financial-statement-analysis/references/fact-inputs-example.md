@@ -85,6 +85,28 @@
   `mapping_validation.json`（含 `input_index` 定位）并以退出码 2 返回修复清单。
 - `document.json` 缺少可用期间时拒绝构造——先澄清期间，不猜默认值。
 
+## 表格证据与文本证据的选择
+
+同页承载多张报表时，`kind=table` 证据只是该页**第一张**可识别表格（证据的 `issues`
+里有 `multiple tables` 告警），第二张表可能才是你要的——此时 table 证据会指向另一张
+报表（合同负债 vs 短期借款量级差异巨大，误用会直接算错资产负债结构）。此类场景对
+非第一张表一律使用 text 证据（`kind=text`）并用 `locator.line` 定位：
+
+```json
+{
+  "metric": "contract_liabilities",
+  "raw_label": "合同负债",
+  "raw_value": "45,000,000.00",
+  "raw_unit": "元",
+  "period_ref": "closing",
+  "evidence": {"evidence_id": "ev-0038", "locator": {"line": 12}}
+}
+```
+
+注意：text 证据只校验 `raw_label` 出现，**不校验数值**；数值正确性由你对照原文负责。
+归属判断以"表标题 + 列头 + 科目行"三者同时出现为准，不要按页码或 `section_id`
+推断合并/母公司口径（见 extraction-rules.md 的同页双表节）。
+
 ## 指标与期间类型
 
 duration（利润表/现金流量表）：`revenue`、`cost_of_sales`、`gross_profit`、`selling_expenses`、
