@@ -65,7 +65,7 @@
 | raw_label | 是 | PDF 原文标签，原样抄写（含括号注释可，程序会归一化定位） |
 | raw_value | 是 | 原文字符串；`—`、`–`、`-`、`--`、空表示未披露，程序自动补 `missing_reason` |
 | raw_unit | 是 | `元` / `千元` / `万元` / `亿元` |
-| period_ref | 是 | duration 指标用 `current`（本期）/ `prior`（上年同期）；instant 指标用 `closing`（期末）/ `opening`（期初）；用错类型被拒 |
+| period_ref | 是 | duration 指标用 `current`（本期）/ `prior`（上年同期）；instant 指标用 `closing`（期末）/ `opening`（期初）；**必须与指标的 period_kind 匹配**（利润表/现金流量表科目是 duration，资产负债表科目是 instant），用错类型整项被拒 |
 | scope | 否 | `consolidated`（默认）/ `parent`（母公司报表科目必须标 parent） |
 | basis | 否 | `as_reported`（默认）/ `restated` |
 | aggregation | 否 | duration 默认 `cumulative`；单季值显式给 `single_period` |

@@ -53,7 +53,9 @@ def _format_pp(value: Decimal, digits: int, abs_mode: bool) -> str:
     return f"{scaled:f}个百分点"
 
 
-def format_value(value: Decimal, kind: str, fmt: str) -> str:
+def format_value(value: Decimal, kind: str, fmt: str, *, with_direction: bool = False) -> str:
+    """渲染绑定值。decline_* 输出正幅度；with_direction 时自带「下降」前缀，
+    使表格单元格成为自包含表达（校验器靠紧邻方向词匹配负值）。"""
     abs_mode = fmt.startswith("decline_")
     base = fmt[len("decline_"):] if abs_mode else fmt
     if abs_mode and value > 0:
@@ -61,16 +63,20 @@ def format_value(value: Decimal, kind: str, fmt: str) -> str:
     if base in _AMOUNT_SPECS:
         if kind != "amount":
             raise RenderIssue(f"format {fmt} applies to amounts, value kind is {kind}")
-        return _format_amount(value, base, abs_mode)
-    if base in _PERCENT_SPECS:
+        text = _format_amount(value, base, abs_mode)
+    elif base in _PERCENT_SPECS:
         if kind != "ratio":
             raise RenderIssue(f"format {fmt} applies to ratios, value kind is {kind}")
-        return _format_percent(value, _PERCENT_SPECS[base], abs_mode)
-    if base in _PP_SPECS:
+        text = _format_percent(value, _PERCENT_SPECS[base], abs_mode)
+    elif base in _PP_SPECS:
         if kind != "ratio":
             raise RenderIssue(f"format {fmt} applies to ratios, value kind is {kind}")
-        return _format_pp(value, _PP_SPECS[base], abs_mode)
-    raise RenderIssue(f"unknown format {fmt!r}")
+        text = _format_pp(value, _PP_SPECS[base], abs_mode)
+    else:
+        raise RenderIssue(f"unknown format {fmt!r}")
+    if abs_mode and with_direction:
+        return f"下降{text}"
+    return text
 
 
 def _value_kind(metric_id: str, metric: dict, fact: dict | None) -> str:
@@ -237,7 +243,7 @@ def _render_table_row(ledger: _Ledger, anchor: str, display_unit: str | None,
         fact_ids.update(fids)
         metric_ids.update(mids)
         pages.update(pgs)
-        cells.append(format_value(value, kind, fmt))
+        cells.append(format_value(value, kind, fmt, with_direction=True))
 
     text = "| " + " | ".join([label, *cells]) + " |"
     claim_type = row.get("claim_type") or ("calculation" if metric_ids else "fact")

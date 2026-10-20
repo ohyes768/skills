@@ -195,7 +195,7 @@ def test_table_rows_rendered_with_claims(run_dir):
     markdown, claims, issues = render_report.render_report(run_dir, inputs)
     assert issues == []
     assert "| 营业收入 | 12.35亿元 |" in markdown
-    assert "| 收入同比 | 27.8% |" in markdown
+    assert "| 收入同比 | 下降27.8% |" in markdown
     assert len(claims) == 2
     assert claims[1]["claim_type"] == "calculation"
 
@@ -263,3 +263,30 @@ def test_plain_qualitative_paragraph_passes(run_dir):
     markdown, _, issues = render_report.render_report(run_dir, inputs)
     assert issues == []
     assert "需求收缩" in markdown
+
+
+def test_table_decline_cell_passes_validation(run_dir):
+    """表格行 decline 格式输出自带「下降」前缀，渲染产物直接过校验器（实跑撞坑复现）。"""
+    prepare_render_run(run_dir)
+    write_json_file(run_dir / "metrics.json", {
+        "schema_version": 1,
+        "metrics": [
+            {"metric_id": "cfo_to_np", "value": "-0.7518", "status": "computed",
+             "formula": "cfo/np", "input_fact_ids": ["f-0001"], "source_pages": [5],
+             "reason": None},
+        ],
+    })
+    inputs = {"schema_version": 1, "sections": [
+        {"anchor": "## 关键指标", "statements": [], "paragraphs": [],
+         "table": {"columns": ["指标", "数值"], "rows": [
+             {"label": "经营现金流/净利润", "cells": [
+                 {"metric_id": "cfo_to_np", "format": "decline_percent2"}],
+              "claim_type": "calculation"},
+         ]}},
+    ]}
+    markdown, claims, issues = render_report.render_report(run_dir, inputs)
+    assert issues == [], issues
+    assert "| 经营现金流/净利润 | 下降75.18% |" in markdown
+    write_json_file(run_dir / "report_claims.json", {"schema_version": 1, "claims": claims})
+    (run_dir / "analysis.md").write_text(markdown, encoding="utf-8")
+    assert validate_report.validate_report(run_dir)["passed"] is True
