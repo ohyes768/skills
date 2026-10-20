@@ -211,6 +211,8 @@ def cmd_compute(run_dir: Path) -> tuple[dict, int]:
         "quality_status": "partial",
         "next_action": "write report_inputs.json with bindings into facts/metrics, then run report",
     }
+    from pack_context import build_packet
+    result["context"] = build_packet(run_dir, stage="analyze", request_id="compute-analysis")
     return result, (0 if not issues else 2)
 
 
@@ -265,7 +267,9 @@ def cmd_report(run_dir: Path) -> tuple[dict, int]:
                                "report_validation": str(run_dir / "report_validation.json")},
                  "issues": [], "remaining_repairs": remaining,
                  "quality_status": "verified",
-                 "next_action": "semantic review by the agent; publishing belongs to the caller"}, 0)
+                 "terminal": False,
+                 "next_action": "complete semantic review once, then run finish --semantic-reviewed; "
+                                "do not repeat report or rewrite analysis.md in the final response"}, 0)
     state["quality_status"] = "partial"
     _save_state(run_dir, state)
     errors, _total = _examples(validation), sum(_count_issues(validation).values())
@@ -309,6 +313,59 @@ def cmd_review(run_dir: Path) -> tuple[dict, int]:
              "resume the stage that last emitted repair_needed"}, code)
 
 
+def cmd_evidence(run_dir: Path, *, section_ids: list[str] | None = None,
+                 pages: list[int] | None = None, request_id: str = "evidence",
+                 cursor: str | None = None) -> tuple[dict, int]:
+    """One tool call for extraction plus first packet; continuation never re-extracts."""
+    from extract_sections import extract_sections
+    from pack_context import build_packet
+
+    if not section_ids and not pages:
+        raise ValueError("evidence requires explicit sections or pages")
+    if cursor is None:
+        extract_sections(run_dir, section_ids=section_ids, pages=pages)
+    manifest = read_json(run_dir / "extraction_manifest.json")
+    selected = [ev for ev in manifest["evidences"]
+                if (not section_ids or ev.get("section_id") in section_ids)
+                and (not pages or set(ev["pdf_pages"]) & set(pages))]
+    incomplete = [ev["evidence_id"] for ev in selected if not ev["complete"]]
+    context = build_packet(run_dir, stage="map", request_id=request_id,
+                           section_ids=section_ids, pages=pages, cursor=cursor)
+    result = {"stage": "evidence", "status": "partial" if incomplete else "ok",
+              "quality_status": "partial", "terminal": False, "context": context,
+              "issues": [issue for ev in selected for issue in ev.get("issues", [])],
+              "incomplete_evidence_ids": incomplete,
+              "next_action": "continue cursor if present; otherwise write fact_inputs.json"}
+    return result, (2 if incomplete else 0)
+
+
+def cmd_finish(run_dir: Path, *, semantic_reviewed: bool = False) -> tuple[dict, int]:
+    """The explicit stopping point, after semantic review and fresh machine validation."""
+    from completion import create_completion
+    from validate_report import validate_report
+
+    result = {"stage": "finish", "terminal": False, "status": "repair_needed",
+              "quality_status": "partial", "issues": [], "next_action": None}
+    if not semantic_reviewed:
+        result["issues"] = ["semantic review must be completed before finish --semantic-reviewed"]
+        return result, 2
+    state = _load_state(run_dir)
+    if state.get("quality_status") != "verified":
+        result["issues"] = ["report stage must pass before finish"]
+        return result, 2
+    validation = validate_report(run_dir)
+    if not validation["passed"]:
+        state["quality_status"] = "partial"
+        _save_state(run_dir, state)
+        result["issues"] = _examples(validation)
+        return result, 2
+    create_completion(run_dir)
+    result.update(status="ok", terminal=True, quality_status="verified",
+                  artifacts={"analysis_md": str(run_dir / "analysis.md"),
+                             "completion_json": str(run_dir / "completion.json")})
+    return result, 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="财报分析统一阶段入口")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -326,6 +383,16 @@ def main(argv: list[str] | None = None) -> int:
     review = subparsers.add_parser("review", help="只读当前状态与修复余量")
     review.add_argument("--run-dir", required=True)
 
+    evidence = subparsers.add_parser("evidence", help="增量提取并直接返回首个证据包")
+    evidence.add_argument("--run-dir", required=True)
+    evidence.add_argument("--sections", default="")
+    evidence.add_argument("--pages", default="")
+    evidence.add_argument("--request-id", default="evidence")
+    evidence.add_argument("--cursor")
+    finish = subparsers.add_parser("finish", help="语义复核后重新校验并签发交付凭据")
+    finish.add_argument("--run-dir", required=True)
+    finish.add_argument("--semantic-reviewed", action="store_true")
+
     args = parser.parse_args(argv)
     run_dir = Path(args.run_dir)
     if args.command == "prepare":
@@ -334,6 +401,13 @@ def main(argv: list[str] | None = None) -> int:
         result, code = cmd_compute(run_dir)
     elif args.command == "report":
         result, code = cmd_report(run_dir)
+    elif args.command == "evidence":
+        from pack_context import parse_pages
+        result, code = cmd_evidence(
+            run_dir, section_ids=[s.strip() for s in args.sections.split(",") if s.strip()] or None,
+            pages=parse_pages(args.pages), request_id=args.request_id, cursor=args.cursor)
+    elif args.command == "finish":
+        result, code = cmd_finish(run_dir, semantic_reviewed=args.semantic_reviewed)
     else:
         result, code = cmd_review(run_dir)
     print(json.dumps(result, ensure_ascii=False, default=str))

@@ -67,3 +67,21 @@ or validate only `report_claims.json` while ignoring `analysis.md`.
 
 Correct: select one document period, keep evidence identities immutable, and bind delivered
 Markdown text, display values and pages to the resolved source chain.
+
+## 8. Delivery and model round trips
+
+- Use `run_pipeline evidence` for extraction plus the first bounded evidence packet. Cursor
+  continuation must not extract again. `compute` returns an analysis packet; unfiltered analyze
+  reads the ledgers while explicit page/section selection reads source evidence.
+- Machine `verified` is not a semantic-review receipt. After semantic review, `finish
+  --semantic-reviewed` independently validates current Markdown and atomically snapshots the
+  artifact hashes in completion.json. Any subsequent change invalidates delivery.
+- An opt-in financial Runs API request owns a unique host-selected directory and source URL.
+  The host verifies the receipt with its installed fixed verifier and reads the report directly.
+  No accepted receipt means failure, even if the model returns a convincing summary.
+- Delivery terminal states are absorbing. Do not wait for model transcription or resource
+  cleanup to expose a verified result, but keep worker concurrency accounting until actual exit.
+- Verify the loaded module path before deploying Hermes changes: the installed site-packages
+  copy may differ from the adjacent source checkout. Test the actual imported adapter.
+- Receipt hashes detect stale/changed artifacts; they are not an authentication signature or
+  proof of semantic correctness. Protected execution still requires host ownership/permissions.

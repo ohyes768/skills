@@ -20,7 +20,7 @@ dev = [
 package = false
 
 [tool.pytest.ini_options]
-pythonpath = ["scripts"]
+pythonpath = ["scripts", "integrations/hermes"]
 testpaths = ["tests"]
 
 [tool.ruff]

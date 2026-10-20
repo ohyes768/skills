@@ -242,9 +242,29 @@ Semantic review remains required.
 
 ## context_usage.jsonl — pack_context.py (one JSON object per line, append-only)
 
+Unfiltered `stage=analyze` packets read financials/metrics/checks when those ledgers exist;
+explicit page/section filters continue to read original evidence. `compute` returns the first
+bounded analysis packet directly. Cursor continuation uses the same stage and filters.
+
 `request_id`, `stage` (locate/map/analyze/review), `packet_sha256`, `evidence_ids`,
 `character_count`, `byte_count`, `cursor` (null for first page of a packet). Re-reads append new
 lines; total delivered characters accumulate — repeats are never subtracted.
+
+## completion.json — run_pipeline.py finish
+
+Explicit delivery receipt after the agent has completed semantic review and the fixed report
+validator has rechecked current files. `report` returning `verified` alone is not delivery.
+
+Fields: `schema_version=1`, `run_id` (directory name), `terminal=true`,
+`quality_status=verified`, `semantic_reviewed=true`, `artifacts_sha256` (file-name/hash map).
+The map includes the report, its inputs, facts, metrics, document, manifest and evidence files;
+source metadata/PDF and fact inputs are included when present. This is a consistency receipt,
+not a cryptographic signature or proof of semantic correctness.
+
+The host uses the installed fixed `completion.py` verifier, requires the request's source URL,
+checks hashes and independently validates actual Markdown/claims before accepting the body.
+Changes invalidate the receipt. The host reads analysis.md directly and does not require the
+model to reproduce it. `finish` success is the last tool action in an analysis run.
 
 ## model_usage.json — optional
 

@@ -238,6 +238,17 @@ def build_packet(
     if stage == "locate":
         items, evidence_ids = _locate_items(run_dir, section_ids, pages)
         blocks: list[dict] = []
+    elif (stage == "analyze" and not section_ids and not pages
+          and (run_dir / "financials.json").exists() and (run_dir / "metrics.json").exists()):
+        # Analysis consumes the ledger, not the same original PDF excerpts again.
+        facts = read_json(run_dir / "financials.json")
+        metrics = read_json(run_dir / "metrics.json")
+        blocks = [{"kind": "fact", **fact} for fact in facts["facts"]]
+        blocks += [{"kind": "metric", **metric} for metric in metrics["metrics"]]
+        blocks += [{"kind": "check", **check} for check in metrics.get("validation", [])]
+        evidence_ids = sorted({eid for fact in facts["facts"]
+                               for eid in fact.get("evidence_ids", [])})
+        items = []
     else:
         blocks, evidence_ids = _build_blocks(run_dir, section_ids, pages)
         items = blocks[start : start]
