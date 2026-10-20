@@ -55,7 +55,7 @@ def _validate_pdf_file(path: Path) -> bool:
         return False
 
 
-def _read_cached(run_dir: Path) -> dict | None:
+def _read_cached(run_dir: Path, requested_url: str) -> dict | None:
     source_json = run_dir / "source.json"
     source_pdf = run_dir / "source.pdf"
     if not (source_json.exists() and source_pdf.exists()):
@@ -63,6 +63,8 @@ def _read_cached(run_dir: Path) -> dict | None:
     try:
         record = json.loads(source_json.read_text(encoding="utf-8"))
     except (OSError, ValueError):
+        return None
+    if record.get("requested_url") != requested_url:
         return None
     if not _validate_pdf_file(source_pdf):
         return None
@@ -120,7 +122,7 @@ def fetch_pdf(
     run_dir.mkdir(parents=True, exist_ok=True)
 
     if not refresh:
-        cached = _read_cached(run_dir)
+        cached = _read_cached(run_dir, url)
         if cached is not None:
             return {**cached, "reused": True}
 

@@ -4,6 +4,7 @@ import json
 from decimal import Decimal
 
 import pytest
+import report_values
 import validate_report
 from test_validate_report import make_claim, prepare_run
 
@@ -48,7 +49,7 @@ def test_extra_unclaimed_numeric_statement_rejected(run_dir):
                                             ("FCF 10000 yuan", "100"),
                                             ("Growth 200%", ".2")])
 def test_number_scale_errors_are_rejected(text, value):
-    assert not validate_report._text_contains_value(text, Decimal(value))
+    assert not report_values.text_contains_value(text, Decimal(value))
 
 
 @pytest.mark.parametrize(("text", "value"), [("Growth 20%", ".2"),
@@ -58,7 +59,7 @@ def test_number_scale_errors_are_rejected(text, value):
                                             ("现金 1.23 亿元", "123456789"),
                                             ("现金比率 103.5%", "1.0350251")])
 def test_explicit_units_and_display_precision_are_supported(text, value):
-    assert validate_report._text_contains_value(text, Decimal(value))
+    assert report_values.text_contains_value(text, Decimal(value))
 
 
 def test_fact_value_is_checked_not_only_its_id(run_dir):

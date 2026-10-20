@@ -238,3 +238,26 @@ def test_cli_injection_point_for_tests(run_dir, monkeypatch):
     code = fetch_pdf.main(["--url", "https://example.com/r.pdf", "--output-dir", str(run_dir)])
     assert code == 0
     assert (run_dir / "source.pdf").exists()
+
+
+def test_cached_record_from_different_url_not_reused(run_dir):
+    data = build_pdf_bytes()
+    fetch_pdf.fetch_pdf("https://example.com/a.pdf", run_dir, client=make_client(lambda r: pdf_response(data)))
+    counter = RequestCounter(lambda r: pdf_response(build_pdf_bytes("other doc")))
+    result = fetch_pdf.fetch_pdf("https://example.com/b.pdf", run_dir, client=make_client(counter))
+    assert result["reused"] is False
+    assert counter.count == 1
+    record = json.loads((run_dir / "source.json").read_text(encoding="utf-8"))
+    assert record["requested_url"] == "https://example.com/b.pdf"
+
+
+def test_legacy_cache_without_requested_url_not_reused(run_dir):
+    data = build_pdf_bytes()
+    (run_dir / "source.pdf").write_bytes(data)
+    (run_dir / "source.json").write_text(
+        json.dumps({"sha256": hashlib.sha256(data).hexdigest()}), encoding="utf-8"
+    )
+    counter = RequestCounter(lambda r: pdf_response(data))
+    result = fetch_pdf.fetch_pdf("https://example.com/a.pdf", run_dir, client=make_client(counter))
+    assert result["reused"] is False
+    assert counter.count == 1

@@ -1,20 +1,39 @@
-"""报告显示值解析：百分号、金额单位及显示精度均参与数值匹配。"""
+"""报告显示值解析：百分号、金额单位及显示精度均参与数值匹配。
+
+数字 token 分型：金额/比率按单位缩放匹配；方向词（下降/亏损）建模符号；
+「个百分点」按比率×100 匹配；年份+期间后缀、页码引用为非财务 token。
+"""
 
 import re
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 NUMBER_RE = re.compile(
     r"(?<![\d.])(?P<number>[+-]?\d[\d,]*(?:\.\d+)?)\s*"
-    r"(?P<unit>亿元|万元|千元|亿|万|元|yuan|[%％])?", re.IGNORECASE
+    r"(?P<unit>亿元|万元|千元|亿|万|元|yuan|[%％])?(?![A-Za-z])", re.IGNORECASE
 )
 SCALES = {"亿元": Decimal("1e8"), "亿": Decimal("1e8"),
           "万元": Decimal("1e4"), "万": Decimal("1e4"),
           "千元": Decimal("1e3"), "元": Decimal(1), "yuan": Decimal(1),
           "%": Decimal("0.01"), "％": Decimal("0.01")}
 
+_DECLINE_RE = re.compile(r"(?:下降|下跌|下滑|回落|减少|降幅|亏损)[为达约]?\s*$")
+_PERIOD_SUFFIX_RE = re.compile(
+    r"\s*(?:年|年上半年|年下半年|上半年|下半年|Q[1-4]|H[1-2]|第[一二三四]季度)", re.IGNORECASE
+)
+_PERCENT_POINT_SUFFIX_RE = re.compile(r"\s*个?\s*(?:百分点|pct|pp)(?![a-z])", re.IGNORECASE)
+_CITATION_RE = re.compile(r"(?:PDF\s*第|p\.)\s*(\d+(?:\s*[-–—、,，]\s*\d+)*)", re.IGNORECASE)
+_RANGE_PAGE_TAIL_RE = re.compile(
+    r"(?:第|p\.\s*)\d+(?:\s*[-–—、,，]\s*\d+)*\s*[-–—、,，]$", re.IGNORECASE
+)
+
 
 def matches_number(match, value: Decimal, display_unit: str | None = None,
-                   value_kind: str | None = None) -> bool:
+                   value_kind: str | None = None, direction: str | None = None) -> bool:
+    if direction == "decline":
+        if value > 0:
+            return False
+        if value < 0:
+            value = -value
     raw = Decimal(match.group("number").replace(",", ""))
     unit = match.group("unit") or display_unit
     if value_kind == "amount" and unit in ("%", "％"):
@@ -36,9 +55,44 @@ def matches_number(match, value: Decimal, display_unit: str | None = None,
         return False
 
 
+def decline_context(text: str, match) -> bool:
+    prefix = text[max(0, match.start() - 8):match.start()]
+    return bool(_DECLINE_RE.search(prefix))
+
+
+def period_year_suffix(text: str, match) -> bool:
+    suffix = text[match.end():match.end() + 8]
+    return bool(_PERIOD_SUFFIX_RE.match(suffix))
+
+
+def percentage_point_suffix(text: str, match) -> bool:
+    suffix = text[match.end():match.end() + 8]
+    return bool(_PERCENT_POINT_SUFFIX_RE.match(suffix))
+
+
+def in_range_citation(text: str, match) -> bool:
+    """数字位于「第56-57页」类范围页码的非首位置。"""
+    prefix = text[max(0, match.start() - 24):match.start()]
+    return bool(_RANGE_PAGE_TAIL_RE.search(prefix))
+
+
+def extract_cited_pages(text: str) -> set[int]:
+    """提取正文引用页码，范围「第56-57页」展开为区间，顿号列举逐项保留。"""
+    pages: set[int] = set()
+    for match in _CITATION_RE.finditer(text):
+        for part in re.split(r"[、,，]", match.group(1)):
+            nums = [int(n) for n in re.findall(r"\d+", part)]
+            if len(nums) == 2 and 0 < nums[1] - nums[0] <= 200:
+                pages.update(range(nums[0], nums[1] + 1))
+            else:
+                pages.update(nums)
+    return pages
+
+
 def text_contains_value(text: str, value: Decimal, display_unit: str | None = None,
                         value_kind: str | None = None) -> bool:
-    return any(matches_number(match, value, display_unit, value_kind)
+    return any(matches_number(match, value, display_unit, value_kind,
+                              direction="decline" if decline_context(text, match) else None)
                for match in NUMBER_RE.finditer(text))
 
 

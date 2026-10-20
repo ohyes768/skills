@@ -85,9 +85,19 @@ Image crops are `complete: false` until visually reviewed; context packets conta
 (absolute image path), `requires_visual_review: true`, IDs and pages, never decoded PNG text.
 The initial `locate` packet works before any extraction manifest exists.
 
-## financials.json — written by agent, validated by financial_schema.py
+## fact_inputs.json — written by agent, consumed by build_financials.py
 
-Top level: `schema_version`, `document_sha256`, `facts` (list).
+Compact fact input; see [fact-inputs-example.md](fact-inputs-example.md) for the full contract.
+Each entry carries only judgment fields: `metric` (contracted name or registered alias),
+`raw_label`, `raw_value`, `raw_unit`, `period_ref` (`current`/`prior`/`closing`/`opening`),
+optional `scope`/`basis`/`aggregation`/`review_status`/`note`, and an `evidence` object
+(`evidence_id` plus `locator` `{row, col}` for tables or `{line}` for text).
+Attribution is never an input — the metric contract fixes it. Undisclosed tokens
+(`—`/`–`/`-`/`--`) produce `value: null` with a program-supplied `missing_reason`.
+
+## financials.json — written by build_financials.py, validated by financial_schema.py
+
+Top level: `schema_version`, `document_sha256`, `currency`, `facts` (list).
 
 Each fact:
 
@@ -148,7 +158,37 @@ Each entry: `check_id`, `status` (passed / failed / not_applicable), `input_fact
 (decimal string \| null), `tolerance` (decimal string \| null), `issues`. Extraction conflicts are
 reported here as data problems, independent of financial risk conclusions.
 
-## report_claims.json — written by agent
+## mapping_validation.json — build_financials.py
+
+`schema_version`, `document_sha256`, `input_facts`, `mapped_facts`, `issues`, `warnings`.
+Each issue: `input_index` (position in fact_inputs.json), `error` (with row/col locator or
+unknown-label detail), optional `field`/`evidence_id`/`severity`. Any issue blocks
+`financials.json`; the agent fixes `fact_inputs.json` per `input_index` and reruns.
+
+## report_inputs.json — written by agent, consumed by render_report.py
+
+Structured rendering input; see [report-inputs-example.md](report-inputs-example.md).
+Sections carry `anchor`, `statements` (template + bindings + claim_type), `paragraphs`
+(qualitative free text — static numbers limited to years and page citations), and optional
+`table` (display_unit, columns, rows of label + bound cells). Placeholders `{name:format}`
+bind one `fact_id` or `metric_id` each; formats cover amount scales, percent precision,
+percentage points, and `decline_*` variants (positive value with a decline format is a
+render-time contract violation).
+
+## render_issues.json — render_report.py
+
+`schema_version`, `issues` — each `{error, anchor?, ...}`. Written instead of deliverables
+when rendering is blocked; fix `report_inputs.json` and rerun.
+
+## run_state.json — run_pipeline.py
+
+Diagnostic only, not a security authority. `schema_version`, `stage`, `repairs`
+(per-stage `count` of distinct-input submissions), `input_sha256` (idempotency keys),
+`quality_status` (`verified` / `partial` / `maintenance_required`). Initial submission plus
+at most two repairs per stage; identical input reruns never consume budget; restarts never
+reset it. Protected-mode budgets and final verification belong to the host.
+
+## report_claims.json — written by render_report.py
 
 Each entry: `claim_id`, `report_anchor` (exact Markdown heading in analysis.md), `text`,
 `fact_ids` (list), `metric_ids` (list), `evidence_ids` (list), `source_pages` (list[int]),
@@ -164,9 +204,12 @@ must use those pages. Use separate `（PDF 第 N 页）` citations for multiple 
 Amounts are compared in base units with explicit 元/千元/万元/亿元 or yuan scaling;
 percentages divide by 100 and cannot represent amounts. Display rounding uses the displayed
 decimal precision (ROUND_HALF_UP). Optional `display_unit` supplies a shared table-row unit.
-Years are exempt only as actual `YYYY年` dates in the supporting facts' periods. Machine
-checks bind values and references; they do not verify that a sentence names the correct metric
-or establishes a causal relationship. Semantic review remains required.
+Calendar years in the supporting facts' periods are exempt with period suffixes
+(`2026年`, `2026上半年`, `2026 H1`); decline wording (`下降 27.80%`) models a negative value;
+`N 个百分点` matches ratio changes at ×100; product-style tokens (`3D`) and range page
+citations (`第56-57页`) are not numbers. Machine checks bind values and references; they do
+not verify that a sentence names the correct metric or establishes a causal relationship.
+Semantic review remains required.
 
 ## report_validation.json — validate_report.py
 

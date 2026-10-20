@@ -30,6 +30,41 @@ def _decode_cursor(cursor: str | None) -> int:
         raise ValueError(f"invalid cursor: {cursor!r}") from exc
 
 
+def parse_pages(spec: str) -> list[int] | None:
+    """解析「1,3,5-7」形式的页码；空白返回 None（不筛选）。"""
+    if not spec.strip():
+        return None
+    pages: set[int] = set()
+    for part in spec.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        start_text, sep, end_text = part.partition("-")
+        try:
+            start = int(start_text)
+            end = int(end_text) if sep else start
+        except ValueError as exc:
+            raise ValueError(f"invalid page spec: {part!r} in {spec!r}") from exc
+        if start < 1 or end < start:
+            raise ValueError(f"invalid page range: {part!r} in {spec!r}")
+        pages.update(range(start, end + 1))
+    return sorted(pages)
+
+
+def _document_page_count(run_dir: Path) -> int:
+    document_path = run_dir / "document.json"
+    if document_path.exists():
+        count = read_json(document_path).get("page_count")
+        if isinstance(count, int) and count > 0:
+            return count
+    manifest_path = run_dir / "extraction_manifest.json"
+    if manifest_path.exists():
+        count = read_json(manifest_path).get("page_count")
+        if isinstance(count, int) and count > 0:
+            return count
+    raise ValueError("page bounds unknown: document.json or extraction_manifest.json with page_count required")
+
+
 def _sorted_evidences(run_dir: Path, section_ids: list[str] | None, pages: list[int] | None):
     manifest = read_json(run_dir / "extraction_manifest.json")
     evidences = manifest.get("evidences", [])
@@ -193,6 +228,11 @@ def build_packet(
     if stage not in STAGES:
         raise ValueError(f"unknown stage: {stage}")
     run_dir = Path(run_dir)
+    if pages:
+        page_count = _document_page_count(run_dir)
+        bad = [page for page in pages if not 1 <= page <= page_count]
+        if bad:
+            raise ValueError(f"pages out of range 1..{page_count}: {bad}")
     start = _decode_cursor(cursor)
 
     if stage == "locate":
@@ -283,7 +323,7 @@ def main(argv: list[str] | None = None) -> int:
 
     run_dir = Path(args.run_dir)
     section_ids = [s.strip() for s in args.sections.split(",") if s.strip()] or None
-    pages = [int(p) for p in args.pages.split(",") if p.strip()] or None
+    pages = parse_pages(args.pages)
 
     try:
         result = build_packet(

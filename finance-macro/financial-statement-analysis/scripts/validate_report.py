@@ -9,8 +9,16 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from artifacts import emit_status, read_json, write_json
-from report_values import NUMBER_RE, matches_number, plain_text
-from report_values import text_contains_value as _text_contains_value
+from report_values import (
+    NUMBER_RE,
+    decline_context,
+    extract_cited_pages,
+    in_range_citation,
+    matches_number,
+    percentage_point_suffix,
+    period_year_suffix,
+    plain_text,
+)
 
 _CLAIM_TYPES = {"fact", "calculation", "inference", "company_explanation"}
 _ISSUE_KEYS = (
@@ -18,6 +26,14 @@ _ISSUE_KEYS = (
     "value_mismatches", "missing_evidence_claims", "body_mismatches", "unclaimed_numeric_lines",
     "invalid_support", "page_mismatches",
 )
+
+
+def _number_explained(text: str, number, value: Decimal, display_unit: str | None,
+                      kind: str) -> bool:
+    pp = percentage_point_suffix(text, number)
+    adjusted = value * 100 if pp and kind == "ratio" else value
+    direction = "decline" if decline_context(text, number) else None
+    return matches_number(number, adjusted, display_unit, kind, direction=direction)
 
 
 def _section(body: str, anchor: str) -> str | None:
@@ -77,9 +93,12 @@ def _body_coverage(body: str, claims: list[dict], document: dict) -> list[str]:
                 remaining = ""
                 allowed_pages.update(pages)
         def remove_citation(match, allowed=allowed_pages):
-            page = int(match.group(1))
-            return "" if page in allowed else match.group(0)
-        remaining = re.sub(r"PDF第(\d+)页", remove_citation, remaining)
+            nums = [int(n) for n in re.findall(r"\d+", match.group(1))]
+            return "" if all(page in allowed for page in nums) else match.group(0)
+        remaining = re.sub(
+            r"(?:PDF\s*第\s*|p\.\s*)(\d+(?:\s*[-–—、,，]\s*\d+)*)\s*页?",
+            remove_citation, remaining, flags=re.IGNORECASE,
+        )
         if remaining and NUMBER_RE.search(remaining):
             issues.append(line[:200])
     return issues
@@ -175,8 +194,7 @@ def validate_report(run_dir: Path) -> dict:
                 result["out_of_range_pages"].append({"claim_id": cid, "page": page})
         if set(claim.get("source_pages", [])) != expected_pages:
             result["page_mismatches"].append(cid)
-        cited_pages = {int(match[1]) for match in re.finditer(
-            r"(?:PDF\s*第\s*|p\.\s*)(\d+)", text, re.IGNORECASE)}
+        cited_pages = extract_cited_pages(text)
         if not cited_pages <= expected_pages:
             result["page_mismatches"].append(cid)
         if not eids or (claim_type == "calculation" and not mids):
@@ -185,20 +203,24 @@ def validate_report(run_dir: Path) -> dict:
             result["missing_evidence_claims"].append(cid)
 
         display_unit = claim.get("display_unit")
-        if any(not _text_contains_value(text, value, display_unit, kind)
+        if any(not any(_number_explained(text, number, value, display_unit, kind)
+                       for number in NUMBER_RE.finditer(text))
                for value, kind in required_values):
             result["value_mismatches"].append({"claim_id": cid, "report_text_fragment": text[:100]})
         if claim_type in _CLAIM_TYPES:
             for number in NUMBER_RE.finditer(text):
                 literal = number.group("number").replace(",", "")
                 prefix = text[max(0, number.start() - 8):number.start()]
-                suffix = text[number.end():]
-                is_year = literal in allowed_years and not number.group("unit") and re.match(r"\s*年", suffix)
+                is_year = (literal in allowed_years and not number.group("unit")
+                           and period_year_suffix(text, number))
                 if is_year or re.search(r"(?:PDF\s*第|p\.)\s*$", prefix):
                     continue
-                if not any(matches_number(number, value, display_unit, kind)
-                           for value, kind in all_values):
-                    result["value_mismatches"].append({"claim_id": cid, "unbound_number": literal})
+                if in_range_citation(text, number):
+                    continue
+                if any(_number_explained(text, number, value, display_unit, kind)
+                       for value, kind in all_values):
+                    continue
+                result["value_mismatches"].append({"claim_id": cid, "unbound_number": literal})
 
     result["unclaimed_numeric_lines"] = _body_coverage(body, claims, document)
     result["passed"] = not any(result[key] for key in _ISSUE_KEYS)

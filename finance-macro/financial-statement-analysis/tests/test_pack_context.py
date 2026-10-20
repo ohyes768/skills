@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pack_context
+import pytest
 
 
 def write_json_file(path: Path, value) -> None:
@@ -242,3 +243,23 @@ def test_cli_outputs_single_packet_line(run_dir, capsys):
     packet = json.loads(lines[0])
     assert packet["stage"] == "analyze"
     assert (run_dir / "context_usage.jsonl").exists()
+
+
+def test_parse_pages_accepts_ranges():
+    assert pack_context.parse_pages("1-15") == list(range(1, 16))
+    assert pack_context.parse_pages("1,3,5-7") == [1, 3, 5, 6, 7]
+    assert pack_context.parse_pages("") is None
+    assert pack_context.parse_pages(" 10 ") == [10]
+    assert pack_context.parse_pages("9-10") == [9, 10]
+
+
+@pytest.mark.parametrize("spec", ["5-1", "0", "abc", "1-", "-3", "1-2-3", "1.5"])
+def test_parse_pages_rejects_invalid(spec):
+    with pytest.raises(ValueError):
+        pack_context.parse_pages(spec)
+
+
+def test_pages_beyond_document_rejected(run_dir):
+    prepare_pack_run(run_dir)
+    with pytest.raises(ValueError, match="17"):
+        pack_context.build_packet(run_dir, stage="map", request_id="r1", pages=[18])

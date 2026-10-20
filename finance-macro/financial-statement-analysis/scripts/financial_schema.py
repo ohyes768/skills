@@ -39,6 +39,102 @@ _FACT_FIELDS = {
 _EVIDENCE_ID_RE = re.compile(r"^ev-\d{4,}$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
+# 指标合同：模型只提交规范 metric 名，归属与期间类型由合同固定，不可在输入里改写。
+# monetary_funds（货币资金）与 cash_equivalents（现金及现金等价物）含义不同，别名绝不互通。
+METRIC_CONTRACTS: dict[str, dict] = {
+    "revenue": {"period_kind": "duration", "attribution": "group",
+                "aliases": ("operating_revenue", "营业总收入", "营业收入")},
+    "cost_of_sales": {"period_kind": "duration", "attribution": "group",
+                      "aliases": ("cost_of_revenue", "cost_of_goods_sold", "营业成本")},
+    "gross_profit": {"period_kind": "duration", "attribution": "group",
+                     "aliases": ("毛利润",)},
+    "selling_expenses": {"period_kind": "duration", "attribution": "group",
+                         "aliases": ("销售费用",)},
+    "admin_expenses": {"period_kind": "duration", "attribution": "group",
+                       "aliases": ("管理费用",)},
+    "finance_costs": {"period_kind": "duration", "attribution": "group",
+                      "aliases": ("财务费用",)},
+    "r_and_d_expense": {"period_kind": "duration", "attribution": "group",
+                        "aliases": ("研发费用", "research_and_development_expense")},
+    "operating_profit": {"period_kind": "duration", "attribution": "group",
+                         "aliases": ("营业利润",)},
+    "net_profit_before_tax": {"period_kind": "duration", "attribution": "group",
+                              "aliases": ("利润总额", "total_profit")},
+    "income_tax_expense": {"period_kind": "duration", "attribution": "group",
+                           "aliases": ("所得税费用",)},
+    "net_profit_group": {"period_kind": "duration", "attribution": "group",
+                         "aliases": ("净利润", "net_profit")},
+    "net_profit_owners": {"period_kind": "duration", "attribution": "owners",
+                          "aliases": ("归属于母公司股东的净利润", "归属于母公司所有者的净利润",
+                                      "归母净利润", "net_profit_attributable_to_owners")},
+    "cfo": {"period_kind": "duration", "attribution": "group",
+            "aliases": ("经营活动产生的现金流量净额", "net_cash_flow_from_operating_activities")},
+    "cfi": {"period_kind": "duration", "attribution": "group",
+            "aliases": ("投资活动产生的现金流量净额", "net_cash_flow_from_investing_activities")},
+    "cff": {"period_kind": "duration", "attribution": "group",
+            "aliases": ("筹资活动产生的现金流量净额", "net_cash_flow_from_financing_activities")},
+    "fx_effect_on_cash": {"period_kind": "duration", "attribution": "group",
+                          "aliases": ("汇率变动对现金及现金等价物的影响",)},
+    "capex_purchase_fixed_assets": {"period_kind": "duration", "attribution": "group",
+                                    "aliases": ("购建固定资产、无形资产和其他长期资产支付的现金",)},
+    "total_assets": {"period_kind": "instant", "attribution": "not_applicable",
+                     "aliases": ("资产总计", "资产总额")},
+    "total_liabilities": {"period_kind": "instant", "attribution": "not_applicable",
+                          "aliases": ("负债合计", "负债总额")},
+    "total_equity": {"period_kind": "instant", "attribution": "not_applicable",
+                     "aliases": ("所有者权益合计", "股东权益合计", "equity")},
+    "total_equity_owners": {"period_kind": "instant", "attribution": "owners",
+                            "aliases": ("归属于母公司股东权益合计", "归属于母公司所有者权益合计", "归母净资产")},
+    "monetary_funds": {"period_kind": "instant", "attribution": "not_applicable",
+                       "aliases": ("货币资金",)},
+    "cash_equivalents": {"period_kind": "instant", "attribution": "not_applicable",
+                         "aliases": ("现金及现金等价物余额", "期末现金及现金等价物余额")},
+    "accounts_receivable": {"period_kind": "instant", "attribution": "not_applicable",
+                            "aliases": ("应收账款",)},
+    "notes_receivable": {"period_kind": "instant", "attribution": "not_applicable",
+                         "aliases": ("应收票据",)},
+    "inventory": {"period_kind": "instant", "attribution": "not_applicable",
+                  "aliases": ("存货",)},
+    "fixed_assets": {"period_kind": "instant", "attribution": "not_applicable",
+                     "aliases": ("固定资产",)},
+    "goodwill": {"period_kind": "instant", "attribution": "not_applicable",
+                 "aliases": ("商誉",)},
+    "total_current_assets": {"period_kind": "instant", "attribution": "not_applicable",
+                             "aliases": ("流动资产合计",)},
+    "total_current_liabilities": {"period_kind": "instant", "attribution": "not_applicable",
+                                  "aliases": ("流动负债合计",)},
+    "short_term_borrowings": {"period_kind": "instant", "attribution": "not_applicable",
+                              "aliases": ("短期借款",)},
+    "long_term_borrowings": {"period_kind": "instant", "attribution": "not_applicable",
+                             "aliases": ("长期借款",)},
+    "contract_liabilities": {"period_kind": "instant", "attribution": "not_applicable",
+                             "aliases": ("合同负债",)},
+}
+
+_ALIAS_TABLE: dict[str, str] = {}
+for _metric, _contract in METRIC_CONTRACTS.items():
+    for _alias in (_metric, *_contract["aliases"]):
+        _ALIAS_TABLE.setdefault(_alias.lower(), _metric)
+
+
+def metric_aliases() -> dict[str, list[str]]:
+    """公开别名表副本：规范 metric 名 → 接受的标签列表（含自身）。"""
+    return {
+        metric: [metric, *contract["aliases"]]
+        for metric, contract in METRIC_CONTRACTS.items()
+    }
+
+
+def resolve_metric_label(metric: str | None, raw_label: str | None) -> str | None:
+    """先按提交的 metric 名解析，再退回 PDF 原文标签；都未注册则 None。"""
+    for candidate in (metric, raw_label):
+        if not candidate:
+            continue
+        resolved = _ALIAS_TABLE.get(candidate.strip().lower())
+        if resolved:
+            return resolved
+    return None
+
 
 def parse_amount(raw_value: str | None, raw_unit: str | None) -> Decimal | None:
     """把报表原始字符串转为基本单位（元）的 Decimal；缺失记号返回 None。
