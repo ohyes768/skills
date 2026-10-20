@@ -40,6 +40,11 @@
 
 ## 回滚点
 
+2026-10-20 用户撤回宿主方案：撤掉已安装 Hermes 补丁及客户端专用模式；删除接入脚本、
+finish/completion 机制。仅保留 Skill 内的固定步骤合并，并将语义复核前置到最终 report。
+成功后停止工具；原客户端要求全文时通过 report --include-report 一次交付已校验报告。
+以下宿主接入记录为已撤回方案的历史，不代表当前设计。
+
 2026-10-20 后续：完成交付收尾与固定步骤合并，详见 [delivery-plan.md](delivery-plan.md)。
 新增 finish 交付凭据、宿主独立校验与终态、evidence 合并提取读取、compute 直接返回分析包。
 NAS 已安装实际运行环境，空闲时重启 profile 网关并检查能力开关；调用端已接入。

@@ -1,4 +1,4 @@
-"""Explicit acceptance receipt and fewer deterministic tool round trips."""
+"""Skill-only stopping point and fewer deterministic tool round trips."""
 
 import json
 
@@ -16,48 +16,39 @@ def rendered(run_dir):
     assert run_pipeline.cmd_report(run_dir)[1] == 0
 
 
-def test_finish_requires_semantic_review(run_dir):
+def test_report_success_is_last_tool_step(run_dir):
     rendered(run_dir)
-    result, code = run_pipeline.cmd_finish(run_dir, semantic_reviewed=False)
-    assert code != 0
-    assert result["terminal"] is False
-    assert not (run_dir / "completion.json").exists()
-
-
-def test_finish_delivers_without_model_rewriting_report(run_dir):
-    from completion import verify_completion
-
-    rendered(run_dir)
-    result, code = run_pipeline.cmd_finish(run_dir, semantic_reviewed=True)
+    result, code = run_pipeline.cmd_report(run_dir)
     assert code == 0
     assert result["terminal"] is True
     assert result["next_action"] is None
-    assert "analysis.md" not in result.get("output", "")
-    body = verify_completion(run_dir, expected_url="https://example.com/report.pdf")
-    assert body == (run_dir / "analysis.md").read_text(encoding="utf-8")
-    with pytest.raises(ValueError, match="URL"):
-        verify_completion(run_dir, expected_url="https://example.com/other.pdf")
-
-
-@pytest.mark.parametrize("name", ["analysis.md", "financials.json", "report_inputs.json"])
-def test_host_rejects_changed_artifact_after_finish(run_dir, name):
-    from completion import verify_completion
-
-    rendered(run_dir)
-    assert run_pipeline.cmd_finish(run_dir, semantic_reviewed=True)[1] == 0
-    with (run_dir / name).open("a", encoding="utf-8") as file:
-        file.write(" \n")
-    with pytest.raises(ValueError, match="changed"):
-        verify_completion(run_dir)
-
-
-def test_finish_revalidates_instead_of_trusting_verified_state(run_dir):
-    rendered(run_dir)
-    (run_dir / "analysis.md").write_text("# 篡改\n收入 99 亿元", encoding="utf-8")
-    result, code = run_pipeline.cmd_finish(run_dir, semantic_reviewed=True)
-    assert code == 2
-    assert result["terminal"] is False
+    assert "report_markdown" not in result
     assert not (run_dir / "completion.json").exists()
+
+
+def test_requested_report_body_matches_validated_file(run_dir):
+    rendered(run_dir)
+    result, code = run_pipeline.cmd_report(run_dir, include_report=True)
+    assert code == 0
+    assert result["terminal"] is True
+    assert result["report_markdown"] == (run_dir / "analysis.md").read_text(encoding="utf-8")
+
+
+def test_cli_can_deliver_report_without_another_tool_read(run_dir, capsys):
+    rendered(run_dir)
+    assert run_pipeline.main(["report", "--run-dir", str(run_dir), "--include-report"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["report_markdown"] == (run_dir / "analysis.md").read_text(encoding="utf-8")
+
+
+def test_failed_report_does_not_signal_completion_or_deliver_body(run_dir):
+    rendered(run_dir)
+    write_json_file(run_dir / "report_inputs.json",
+                    revenue_inputs(bindings={"rev": {"fact_id": "missing"}}))
+    result, code = run_pipeline.cmd_report(run_dir, include_report=True)
+    assert code == 2
+    assert result.get("terminal") is not True
+    assert "report_markdown" not in result
 
 
 def test_evidence_extracts_and_returns_first_packet_then_only_reads_cursor(run_dir, monkeypatch):

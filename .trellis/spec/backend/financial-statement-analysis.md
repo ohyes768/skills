@@ -73,15 +73,12 @@ Markdown text, display values and pages to the resolved source chain.
 - Use `run_pipeline evidence` for extraction plus the first bounded evidence packet. Cursor
   continuation must not extract again. `compute` returns an analysis packet; unfiltered analyze
   reads the ledgers while explicit page/section selection reads source evidence.
-- Machine `verified` is not a semantic-review receipt. After semantic review, `finish
-  --semantic-reviewed` independently validates current Markdown and atomically snapshots the
-  artifact hashes in completion.json. Any subsequent change invalidates delivery.
-- An opt-in financial Runs API request owns a unique host-selected directory and source URL.
-  The host verifies the receipt with its installed fixed verifier and reads the report directly.
-  No accepted receipt means failure, even if the model returns a convincing summary.
-- Delivery terminal states are absorbing. Do not wait for model transcription or resource
-  cleanup to expose a verified result, but keep worker concurrency accounting until actual exit.
-- Verify the loaded module path before deploying Hermes changes: the installed site-packages
-  copy may differ from the adjacent source checkout. Test the actual imported adapter.
-- Receipt hashes detect stale/changed artifacts; they are not an authentication signature or
-  proof of semantic correctness. Protected execution still requires host ownership/permissions.
+- Complete semantic review before the final report call. After machine validation succeeds,
+  return `terminal=true` and `next_action=null`; the agent stops tools and gives a final reply.
+  This is a Skill-only hint; it does not force or modify the host lifecycle.
+- Full-Markdown callers use `report --include-report`. Return the exact validated body once
+  in `report_markdown`, avoiding an extra read. Failed reports must not deliver that field.
+- Do not install custom Hermes patches, override iteration-limit summaries, or change the
+  financial client to consume an out-of-band artifact receipt. Hermes remains unmodified.
+- Machine validation does not prove semantic correctness. A stopped agent is distinct from
+  a host process that might still be cleaning up; diagnose actual host failures separately.

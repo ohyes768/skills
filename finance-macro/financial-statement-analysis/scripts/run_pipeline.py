@@ -216,7 +216,7 @@ def cmd_compute(run_dir: Path) -> tuple[dict, int]:
     return result, (0 if not issues else 2)
 
 
-def cmd_report(run_dir: Path) -> tuple[dict, int]:
+def cmd_report(run_dir: Path, *, include_report: bool = False) -> tuple[dict, int]:
     import render_report
     import validate_report
 
@@ -261,15 +261,16 @@ def cmd_report(run_dir: Path) -> tuple[dict, int]:
     if validation["passed"]:
         state["quality_status"] = "verified"
         _save_state(run_dir, state)
-        return ({"status": "ok", "stage": "report",
+        result = {"status": "ok", "stage": "report",
                  "artifacts": {"analysis_md": str(run_dir / "analysis.md"),
                                "report_claims_json": str(run_dir / "report_claims.json"),
                                "report_validation": str(run_dir / "report_validation.json")},
                  "issues": [], "remaining_repairs": remaining,
                  "quality_status": "verified",
-                 "terminal": False,
-                 "next_action": "complete semantic review once, then run finish --semantic-reviewed; "
-                                "do not repeat report or rewrite analysis.md in the final response"}, 0)
+                 "terminal": True, "next_action": None}
+        if include_report:
+            result["report_markdown"] = markdown
+        return result, 0
     state["quality_status"] = "partial"
     _save_state(run_dir, state)
     errors, _total = _examples(validation), sum(_count_issues(validation).values())
@@ -339,33 +340,6 @@ def cmd_evidence(run_dir: Path, *, section_ids: list[str] | None = None,
     return result, (2 if incomplete else 0)
 
 
-def cmd_finish(run_dir: Path, *, semantic_reviewed: bool = False) -> tuple[dict, int]:
-    """The explicit stopping point, after semantic review and fresh machine validation."""
-    from completion import create_completion
-    from validate_report import validate_report
-
-    result = {"stage": "finish", "terminal": False, "status": "repair_needed",
-              "quality_status": "partial", "issues": [], "next_action": None}
-    if not semantic_reviewed:
-        result["issues"] = ["semantic review must be completed before finish --semantic-reviewed"]
-        return result, 2
-    state = _load_state(run_dir)
-    if state.get("quality_status") != "verified":
-        result["issues"] = ["report stage must pass before finish"]
-        return result, 2
-    validation = validate_report(run_dir)
-    if not validation["passed"]:
-        state["quality_status"] = "partial"
-        _save_state(run_dir, state)
-        result["issues"] = _examples(validation)
-        return result, 2
-    create_completion(run_dir)
-    result.update(status="ok", terminal=True, quality_status="verified",
-                  artifacts={"analysis_md": str(run_dir / "analysis.md"),
-                             "completion_json": str(run_dir / "completion.json")})
-    return result, 0
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="财报分析统一阶段入口")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -379,6 +353,8 @@ def main(argv: list[str] | None = None) -> int:
 
     report = subparsers.add_parser("report", help="report_inputs.json → analysis + claims + 校验")
     report.add_argument("--run-dir", required=True)
+    report.add_argument("--include-report", action="store_true",
+                        help="调用方要求完整正文时，同次返回已校验的报告，免去额外读取")
 
     review = subparsers.add_parser("review", help="只读当前状态与修复余量")
     review.add_argument("--run-dir", required=True)
@@ -389,9 +365,6 @@ def main(argv: list[str] | None = None) -> int:
     evidence.add_argument("--pages", default="")
     evidence.add_argument("--request-id", default="evidence")
     evidence.add_argument("--cursor")
-    finish = subparsers.add_parser("finish", help="语义复核后重新校验并签发交付凭据")
-    finish.add_argument("--run-dir", required=True)
-    finish.add_argument("--semantic-reviewed", action="store_true")
 
     args = parser.parse_args(argv)
     run_dir = Path(args.run_dir)
@@ -400,14 +373,12 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "compute":
         result, code = cmd_compute(run_dir)
     elif args.command == "report":
-        result, code = cmd_report(run_dir)
+        result, code = cmd_report(run_dir, include_report=args.include_report)
     elif args.command == "evidence":
         from pack_context import parse_pages
         result, code = cmd_evidence(
             run_dir, section_ids=[s.strip() for s in args.sections.split(",") if s.strip()] or None,
             pages=parse_pages(args.pages), request_id=args.request_id, cursor=args.cursor)
-    elif args.command == "finish":
-        result, code = cmd_finish(run_dir, semantic_reviewed=args.semantic_reviewed)
     else:
         result, code = cmd_review(run_dir)
     print(json.dumps(result, ensure_ascii=False, default=str))

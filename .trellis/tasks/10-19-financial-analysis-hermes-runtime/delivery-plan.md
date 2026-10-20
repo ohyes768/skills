@@ -1,5 +1,24 @@
 # Financial delivery and fewer model round trips
 
+## Current decision: Skill-only (2026-10-20)
+
+The user explicitly revoked the core-patch approach below. Restore the installed Runs API and
+caller to their pre-patch bytes, remove the extra bridge/tests/installer and completion receipt,
+and restart the idle affected profile gateway. Retain evidence+packet and compute+analysis
+combination. Move semantic review before final report; successful report emits terminal=true
+and no next action. Full-Markdown callers use report --include-report and return that exact
+validated body once. No custom host mode, summary override or lifecycle hook remains.
+
+Verify byte-identical core/client restoration, absence of extra module/capability, normal
+Runs API/client regression tests, Skill tests and lint. Preserve unrelated work and historical
+report artifacts. The earlier design/results below are historical and superseded.
+
+Rollback verified: installed API and caller match their pre-patch backups byte for byte;
+the live custom capability and extra gateway module are absent after restarting the idle profile
+gateway. Local Skill tests: 232 passed; NAS: 227 passed/5 optional samples skipped; unmodified
+installed Runs API: 23 passed; original client/analysis: 26 passed. Ruff and Skill metadata pass.
+No live-model financial run or publication performed. Backups remain outside active Skill code.
+
 Approved scope (2026-10-20): finish runs after acceptance and combine deterministic steps.
 Continue the existing runtime task; do not change financial coverage or raise iteration limits.
 

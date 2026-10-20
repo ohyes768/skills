@@ -250,21 +250,18 @@ bounded analysis packet directly. Cursor continuation uses the same stage and fi
 `character_count`, `byte_count`, `cursor` (null for first page of a packet). Re-reads append new
 lines; total delivered characters accumulate — repeats are never subtracted.
 
-## completion.json — run_pipeline.py finish
+## Report completion — Skill-only
 
-Explicit delivery receipt after the agent has completed semantic review and the fixed report
-validator has rechecked current files. `report` returning `verified` alone is not delivery.
+Semantic review happens before the final `report` call. A successful report result contains
+`quality_status=verified`, `terminal=true` and `next_action=null`; the agent must stop tools
+and return its final response. `terminal` is a local workflow hint, not a host lifecycle hook.
+No completion.json, host verifier or custom Runs API request field is required.
 
-Fields: `schema_version=1`, `run_id` (directory name), `terminal=true`,
-`quality_status=verified`, `semantic_reviewed=true`, `artifacts_sha256` (file-name/hash map).
-The map includes the report, its inputs, facts, metrics, document, manifest and evidence files;
-source metadata/PDF and fact inputs are included when present. This is a consistency receipt,
-not a cryptographic signature or proof of semantic correctness.
-
-The host uses the installed fixed `completion.py` verifier, requires the request's source URL,
-checks hashes and independently validates actual Markdown/claims before accepting the body.
-Changes invalidate the receipt. The host reads analysis.md directly and does not require the
-model to reproduce it. `finish` success is the last tool action in an analysis run.
+Default output contains paths and status. If the caller explicitly requests full Markdown,
+use `report --include-report`: only successful validation adds `report_markdown`, exactly the
+rendered analysis.md body, so the final response can deliver it once without another file read.
+Failed reports never include this field or a successful terminal signal. Existing validation
+and repair budgets remain in force; machine checks do not prove semantic correctness.
 
 ## model_usage.json — optional
 

@@ -16,7 +16,7 @@ description: A 股财报 PDF 深度分析。输入一份财报 PDF 链接（年�
 
 ## 执行顺序（统一阶段入口）
 
-日常分析用 `run_pipeline.py`（prepare/evidence/compute/report/finish）。旧提取/读包 CLI 保留兼容，默认不要拆开调用；`review` 仅诊断恢复时用。写入紧凑输入后可在同一次工具调用中执行下一阶段，无需先读回刚写入的文件。
+日常分析用 `run_pipeline.py`（prepare/evidence/compute/report）。旧提取/读包 CLI 保留兼容，默认不要拆开调用；`review` 仅诊断恢复时用。写入紧凑输入后可在同一次工具调用中执行下一阶段，无需先读回刚写入的文件。仅使用 Skill 自带流程，不安装宿主补丁、不改调用端或 Hermes 配置。
 
 1. `run_pipeline.py prepare --url <URL> --run-dir <运行目录>` — 下载、缓存（核对 URL 与哈希，防误复用旧 PDF）、生成 `document.json`/`sections.json`，返回章节定位摘要。`run-dir` 不得指向 Skill 源码目录。
 2. `run_pipeline.py evidence --run-dir <运行目录> --sections <重点章节ID> --request-id map-01` — 一次完成增量提取与首包交付，保留旧 ID 与文件。半年报 `document.json` 的 `period.frequency` 是 `semi_annual`，`compute` 阶段会自动归一化为合同值 `half_year`，无需也不得手工修改 `document.json`。同页多表只提取第一张并记录 `multiple tables` 告警，其余表按[提取规则](references/extraction-rules.md)的"同页双表"规则处理。扫描页缺 OCR 能力时退出 2，把未提取页列入报告"未验证事项"。
@@ -25,10 +25,9 @@ description: A 股财报 PDF 深度分析。输入一份财报 PDF 链接（年�
 4. 写 `fact_inputs.json`（合同与示例见[fact-inputs-example](references/fact-inputs-example.md)）— 只提交指标映射、原文值与证据定位；归属维度、期间结构、`missing_reason` 由程序推导，**缺失不是零**。
 5. `run_pipeline.py compute --run-dir <运行目录>` — 表格 cell/文本 label 逐项核对后构造 `financials.json`，计算指标与勾稽。exit 2 返回 `mapping_validation.json` 定位修复；按 `input_index` 修改 `fact_inputs.json` 重跑。**初检 + 最多两次修复**，预算持久化在 `run_state.json`，相同输入重跑不消耗预算，重启不重置；预算耗尽后须新建运行目录或申请维护。
 6. 分析与回查 — `compute` 已返回 facts/metrics/checks 的 `context.packet`，不要重读原文或整个 JSON。分页用 `pack_context.py --stage analyze --request-id analyze-N --cursor <游标>`；原文定向回查用 `run_pipeline.py evidence --run-dir <运行目录> --pages N-M`，**最多两轮**，仍未解决就保留不确定性。语义复核在交付前完成，不在交付后追加新一轮研究。
-7. 写 `report_inputs.json`（合同与示例见[report-inputs-example](references/report-inputs-example.md)）— 用结构化绑定（fact_id/metric_id + 格式符）表达定量陈述；不要手写正文再补引用。
-8. `run_pipeline.py report --run-dir <运行目录>` — 同源渲染 `analysis.md` 与 `report_claims.json`，随后固定 `validate_report` 独立校验。渲染修复清单见 `render_issues.json`，校验明细见 `report_validation.json`；同样受初检+2 次修复预算约束。
-9. 对已生成的报告完成一次语义复核（口径、期间、结论是否符合已读证据），然后 `run_pipeline.py finish --run-dir <运行目录> --semantic-reviewed` — 重新校验当前报告并生成带文件哈希的 `completion.json`。不能只因机器通过就声称完成语义复核。
-10. **`finish` 返回 `terminal: true` 后立即停止调用工具**，只回复完成状态和报告位置，不重算、不再调用 review、不复述报告全文。宿主独立核验交付凭据后直接读取 `analysis.md`。如果宿主报告没有接收成功，交由维护排查，不重跑已完成分析。
+7. 写 `report_inputs.json`（合同与示例见[report-inputs-example](references/report-inputs-example.md)）— 用结构化绑定（fact_id/metric_id + 格式符）表达定量陈述；不要手写正文再补引用。**在最终 report 命令之前完成一次语义复核**：检查口径、期间与结论是否符合已读证据；需要修正时在这里集中改输入。
+8. `run_pipeline.py report --run-dir <运行目录>` — 同源渲染 `analysis.md` 与 `report_claims.json`，随后固定 `validate_report` 独立校验。渲染修复清单见 `render_issues.json`，校验明细见 `report_validation.json`；同样受初检+2 次修复预算约束。调用方明确要求完整 Markdown（例如财报推送客户端）时，这一次命令加 `--include-report`，成功结果直接提供已校验的 `report_markdown`，不再额外读取报告。
+9. **report 返回 `quality_status: verified`、`terminal: true` 后立即停止调用工具并输出最终回复**：默认只报完成状态和报告位置；调用方要求全文时，直接交付上一步的 `report_markdown` 一次，不重新分析或重写。不得再调用 review、重算、追加附注回查或重复校验。`terminal` 是 Skill 给 agent 的停止提示，不改变宿主运行状态；Hermes 按原有流程处理最终回复。
 
 ## 运行时边界
 
@@ -47,6 +46,6 @@ description: A 股财报 PDF 深度分析。输入一份财报 PDF 链接（年�
 
 ## 完成条件
 
-- `run_pipeline.py finish --semantic-reviewed` 返回 `quality_status: verified`、`terminal: true`；关键数字全部有来源（原文页码或带输入来源的计算）。`report` 的 verified 只表示机器检查通过，尚不等于已完成语义复核和交付。
+- 最终 report 前已完成语义复核，report 返回 `quality_status: verified`、`terminal: true`；关键数字全部有来源（原文页码或带输入来源的计算）。机器校验不能代替语义判断。
 - 风险信号逐项标注：触发 / 已检查未发现 / 资料不足 / 行业不适用；筛查线索不写成造假结论。
 - `context_usage.jsonl` 已记录交付量；实际模型 token 用量只有在宿主提供时才记录，否则留空说明不可获取。
