@@ -94,6 +94,7 @@ def test_report_repair_budget_exhausts(run_dir):
             assert result["quality_status"] == "maintenance_required"
             assert result["remaining_repairs"] == 0
             assert "budget exhausted" in result["issues"][0]
+            assert "run_state.json" in result["policy"]
 
 
 def test_identical_input_rerun_does_not_consume_budget(run_dir):
@@ -184,3 +185,18 @@ def test_state_survives_restart(run_dir):
     assert code == 2
     state = json.loads((run_dir / "run_state.json").read_text(encoding="utf-8"))
     assert state["repairs"]["report"]["count"] == 2
+
+
+def test_compute_feedback_lists_all_issues(run_dir):
+    """16 个映射错误必须一轮全部反馈，而不是每轮只给 5 条导致修复轮数爆炸。"""
+    prepare_build_run(run_dir)
+    facts = [
+        fact_input(metric=f"made_up_{i}", raw_label=f"未知科目{i}")
+        for i in range(16)
+    ]
+    fact_inputs_file(run_dir, facts)
+    result, code = run("compute", run_dir)
+    assert code == 2
+    assert result["error_counts"]["mapping_issues"] == 16
+    assert len(result["issues"]) == 16
+    assert "[input_index=15]" in result["issues"][-1]

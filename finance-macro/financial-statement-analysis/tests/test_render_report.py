@@ -214,3 +214,24 @@ def test_failed_render_writes_no_deliverables(run_dir):
     assert markdown is None and claims is None and issues
     assert not (run_dir / "analysis.md").exists()
     assert not (run_dir / "report_claims.json").exists()
+
+
+def test_render_issues_carry_positions(run_dir):
+    """渲染错误必须指明在哪个 statement / 表格行 / 段落，模型不用猜。"""
+    prepare_render_run(run_dir)
+    inputs = {"schema_version": 1, "sections": [
+        {"anchor": "## 经营分析",
+         "statements": [
+             revenue_statement(),
+             {"template": "客户 {miss:amount_yi} 家。", "bindings": {}},
+         ],
+         "paragraphs": ["第3大客户贡献突出。"],
+         "table": {"columns": ["指标", "数值"], "rows": [
+             {"label": "不存在的事实", "cells": [{"fact_id": "f-9999", "format": "amount_yi"}]},
+         ]},
+        },
+    ]}
+    _, _, issues = render_report.render_report(run_dir, inputs)
+    assert any(i.get("statement_index") == 2 for i in issues)
+    assert any(i.get("paragraph_index") == 1 for i in issues)
+    assert any(i.get("row_label") == "不存在的事实" for i in issues)

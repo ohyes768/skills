@@ -125,6 +125,15 @@ class _Ledger:
         return value, kind, sorted(fact_ids), sorted(metric_ids), pages
 
 
+def _resolve_with_ctx(ledger: _Ledger, binding: dict, ctx: dict):
+    try:
+        return ledger.resolve(binding)
+    except RenderIssue as exc:
+        merged = {**ctx, **exc.issue}
+        error = merged.pop("error", str(exc))
+        raise RenderIssue(error, **merged) from exc
+
+
 def _check_static_text(text: str, context: dict) -> None:
     """自由文字中的静态数字只允许年份与页码引用。"""
     for number in NUMBER_RE.finditer(text):
@@ -139,15 +148,16 @@ def _check_static_text(text: str, context: dict) -> None:
 
 
 def _render_statement(ledger: _Ledger, anchor: str, statement: dict,
-                      claim_no: int) -> tuple[str, dict]:
+                      claim_no: int, statement_index: int) -> tuple[str, dict]:
+    ctx = {"anchor": anchor, "statement_index": statement_index}
     template = statement.get("template")
     if not isinstance(template, str) or not template.strip():
-        raise RenderIssue("statement.template is required", anchor=anchor)
+        raise RenderIssue("statement.template is required", **ctx)
     claim_type = statement.get("claim_type") or "inference"
     if claim_type not in _CLAIM_TYPES:
-        raise RenderIssue(f"illegal claim_type {claim_type!r}", anchor=anchor)
+        raise RenderIssue(f"illegal claim_type {claim_type!r}", **ctx)
     bindings = statement.get("bindings") or {}
-    _check_static_text(_PLACEHOLDER_RE.sub("X", template), {"anchor": anchor})
+    _check_static_text(_PLACEHOLDER_RE.sub("X", template), ctx)
 
     fact_ids: set[str] = set()
     metric_ids: set[str] = set()
@@ -157,10 +167,10 @@ def _render_statement(ledger: _Ledger, anchor: str, statement: dict,
         name, fmt = match.group(1), match.group(2)
         binding = bindings.get(name)
         if binding is None:
-            raise RenderIssue(f"template placeholder {{{name}}} has no binding", anchor=anchor)
+            raise RenderIssue(f"template placeholder {{{name}}} has no binding", **ctx)
         if fmt is None:
-            raise RenderIssue(f"placeholder {{{name}}} needs an explicit format", anchor=anchor)
-        value, kind, fids, mids, pgs = ledger.resolve(binding)
+            raise RenderIssue(f"placeholder {{{name}}} needs an explicit format", **ctx)
+        value, kind, fids, mids, pgs = _resolve_with_ctx(ledger, binding, ctx)
         fact_ids.update(fids)
         metric_ids.update(mids)
         pages.update(pgs)
@@ -168,9 +178,9 @@ def _render_statement(ledger: _Ledger, anchor: str, statement: dict,
 
     text = _PLACEHOLDER_RE.sub(replace, template)
     if claim_type == "calculation" and not metric_ids:
-        raise RenderIssue("calculation statement needs a metric binding", anchor=anchor)
+        raise RenderIssue("calculation statement needs a metric binding", **ctx)
     if claim_type == "fact" and not fact_ids:
-        raise RenderIssue("fact statement needs a fact binding", anchor=anchor)
+        raise RenderIssue("fact statement needs a fact binding", **ctx)
 
     if statement.get("cite_pages", True) and pages:
         citation = "、".join(str(page) for page in sorted(pages))
@@ -195,13 +205,14 @@ def _render_statement(ledger: _Ledger, anchor: str, statement: dict,
 
 
 def _render_table_row(ledger: _Ledger, anchor: str, display_unit: str | None,
-                      row: dict, claim_no: int) -> tuple[str, dict]:
+                      row: dict, claim_no: int, row_index: int) -> tuple[str, dict]:
     label = row.get("label")
     if not isinstance(label, str) or not label.strip():
-        raise RenderIssue("table row label is required", anchor=anchor)
+        raise RenderIssue("table row label is required", anchor=anchor, row_index=row_index)
+    ctx = {"anchor": anchor, "row_index": row_index, "row_label": label}
     cells_spec = row.get("cells")
     if not isinstance(cells_spec, list):
-        raise RenderIssue("table row cells must be a list", anchor=anchor)
+        raise RenderIssue("table row cells must be a list", **ctx)
 
     fact_ids: set[str] = set()
     metric_ids: set[str] = set()
@@ -209,15 +220,15 @@ def _render_table_row(ledger: _Ledger, anchor: str, display_unit: str | None,
     cells: list[str] = []
     for cell in cells_spec:
         if isinstance(cell, str):
-            _check_static_text(cell, {"anchor": anchor, "row": label})
+            _check_static_text(cell, ctx)
             cells.append(cell)
             continue
         if not isinstance(cell, dict):
-            raise RenderIssue("table cell must be a string or a binding", anchor=anchor)
+            raise RenderIssue("table cell must be a string or a binding", **ctx)
         fmt = cell.get("format")
         if not fmt:
-            raise RenderIssue("bound table cell needs a format", anchor=anchor)
-        value, kind, fids, mids, pgs = ledger.resolve(cell)
+            raise RenderIssue("bound table cell needs a format", **ctx)
+        value, kind, fids, mids, pgs = _resolve_with_ctx(ledger, cell, ctx)
         fact_ids.update(fids)
         metric_ids.update(mids)
         pages.update(pgs)
@@ -226,7 +237,7 @@ def _render_table_row(ledger: _Ledger, anchor: str, display_unit: str | None,
     text = "| " + " | ".join([label, *cells]) + " |"
     claim_type = row.get("claim_type") or ("calculation" if metric_ids else "fact")
     if claim_type not in _CLAIM_TYPES:
-        raise RenderIssue(f"illegal claim_type {claim_type!r}", anchor=anchor)
+        raise RenderIssue(f"illegal claim_type {claim_type!r}", **ctx)
     claim = {
         "claim_id": f"c-{claim_no:04d}",
         "report_anchor": anchor,
@@ -268,9 +279,10 @@ def render_report(run_dir: Path, inputs: dict) -> tuple[str | None, list[dict] |
             issues.append({"error": "section.anchor is required"})
             continue
         body_parts.append(anchor)
-        for statement in section.get("statements") or []:
+        for statement_no, statement in enumerate(section.get("statements") or [], start=1):
             try:
-                text, claim = _render_statement(ledger, anchor, statement, claim_no + 1)
+                text, claim = _render_statement(ledger, anchor, statement, claim_no + 1,
+                                                statement_no)
             except RenderIssue as exc:
                 issues.append(exc.issue)
                 continue
@@ -286,18 +298,19 @@ def render_report(run_dir: Path, inputs: dict) -> tuple[str | None, list[dict] |
                 columns = table.get("columns") or []
                 lines = ["| " + " | ".join(str(c) for c in columns) + " |",
                          "| " + " | ".join("---" for _ in columns) + " |"]
-                for row in rows_spec:
+                for row_no, row in enumerate(rows_spec, start=1):
                     text, claim = _render_table_row(
-                        ledger, anchor, table.get("display_unit"), row, claim_no + 1)
+                        ledger, anchor, table.get("display_unit"), row, claim_no + 1, row_no)
                     claim_no += 1
                     lines.append(text)
                     claims.append(claim)
                 body_parts.append("\n".join(lines))
             except RenderIssue as exc:
                 issues.append(exc.issue)
-        for paragraph in section.get("paragraphs") or []:
+        for paragraph_no, paragraph in enumerate(section.get("paragraphs") or [], start=1):
             try:
-                _check_static_text(paragraph, {"anchor": anchor})
+                _check_static_text(paragraph, {"anchor": anchor,
+                                               "paragraph_index": paragraph_no})
             except RenderIssue as exc:
                 issues.append(exc.issue)
                 continue

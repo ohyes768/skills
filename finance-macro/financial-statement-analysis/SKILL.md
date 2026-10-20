@@ -31,7 +31,8 @@ description: A 股财报 PDF 深度分析。输入一份财报 PDF 链接（年�
 ## 运行时边界
 
 - 分析运行不得修改 `scripts/`、`references/`、校验规则、`extraction_manifest.json` 或任何校验结果；事实修复只能改 `fact_inputs.json` / `report_inputs.json`，且必须有原文依据。
-- `run_state.json` 是诊断状态，不是安全权威；受保护模式（agent 凭据不可写 Skill 目录）由宿主实施，仅靠提示词不算完成。
+- **`run_state.json` 是修复预算的唯一账本，禁止删除、清空或改写来重置预算。** 预算耗尽时的合法出路：基于已产出的 `metrics.json` 与证据撰写分析，并在报告开头明确声明"未通过机器校验，quality_status=maintenance_required"，交由调用方决定是否采用；绕过校验输出未验收报告等同于任务失败。
+- 受保护模式（agent 凭据不可写 Skill 目录与运行状态）由宿主实施，仅靠提示词不算完成。
 - `quality_status`：`verified`（报告通过机器校验，发布方视为正式完成）/ `partial`（预算内可修复或数据不足）/ `maintenance_required`（预算耗尽或源码/依赖/校验器故障，属于维护问题，不在分析任务内修程序）。
 - Skill 不直接发钉钉/RSS；发布归调用端，且只把 `verified` 当作完整结果发送，`partial` 不得包装为高质量结论。
 

@@ -19,6 +19,10 @@ from artifacts import read_json, write_json
 STATE_SCHEMA_VERSION = 1
 MAX_REPAIRS = 2
 EXAMPLE_LIMIT = 5
+MAX_FEEDBACK_CHARS = 4000
+BUDGET_POLICY = ("Do not delete or edit run_state.json to reset the repair budget; "
+                 "when the budget is exhausted, deliver conclusions as "
+                 "quality_status=maintenance_required/partial instead of bypassing validation.")
 _ISSUE_KEYS = (
     "unknown_fact_ids", "unknown_metric_ids", "unknown_evidence_ids", "out_of_range_pages",
     "value_mismatches", "missing_evidence_claims", "body_mismatches", "unclaimed_numeric_lines",
@@ -52,17 +56,34 @@ def _count_issues(validation: dict) -> dict:
 
 
 def _examples(validation: dict) -> list[str]:
-    examples: list[str] = []
-    for key in _ISSUE_KEYS:
-        for item in validation.get(key, [])[:EXAMPLE_LIMIT]:
-            examples.append(f"{key}: {item}")
-    return examples[:EXAMPLE_LIMIT]
+    """全部校验错误单轮给全（字符限额内），修复不应被反馈窗口拖成多轮。"""
+    items = [f"{key}: {item}" for key in _ISSUE_KEYS for item in validation.get(key, [])]
+    rendered, _ = _limited(items, "report_validation.json")
+    return rendered
 
 
-def _limited(issues: list[dict]) -> tuple[list[str], int]:
-    """有限错误反馈：示例 + 总数，完整清单已在落盘文件中。"""
-    rendered = [issue["error"] if isinstance(issue, dict) else str(issue)
-                for issue in issues[:EXAMPLE_LIMIT]]
+def _render_issue(issue) -> str:
+    if not isinstance(issue, dict):
+        return str(issue)
+    parts = [f"{key}={issue[key]}" for key in
+             ("anchor", "statement_index", "row_label", "paragraph_index", "input_index")
+             if issue.get(key) is not None]
+    text = issue.get("error", str(issue))
+    return f"[{' '.join(parts)}] {text}" if parts else text
+
+
+def _limited(issues: list[dict], detail_file: str | None = None) -> tuple[list[str], int]:
+    """按字符限额反馈全部问题；只有超限时才截断并指向落盘文件。"""
+    rendered: list[str] = []
+    used = 0
+    for issue in issues:
+        text = _render_issue(issue)
+        if rendered and used + len(text) > MAX_FEEDBACK_CHARS:
+            rendered.append(f"...and {len(issues) - len(rendered)} more; "
+                            f"full list in {detail_file or 'the detailed validation file'}")
+            break
+        rendered.append(text)
+        used += len(text)
     return rendered, len(issues)
 
 
@@ -135,7 +156,7 @@ def cmd_compute(run_dir: Path) -> tuple[dict, int]:
         state["quality_status"] = "maintenance_required"
         _save_state(run_dir, state)
         return ({"status": "failed", "stage": "compute", "artifacts": {},
-                 "issues": [blocked], "remaining_repairs": 0,
+                 "issues": [blocked], "remaining_repairs": 0, "policy": BUDGET_POLICY,
                  "quality_status": "maintenance_required"}, 2)
     inputs_path = run_dir / "fact_inputs.json"
     if not inputs_path.exists():
@@ -145,7 +166,7 @@ def cmd_compute(run_dir: Path) -> tuple[dict, int]:
     financials, mapping = build_financials.build_financials(run_dir, read_json(inputs_path))
     write_json(run_dir / "mapping_validation.json", mapping)
     if financials is None:
-        errors, total = _limited(mapping["issues"])
+        errors, total = _limited(mapping["issues"], "mapping_validation.json")
         state["stage"] = "compute"
         state["quality_status"] = "partial"
         _save_state(run_dir, state)
@@ -204,7 +225,7 @@ def cmd_report(run_dir: Path) -> tuple[dict, int]:
         state["quality_status"] = "maintenance_required"
         _save_state(run_dir, state)
         return ({"status": "failed", "stage": "report", "artifacts": {},
-                 "issues": [blocked], "remaining_repairs": 0,
+                 "issues": [blocked], "remaining_repairs": 0, "policy": BUDGET_POLICY,
                  "quality_status": "maintenance_required"}, 2)
     inputs_path = run_dir / "report_inputs.json"
     if not inputs_path.exists():
@@ -222,7 +243,7 @@ def cmd_report(run_dir: Path) -> tuple[dict, int]:
                  "quality_status": "maintenance_required"}, 1)
     if issues:
         write_json(run_dir / "render_issues.json", {"schema_version": 1, "issues": issues})
-        errors, total = _limited(issues)
+        errors, total = _limited(issues, "render_issues.json")
         state["stage"] = "report"
         state["quality_status"] = "partial"
         _save_state(run_dir, state)

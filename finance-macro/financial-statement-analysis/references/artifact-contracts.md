@@ -177,8 +177,11 @@ render-time contract violation).
 
 ## render_issues.json — render_report.py
 
-`schema_version`, `issues` — each `{error, anchor?, ...}`. Written instead of deliverables
-when rendering is blocked; fix `report_inputs.json` and rerun.
+`schema_version`, `issues` — each carries a position (`anchor`, `statement_index`,
+`row_index`/`row_label`, `paragraph_index`) plus `error`, so one repair pass can fix every
+problem without guessing locations. Written instead of deliverables when rendering is
+blocked; fix `report_inputs.json` and rerun. `run_pipeline` relays all issues in stdout
+up to a 4000-character budget before truncating to the file reference.
 
 ## run_state.json — run_pipeline.py
 
@@ -186,7 +189,9 @@ Diagnostic only, not a security authority. `schema_version`, `stage`, `repairs`
 (per-stage `count` of distinct-input submissions), `input_sha256` (idempotency keys),
 `quality_status` (`verified` / `partial` / `maintenance_required`). Initial submission plus
 at most two repairs per stage; identical input reruns never consume budget; restarts never
-reset it. Protected-mode budgets and final verification belong to the host.
+reset it. Deleting or editing this file to reset the budget is a violation — when the
+budget is exhausted, deliver with an explicit `maintenance_required` disclosure instead.
+Protected-mode budgets and final verification belong to the host.
 
 ## report_claims.json — written by render_report.py
 
