@@ -109,6 +109,10 @@ METRIC_CONTRACTS: dict[str, dict] = {
                              "aliases": ("长期借款",)},
     "contract_liabilities": {"period_kind": "instant", "attribution": "not_applicable",
                              "aliases": ("合同负债",)},
+    "prepayments": {"period_kind": "instant", "attribution": "not_applicable",
+                    "aliases": ("预付款项", "预付账款")},
+    "construction_in_progress": {"period_kind": "instant", "attribution": "not_applicable",
+                                 "aliases": ("在建工程",)},
 }
 
 _ALIAS_TABLE: dict[str, str] = {}

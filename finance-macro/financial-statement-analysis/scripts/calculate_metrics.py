@@ -326,10 +326,192 @@ def _cash_reconciliation(facts: FactSelection) -> dict:
     return entry
 
 
+_RED_FLAG_THRESHOLDS = {
+    "dual_high_ratio": Decimal("0.30"),
+    "outpacing_factor": Decimal("1.5"),
+    "inventory_surge_factor": Decimal("1.5"),
+    "prepayment_surge_factor": Decimal("1.5"),
+    "minority_shift": Decimal("0.20"),
+    "goodwill_ratio": Decimal("0.30"),
+    "construction_ratio": Decimal("0.50"),
+}
+
+
+def _flag(flag_id: str, status: str, *, value=None, threshold=None,
+          detail: str = "") -> dict:
+    return {"flag_id": flag_id, "status": status, "value": value, "threshold": threshold,
+            "detail": detail}
+
+
+def _flow_value(facts: FactSelection, metric: str, *, attribution: str = "group",
+                prior: bool = False) -> Decimal | None:
+    pick, status, _reason = _pick_single(
+        facts.flows(metric, attribution=attribution, prior=prior))
+    return None if status is not None or pick is None else Decimal(pick["value"])
+
+
+def _balance_value(facts: FactSelection, metric: str, *, opening: bool = False) -> Decimal | None:
+    pick, status, _reason = facts.balance(metric, opening=opening)
+    return None if status is not None or pick is None else Decimal(pick["value"])
+
+
+def _owners_balance(facts: FactSelection, metric: str) -> Decimal | None:
+    """owners 归属的期末余额；facts.balance 只认 group/not_applicable，这里局部补充。"""
+    if not facts.period:
+        return None
+    day = facts.period["end"]
+    candidates = [
+        f for f in facts.facts
+        if f["metric"] == metric and f["scope"] == "consolidated"
+        and f["attribution"] == "owners"
+        and f["period"]["kind"] == "instant" and f["period"]["end"] == day
+    ]
+    pick, status, _reason = pick_usable(candidates)
+    return None if status is not None or pick is None else Decimal(pick["value"])
+
+
+def _growth(current: Decimal | None, base: Decimal | None) -> Decimal | None:
+    if current is None or base is None or base <= 0:
+        return None
+    return current / base - 1
+
+
+def _ratio_vs_revenue(facts: FactSelection, balance_metric: str, revenue: Decimal | None,
+                      *, opening: bool = False) -> Decimal | None:
+    value = _balance_value(facts, balance_metric, opening=opening)
+    if value is None or revenue is None or revenue <= 0:
+        return None
+    return value / revenue
+
+
+def _surge_flag(flag_id: str, current: Decimal | None, base: Decimal | None,
+                factor: Decimal, unit: str) -> dict:
+    if current is None or base is None:
+        return _flag(flag_id, "insufficient_data", detail=f"needs current and prior {unit}")
+    hit = base > 0 and current > base * factor
+    return _flag(flag_id, "flagged" if hit else "clear",
+                 value=format(current, "f"), threshold=format(base * factor, "f"),
+                 detail=f"{unit}: current {current} vs prior {base} (x{factor})")
+
+
+def _red_flags(facts: FactSelection) -> list[dict]:
+    """三表可验证的造假红旗：恒定输出固定清单，事实不足记 insufficient_data。
+    风险发现层——触发不改变退出码或 quality_status，结论表述归分析层。"""
+    flags: list[dict] = []
+    th = _RED_FLAG_THRESHOLDS
+    revenue = _flow_value(facts, "revenue")
+    revenue_prior = _flow_value(facts, "revenue", prior=True)
+
+    cash_ratio = _ratio_vs_revenue(facts, "monetary_funds", revenue)
+    st_debt = _balance_value(facts, "short_term_borrowings")
+    lt_debt = _balance_value(facts, "long_term_borrowings")
+    debt_values = [v for v in (st_debt, lt_debt) if v is not None]
+    debt_ratio = (sum(debt_values) / revenue
+                  if revenue and revenue > 0 and len(debt_values) == 2 else None)
+    if cash_ratio is None or debt_ratio is None:
+        flags.append(_flag("dual_high_cash_debt", "insufficient_data",
+                           detail="needs monetary_funds, short/long borrowings and revenue"))
+    else:
+        hit = cash_ratio > th["dual_high_ratio"] and debt_ratio > th["dual_high_ratio"]
+        flags.append(_flag(
+            "dual_high_cash_debt", "flagged" if hit else "clear",
+            value=f"cash={cash_ratio:.4f}, debt={debt_ratio:.4f}",
+            threshold=f"both > {th['dual_high_ratio']}",
+            detail="货币资金与有息负债同时高于营收警戒线"))
+
+    ar_growth = _growth(
+        _balance_value(facts, "accounts_receivable"),
+        _balance_value(facts, "accounts_receivable", opening=True))
+    rev_growth = _growth(revenue, revenue_prior)
+    if ar_growth is None or rev_growth is None:
+        flags.append(_flag("receivable_outpacing_revenue", "insufficient_data",
+                           detail="needs current/prior receivables and revenue"))
+    else:
+        hit = ar_growth > rev_growth * th["outpacing_factor"]
+        flags.append(_flag(
+            "receivable_outpacing_revenue", "flagged" if hit else "clear",
+            value=f"ar={ar_growth:.4f}, rev={rev_growth:.4f}",
+            threshold=f"ar > rev x {th['outpacing_factor']}",
+            detail="应收增速超过营收增速1.5倍"))
+
+    flags.append(_surge_flag(
+        "inventory_sudden_rise",
+        _ratio_vs_revenue(facts, "inventory", revenue),
+        _ratio_vs_revenue(facts, "inventory", revenue_prior, opening=True),
+        th["inventory_surge_factor"], "存货/营收"))
+
+    cfo = _flow_value(facts, "cfo")
+    profit = _flow_value(facts, "net_profit_group")
+    if cfo is None or profit is None:
+        flags.append(_flag("negative_cfo_positive_profit", "insufficient_data",
+                           detail="needs cfo and net_profit_group"))
+    else:
+        hit = cfo < 0 and profit > 0
+        flags.append(_flag(
+            "negative_cfo_positive_profit", "flagged" if hit else "clear",
+            detail=f"cfo={cfo}, net_profit={profit}；纸面盈利但经营现金流为负"))
+
+    np_group = _flow_value(facts, "net_profit_group")
+    np_owners = _flow_value(facts, "net_profit_owners", attribution="owners")
+    np_group_prior = _flow_value(facts, "net_profit_group", prior=True)
+    np_owners_prior = _flow_value(facts, "net_profit_owners", attribution="owners", prior=True)
+
+    def _minority_ratio(group: Decimal | None, owners: Decimal | None) -> Decimal | None:
+        if group is None or owners is None or group <= 0:
+            return None
+        return (group - owners) / group
+
+    ratio_cur = _minority_ratio(np_group, np_owners)
+    ratio_prior = _minority_ratio(np_group_prior, np_owners_prior)
+    if ratio_cur is None or ratio_prior is None:
+        flags.append(_flag("minority_interest_anomaly", "insufficient_data",
+                           detail="needs current/prior group and owners net profit"))
+    else:
+        hit = abs(ratio_cur - ratio_prior) > th["minority_shift"]
+        flags.append(_flag(
+            "minority_interest_anomaly", "flagged" if hit else "clear",
+            value=f"cur={ratio_cur:.4f}, prior={ratio_prior:.4f}",
+            threshold=f"shift > {th['minority_shift']}",
+            detail="少数股东损益占净利润比例异常变动"))
+
+    goodwill = _balance_value(facts, "goodwill")
+    equity_owners = _owners_balance(facts, "total_equity_owners")
+    if goodwill is None or equity_owners is None or equity_owners <= 0:
+        flags.append(_flag("goodwill_heavy", "insufficient_data",
+                           detail="needs goodwill and total_equity_owners"))
+    else:
+        ratio = goodwill / equity_owners
+        hit = ratio > th["goodwill_ratio"]
+        flags.append(_flag(
+            "goodwill_heavy", "flagged" if hit else "clear",
+            value=f"{ratio:.4f}", threshold=f"> {th['goodwill_ratio']}",
+            detail="商誉/归母净资产超过警戒线"))
+
+    flags.append(_surge_flag(
+        "prepayment_surge",
+        _ratio_vs_revenue(facts, "prepayments", revenue),
+        _ratio_vs_revenue(facts, "prepayments", revenue_prior, opening=True),
+        th["prepayment_surge_factor"], "预付/营收"))
+
+    cip = _balance_value(facts, "construction_in_progress")
+    fixed = _balance_value(facts, "fixed_assets")
+    if cip is None or fixed is None or fixed <= 0:
+        flags.append(_flag("construction_not_converting", "insufficient_data",
+                           detail="needs construction_in_progress and fixed_assets"))
+    else:
+        ratio = cip / fixed
+        hit = ratio > th["construction_ratio"]
+        flags.append(_flag(
+            "construction_not_converting", "flagged" if hit else "clear",
+            value=f"{ratio:.4f}", threshold=f"> {th['construction_ratio']}",
+            detail="在建工程/固定资产过高，关注长期不转固"))
+
+    return flags
+
+
 def calculate_metrics(document: dict) -> dict:
     facts = FactSelection(document)
-    metrics: list[dict] = [
-        _yoy(facts, "revenue", "revenue_yoy"),
+    metrics: list[dict] = [        _yoy(facts, "revenue", "revenue_yoy"),
         _yoy(facts, "net_profit_group", "net_profit_group_yoy"),
         _yoy(facts, "net_profit_owners", "net_profit_owners_yoy"),
         _simple_ratio(
@@ -355,7 +537,8 @@ def calculate_metrics(document: dict) -> dict:
             if mismatch:
                 metric.update(value=None, status="conflict", reason=mismatch)
     validation = [_cash_reconciliation(facts)]
-    return {"schema_version": 1, "metrics": metrics, "validation": validation}
+    return {"schema_version": 1, "metrics": metrics, "validation": validation,
+            "red_flags": _red_flags(facts)}
 
 
 def main(argv: list[str] | None = None) -> int:

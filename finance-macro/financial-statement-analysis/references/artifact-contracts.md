@@ -166,6 +166,18 @@ Each entry: `metric_id`, `value` (decimal string \| null), `status`
 (computed / not_applicable / insufficient_data / conflict), `formula`, `input_fact_ids` (list),
 `source_pages` (list[int]), `reason` (null when computed).
 
+### red_flags — calculated alongside metrics
+
+Risk-discovery layer, deliberately separate from `validation.json` (data quality): a
+triggered flag never affects exit codes or `quality_status`. The list is constant — always
+the same 8 `flag_id` entries (`dual_high_cash_debt`, `receivable_outpacing_revenue`,
+`inventory_sudden_rise`, `negative_cfo_positive_profit`, `minority_interest_anomaly`,
+`goodwill_heavy`, `prepayment_surge`, `construction_not_converting`) — so the report can
+annotate every item. Each entry: `flag_id`, `status` (flagged / clear / insufficient_data),
+`value`, `threshold`, `detail`, thresholds live in `calculate_metrics._RED_FLAG_THRESHOLDS`
+and are locked by tests. Correlated-party dealings and auditor changes are NOT programmable
+(they need notes/non-financial data) and stay qualitative.
+
 ## validation.json — calculate_metrics.py
 
 Each entry: `check_id`, `status` (passed / failed / not_applicable), `input_fact_ids`, `residual`
