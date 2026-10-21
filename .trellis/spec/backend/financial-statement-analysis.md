@@ -85,6 +85,11 @@ Markdown text, display values and pages to the resolved source chain.
 
 ## 9. Reusable analysis tools (Skill only)
 
+- Public references must expose the complete calculated metric ID catalog and independent
+  review check contract, including availability, display limits, tolerances and missing-data
+  behavior. Route report authors to these before source inspection. Maintain coverage with
+  `test_reference_contracts.py` against emitted metric IDs and verifier check labels.
+
 - Tools migrated from the profile-local `financial-pitfall-recovery` belong to this skill's
   scripts/tests. Never require a hard-coded profile path or load the entire historical skill.
 - Normal text mapping uses `compute --spec`: validate excerpt line numbers and literal values

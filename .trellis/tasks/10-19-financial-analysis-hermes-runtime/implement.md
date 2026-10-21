@@ -53,6 +53,17 @@ Hermes 核心、调用端、模型配置不变；不宣称真实模型性能基�
 
 使用skill自带.venv运行pytest，--basetemp指向独立工作区临时目录，避免系统临时目录权限问题。Ruff检查scripts/tests；元数据验证使用python -X utf8执行skill-creator的quick_validate.py。
 
+## 2026-10-21 主 skill 文档合同与按阶段读取
+
+用户授权补齐指标/独立复核合同，后明确 recovery 不需调整。仅调整主 skill 文档及维护检查，不改校验算法、远端 recovery 或宿主。
+
+- [x] RED：3 个 reference 合同测试失败；独立检索 agent 仅读 references，确认完整指标、检查编号及周转率格式缺失。
+- [x] 补 metric-catalog（14 个精确 ID、公式、状态、格式限制）及 independent-review-contract（全部编号、容差、缺数据、修复路径）。
+- [x] 主入口、报告输入、产物合同和工具指南接入按需导航，纠正 net_margin 旧称。
+- [x] reference 检索复验：独立 agent 仅读文档即可回答指标全集、检查编号、D1/C0/C1 与周转率格式问题。
+- [x] 全量 pytest 302 passed、Ruff、元数据校验、全部本地文档链接及 git diff --check 通过。首次全量测试因 basetemp 父目录不存在出现 setup errors，创建父目录后重跑全过。
+- 本地验收完成；用户后续授权提交并推送。未同步远端主 skill 部署目录；远端 recovery 仅检查未修改。
+
 ## 回滚点
 
 2026-10-20 用户撤回宿主方案：撤掉已安装 Hermes 补丁及客户端专用模式；删除接入脚本、

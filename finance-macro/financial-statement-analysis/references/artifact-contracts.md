@@ -185,6 +185,10 @@ Each entry: `metric_id`, `value` (decimal string \| null), `status`
 (computed / not_applicable / insufficient_data / conflict), `formula`, `input_fact_ids` (list),
 `source_pages` (list[int]), `reason` (null when computed).
 
+Full supported metric IDs, formulas, display scales and availability rules:
+[metric-catalog.md](metric-catalog.md). Independent check IDs and missing-data behavior:
+[independent-review-contract.md](independent-review-contract.md).
+
 ### red_flags — calculated alongside metrics
 
 Risk-discovery layer, deliberately separate from `validation.json` (data quality): a

@@ -7,6 +7,9 @@
 禁止根据正文数值在 facts 里搜索碰巧相等的支持事实。渲染产物直接交给固定
 `validate_report` 校验；渲染后篡改正文会被拒绝。
 
+写 spec 前同时读[完整指标目录](metric-catalog.md)和[独立复核合同 A1–E1](independent-review-contract.md)。
+下例只演示一个 section 的字段形状，不是完整可验收报告；完整标题与核心结论要求见[报告模板](report-template.md)。
+
 ## 完整示例
 
 ```json
@@ -63,7 +66,7 @@
 
 先判断数值的**语义类型**，再选格式符：
 
-- **比值/水平类**（`cfo_to_net_profit_group`、`net_margin`、资产负债率、毛利率本身）：
+- **比值/水平类**（`cfo_to_net_profit_group`、`net_margin_group`、披露的资产负债率或毛利率事实）：
   值是当前水平，用 `percent*`，负值原样带负号输出，永远不用 `decline_*`。
 - **降幅/变化量类**（同比 `*_yoy`、毛利率变动）：值为负表示下降，用 `decline_*`；
   值为正（实际增长）会被阻塞，此时换 `percent*` 并在模板写"增长/同比"。

@@ -5,6 +5,9 @@ sibling 或读取其全部历史案例。主 skill 的脚本、合同与测试�
 `financial-pitfall-recovery` 仍可作为历史案例参考；其中旧 workaround、`report → review`、
 固定公司页码与旧预算解释不能覆盖本 skill 当前流程。
 
+写报告时先查[指标目录](metric-catalog.md)与[独立复核合同](independent-review-contract.md)，
+无需去 sibling 或源码寻找 metric_id 枚举及 A1–E1 验收条件。
+
 ## 工具入口
 
 | 工具 | 主流程如何使用 | 何时单独调用 |

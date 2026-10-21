@@ -7,6 +7,10 @@ description: A 股财报 PDF 深度分析。输入一份财报 PDF 链接（年�
 
 由你（agent）判断章节、事实含义和分析结论；Python 脚本连续完成下载、索引、提取、构造、渲染和校验。全文只存在于本地索引，**任何情况下不要把全文打印回对话或要求脚本输出全文**。开工先合并读取[分析框架](references/analysis-framework.md)、[报告模板](references/report-template.md)、[事实输入示例](references/fact-inputs-example.md)和[报告输入示例](references/report-inputs-example.md)；完整[产物合同](references/artifact-contracts.md)与[提取规则](references/extraction-rules.md)按需读取，不读源码猜接口。
 
+## 按阶段读取
+
+写 report spec 前，合并读取[指标目录](references/metric-catalog.md)与[独立复核合同](references/independent-review-contract.md)：前者给出全部 metric_id、公式和可用状态，后者解释 A1–E1、缺数据行为与修复路径。格式和输入形状见[报告输入](references/report-inputs-example.md)，标题见[报告模板](references/report-template.md)。不要用业务名称猜指标 ID；这些合同足够完成常规报告，不为找枚举或验收条件逐个读源码。reference 确有缺口或报错指向实现故障时记录维护问题，不在分析运行内改程序。
+
 ## 输入与运行目录
 
 - 必填：财报 PDF 链接（`pdf_url`）。自动识别公司、期间、报告类型；无法确认时中止并说明，不输出貌似完整的分析。
