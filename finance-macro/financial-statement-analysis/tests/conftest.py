@@ -1,6 +1,21 @@
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def no_structured_network(request, monkeypatch):
+    """离线保证：除 mock HTTP 的单测文件外，fetch_structured 一律拒绝——默认
+    compute 模式（结构化打底）在测试中不得发起真实网络请求，只允许走文件缓存
+    或显式回退。"""
+    if request.module.__name__ == "test_fetch_structured":
+        return
+    from fetch_structured import FetchStructuredError
+
+    def _blocked(*args, **kwargs):
+        raise FetchStructuredError("network disabled in tests")
+
+    monkeypatch.setattr("fetch_structured.fetch_structured", _blocked)
+
+
 @pytest.fixture()
 def run_dir(tmp_path):
     d = tmp_path / "run"

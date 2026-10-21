@@ -36,6 +36,8 @@ _FACT_FIELDS = {
     "review_status",
     "missing_reason",
 }
+# source 为可选字段（缺省视为 extracted），保证旧产物与既有生成器兼容。
+_SOURCE_VALUES = {"structured", "extracted"}
 _EVIDENCE_ID_RE = re.compile(r"^ev-\d{4,}$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -119,6 +121,45 @@ _ALIAS_TABLE: dict[str, str] = {}
 for _metric, _contract in METRIC_CONTRACTS.items():
     for _alias in (_metric, *_contract["aliases"]):
         _ALIAS_TABLE.setdefault(_alias.lower(), _metric)
+
+
+# 结构化数据源字段映射：metric → (报表 kind, 东财 F10 字段)。字段名以实测响应为准。
+# gross_profit / fx_effect_on_cash 无直接披露字段：前者可在下游做确定性派生，
+# 后者缺失时勾稽按 0 处理（既有语义），均不在此映射。
+STRUCTURED_FIELD_MAP: dict[str, tuple[str, str]] = {
+    "revenue": ("income", "TOTAL_OPERATE_INCOME"),
+    "cost_of_sales": ("income", "OPERATE_COST"),
+    "selling_expenses": ("income", "SALE_EXPENSE"),
+    "admin_expenses": ("income", "MANAGE_EXPENSE"),
+    "finance_costs": ("income", "FINANCE_EXPENSE"),
+    "r_and_d_expense": ("income", "RESEARCH_EXPENSE"),
+    "operating_profit": ("income", "OPERATE_PROFIT"),
+    "net_profit_before_tax": ("income", "TOTAL_PROFIT"),
+    "income_tax_expense": ("income", "INCOME_TAX"),
+    "net_profit_group": ("income", "NETPROFIT"),
+    "net_profit_owners": ("income", "PARENT_NETPROFIT"),
+    "cfo": ("cashflow", "NETCASH_OPERATE"),
+    "cfi": ("cashflow", "NETCASH_INVEST"),
+    "cff": ("cashflow", "NETCASH_FINANCE"),
+    "capex_purchase_fixed_assets": ("cashflow", "CONSTRUCT_LONG_ASSET"),
+    "cash_equivalents": ("cashflow", "END_CCE"),
+    "total_assets": ("balance", "TOTAL_ASSETS"),
+    "total_liabilities": ("balance", "TOTAL_LIABILITIES"),
+    "total_equity": ("balance", "TOTAL_EQUITY"),
+    "total_equity_owners": ("balance", "TOTAL_PARENT_EQUITY"),
+    "monetary_funds": ("balance", "MONETARYFUNDS"),
+    "accounts_receivable": ("balance", "ACCOUNTS_RECE"),
+    "notes_receivable": ("balance", "NOTE_RECE"),
+    "inventory": ("balance", "INVENTORY"),
+    "fixed_assets": ("balance", "FIXED_ASSET"),
+    "goodwill": ("balance", "GOODWILL"),
+    "total_current_assets": ("balance", "TOTAL_CURRENT_ASSETS"),
+    "total_current_liabilities": ("balance", "TOTAL_CURRENT_LIAB"),
+    "short_term_borrowings": ("balance", "SHORT_LOAN"),
+    "long_term_borrowings": ("balance", "LONG_LOAN"),
+    "contract_liabilities": ("balance", "CONTRACT_LIAB"),
+}
+STRUCTURED_UNSUPPORTED = ("gross_profit", "fx_effect_on_cash")
 
 
 def metric_aliases() -> dict[str, list[str]]:
@@ -231,7 +272,17 @@ def validate_financials(document: dict) -> list[dict]:
                     errors.append(_error(fact_id, "value", f"not a decimal string: {value!r}"))
 
         evidence_ids = fact["evidence_ids"]
-        if value is not None:
+        source = fact.get("source", "extracted")
+        if source not in _SOURCE_VALUES:
+            errors.append(_error(fact_id, "source", f"illegal value: {source!r}"))
+        if source == "structured":
+            # 结构化事实由程序拉取的披露口径背书，可信度由抽样核对（structured_check）
+            # 把关，不走 PDF evidence 链；抽样发现不一致会转 conflict。
+            if evidence_ids:
+                errors.append(
+                    _error(fact_id, "evidence_ids", "structured fact must not carry evidence_ids")
+                )
+        elif value is not None:
             if not evidence_ids or not all(
                 isinstance(e, str) and _EVIDENCE_ID_RE.match(e) for e in evidence_ids
             ):

@@ -3,6 +3,9 @@
 简单场景由 `spec.json` 经 `compute --spec` 程序生成（见[可复用工具](reusable-tools.md)）；
 表格 locator、缺失值、重复标签等复杂映射时由 agent 按本合同手写。
 `run_pipeline.py compute`（或 `build_financials.py`）消费。
+默认 compute 模式（东财 F10 结构化打底）下本文件角色是**抽查单**：只提交 3-5 个从
+PDF 抽取的关键数字（带 evidence 定位），程序与东财结构化数据双源比对——一致由勾稽
+去重消化，不一致记 conflict 并阻止报告 verified。
 模型只提交需要判断的字段：指标映射、原文值、证据定位；公共公司、币种、期间结构、
 归属维度、`fact_id`、`missing_reason` 全部由程序从 `document.json` / `source.json` /
 `extraction_manifest.json` 推导。**`attribution` 不接受输入**——由指标合同固定

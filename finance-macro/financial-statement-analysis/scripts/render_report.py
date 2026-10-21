@@ -246,6 +246,9 @@ def _render_table_row(ledger: _Ledger, anchor: str, display_unit: str | None,
         cells.append(format_value(value, kind, fmt, with_direction=True))
 
     text = "| " + " | ".join([label, *cells]) + " |"
+    if not fact_ids and not metric_ids:
+        # 纯定性行（无任何绑定）：没有可验证的定量内容，不生成 claim。
+        return text, None
     claim_type = row.get("claim_type") or ("calculation" if metric_ids else "fact")
     if claim_type not in _CLAIM_TYPES:
         raise RenderIssue(f"illegal claim_type {claim_type!r}", **ctx)
@@ -312,9 +315,10 @@ def render_report(run_dir: Path, inputs: dict) -> tuple[str | None, list[dict] |
                 for row_no, row in enumerate(rows_spec, start=1):
                     text, claim = _render_table_row(
                         ledger, anchor, table.get("display_unit"), row, claim_no + 1, row_no)
-                    claim_no += 1
                     lines.append(text)
-                    claims.append(claim)
+                    if claim is not None:
+                        claim_no += 1
+                        claims.append(claim)
                 body_parts.append("\n".join(lines))
             except RenderIssue as exc:
                 issues.append(exc.issue)

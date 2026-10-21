@@ -143,7 +143,46 @@ def cmd_prepare(url: str, run_dir: Path) -> tuple[dict, int]:
     return result, 0
 
 
-def cmd_compute(run_dir: Path, *, spec_path: Path | None = None) -> tuple[dict, int]:
+def _structured_dates(document: dict) -> list[str]:
+    """从 document.period 推导结构化拉取需要的三个报告期末。"""
+    from fact_selection import prior_year
+
+    period = document.get("period") or {}
+    end = period.get("end")
+    if not end:
+        return []
+    dates = {end, prior_year(end)}
+    start = period.get("start")
+    if start:
+        from datetime import date, timedelta
+
+        dates.add((date.fromisoformat(start) - timedelta(days=1)).isoformat())
+    return sorted(dates)
+
+
+def _load_or_fetch_structured(run_dir: Path) -> tuple[dict | None, str | None]:
+    """加载（必要时拉取）结构化数据；失败返回 (None, 回退说明)。"""
+    from fetch_structured import FetchStructuredError, fetch_structured
+
+    struct_path = run_dir / "structured_financials.json"
+    if struct_path.exists():
+        try:
+            return read_json(struct_path), None
+        except (OSError, ValueError) as exc:
+            return None, f"structured data unreadable ({exc}); fell back to PDF-only"
+    document = read_json(run_dir / "document.json")
+    code = document.get("stock_code")
+    dates = _structured_dates(document)
+    if not code or not dates:
+        return None, "document lacks stock_code or period; fell back to PDF-only"
+    try:
+        return fetch_structured(code, dates, run_dir), None
+    except (FetchStructuredError, OSError, ValueError) as exc:
+        return None, f"structured fetch failed ({exc}); fell back to PDF-only"
+
+
+def cmd_compute(run_dir: Path, *, spec_path: Path | None = None,
+                pdf_only: bool = False) -> tuple[dict, int]:
     import build_financials
     from calculate_metrics import calculate_metrics as compute_metrics
     from financial_schema import validate_financials
@@ -168,11 +207,33 @@ def cmd_compute(run_dir: Path, *, spec_path: Path | None = None) -> tuple[dict, 
                  "issues": [blocked], "remaining_repairs": 0, "policy": BUDGET_POLICY,
                  "quality_status": "maintenance_required"}, 2)
     inputs_path = run_dir / "fact_inputs.json"
-    if not inputs_path.exists():
+    has_inputs = inputs_path.exists()
+    if not has_inputs and pdf_only:
         return ({"status": "failed", "stage": "compute", "artifacts": {},
                  "issues": ["fact_inputs.json missing; write compact fact inputs first"],
                  "remaining_repairs": remaining, "quality_status": "partial"}, 1)
-    financials, mapping = build_financials.build_financials(run_dir, read_json(inputs_path))
+    structured_note: str | None = None
+    structured_doc: dict | None = None
+    if not pdf_only:
+        structured_doc, structured_note = _load_or_fetch_structured(run_dir)
+    if structured_doc is not None:
+        sample_inputs = read_json(inputs_path) if has_inputs else None
+        financials, mapping = build_financials.build_financials_structured(
+            run_dir, structured_doc, sample_inputs)
+        write_json(run_dir / "structured_check.json", mapping.get("structured_check", {}))
+    else:
+        if not has_inputs:
+            note = f"; {structured_note}" if structured_note else ""
+            message = (f"fact_inputs.json missing and structured source unavailable{note}"
+                       "; write compact fact inputs first")
+            return ({"status": "failed", "stage": "compute", "artifacts": {},
+                     "issues": [message],
+                     "remaining_repairs": remaining, "quality_status": "partial"}, 1)
+        financials, mapping = build_financials.build_financials(run_dir, read_json(inputs_path))
+    if structured_note:
+        mapping.setdefault("warnings", []).append(
+            {"input_index": -1, "error": structured_note, "field": "structured",
+             "severity": "warning"})
     write_json(run_dir / "mapping_validation.json", mapping)
     if financials is None:
         errors, total = _limited(mapping["issues"], "mapping_validation.json")
@@ -418,6 +479,8 @@ def main(argv: list[str] | None = None) -> int:
 
     compute = subparsers.add_parser("compute", help="fact_inputs.json → financials + metrics")
     compute.add_argument("--run-dir", required=True)
+    compute.add_argument("--pdf-only", action="store_true",
+                         help="跳过东财 F10 结构化数据，强制纯 PDF 全量抽取模式")
     compute.add_argument("--spec", help="spec → verified fact inputs → compute in one call")
 
     report = subparsers.add_parser("report", help="report_inputs.json → analysis + claims + 校验")
@@ -443,7 +506,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "prepare":
         result, code = cmd_prepare(args.url, run_dir)
     elif args.command == "compute":
-        result, code = cmd_compute(run_dir, spec_path=Path(args.spec) if args.spec else None)
+        result, code = cmd_compute(run_dir, spec_path=Path(args.spec) if args.spec else None,
+                                   pdf_only=args.pdf_only)
     elif args.command == "report":
         result, code = cmd_report(run_dir, include_report=args.include_report,
                                   independent_review=args.independent_review,

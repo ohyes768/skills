@@ -93,6 +93,25 @@ Image crops are `complete: false` until visually reviewed; context packets conta
 (absolute image path), `requires_visual_review: true`, IDs and pages, never decoded PNG text.
 The initial `locate` packet works before any extraction manifest exists.
 
+## structured_financials.json — fetch_structured.py
+
+East Money F10 three statements fetched by program (never the agent): `schema_version`,
+`source: structured_eastmoney`, `security_code`/`secucode`, `report_dates` (current,
+prior year same period, prior year end), `fetched_at`, `requested`, `response_sha256`
+(audit trail), and `reports[date][kind]` with raw rows kept verbatim. Numbers are parsed
+with `parse_float=Decimal` and archived as exact strings. Cache reuse is incremental per
+`(date, kind)`; `--refresh` refetches. HTTP/non-JSON/empty failures exit 1 — the caller
+falls back to PDF-only mode and labels the run's data source.
+
+## structured_check.json — written by compute (structured mode)
+
+Dual-source sample check: `samples` (metric, period_end, structured_value,
+extracted_value, status `verified`/`conflict`/`unchecked`, evidence_ids, pdf_pages) plus
+counts. The agent's fact_inputs act as the spot-check sheet in this mode; a mismatch
+flips the structured fact to `review_status: conflict` and blocks `verified` reports —
+validate_report accepts `source: structured` facts only when this file exists with
+`conflicts: 0`.
+
 ## fact_inputs.json — generated from spec.json or written by agent; consumed by build_financials.py
 
 Two paths produce this file: for plain text-evidence facts the agent writes a compact

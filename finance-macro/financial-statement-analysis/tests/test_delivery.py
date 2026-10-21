@@ -75,7 +75,7 @@ def test_evidence_extracts_and_returns_first_packet_then_only_reads_cursor(run_d
 def test_compute_returns_bounded_analysis_without_raw_evidence(run_dir):
     prepare_build_run(run_dir)
     write_json_file(run_dir / "fact_inputs.json", {"schema_version": 1, "facts": [fact_input()]})
-    result, code = run_pipeline.cmd_compute(run_dir)
+    result, code = run_pipeline.cmd_compute(run_dir, pdf_only=True)
     assert code in (0, 2)
     packet = result["context"]["packet"]
     assert packet["character_count"] <= 12000

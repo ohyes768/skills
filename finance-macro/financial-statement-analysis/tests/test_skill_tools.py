@@ -36,7 +36,8 @@ def complete_inputs():
 
 def computed(run_dir):
     write_json_file(run_dir / "spec.json", text_run(run_dir))
-    result, _ = run_pipeline.cmd_compute(run_dir, spec_path=run_dir / "spec.json")
+    result, _ = run_pipeline.cmd_compute(run_dir, spec_path=run_dir / "spec.json",
+                                         pdf_only=True)
     assert result.get("metric_counts"), result
     write_json_file(run_dir / "report_inputs.json", complete_inputs())
 
@@ -64,7 +65,8 @@ def test_bad_spec_is_rejected_before_compute_budget(run_dir):
     spec = text_run(run_dir)
     spec["facts"][0]["cur"] = "999.00"
     write_json_file(run_dir / "spec.json", spec)
-    result, code = run_pipeline.cmd_compute(run_dir, spec_path=run_dir / "spec.json")
+    result, code = run_pipeline.cmd_compute(run_dir, spec_path=run_dir / "spec.json",
+                                            pdf_only=True)
     assert code == 2
     assert "VALUE" in str(result["issues"])
     assert not (run_dir / "financials.json").exists()
@@ -231,7 +233,7 @@ def test_balance_review_uses_document_dates_and_allows_minority_profit(run_dir):
         ("total_equity", "所有者权益合计", "70.00"), ("net_profit_group", "净利润", "20.00"),
         ("net_profit_owners", "归母净利润", "18.00")]]
     write_json_file(run_dir / "spec.json", spec)
-    run_pipeline.cmd_compute(run_dir, spec_path=run_dir / "spec.json")
+    run_pipeline.cmd_compute(run_dir, spec_path=run_dir / "spec.json", pdf_only=True)
     write_json_file(run_dir / "report_inputs.json", complete_inputs())
     result, code = run_pipeline.cmd_report(run_dir, independent_review=True)
     assert code == 0, result

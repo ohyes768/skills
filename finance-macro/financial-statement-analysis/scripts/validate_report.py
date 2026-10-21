@@ -28,6 +28,18 @@ _ISSUE_KEYS = (
 )
 
 
+def _structured_check_clean(run_dir: Path) -> bool:
+    """抽样核对存在且无冲突时，结构化事实才可作为报告支撑。"""
+    path = Path(run_dir) / "structured_check.json"
+    if not path.exists():
+        return False
+    try:
+        check = read_json(path)
+    except (OSError, ValueError):
+        return False
+    return check.get("conflicts") == 0 and bool(check.get("samples"))
+
+
 def _number_explained(text: str, number, value: Decimal, display_unit: str | None,
                       kind: str) -> bool:
     pp = percentage_point_suffix(text, number)
@@ -174,10 +186,16 @@ def validate_report(run_dir: Path) -> dict:
                 all_values.append((value, kind))
                 if claim_type == "fact":
                     required_values.append((value, kind))
-            source_ids = fact.get("evidence_ids", [])
-            if not source_ids:
-                result["invalid_support"].append(f"{cid}: fact {fid} has no evidence")
-            eids.update(source_ids)
+            if fact.get("source") == "structured":
+                # 结构化事实无 evidence 链，由抽样核对背书：有任何双源冲突即不可用。
+                if not _structured_check_clean(run_dir):
+                    result["invalid_support"].append(
+                        f"{cid}: structured fact {fid} lacks a clean sample check")
+            else:
+                source_ids = fact.get("evidence_ids", [])
+                if not source_ids:
+                    result["invalid_support"].append(f"{cid}: fact {fid} has no evidence")
+                eids.update(source_ids)
             for field in ("start", "end"):
                 day = fact.get("period", {}).get(field)
                 if day:
@@ -197,7 +215,10 @@ def validate_report(run_dir: Path) -> dict:
         cited_pages = extract_cited_pages(text)
         if not cited_pages <= expected_pages:
             result["page_mismatches"].append(cid)
-        if not eids or (claim_type == "calculation" and not mids):
+        has_structured_backing = any(
+            facts[fid].get("source") == "structured" for fid in fids if fid in facts)
+        if (not eids and not has_structured_backing) or (
+                claim_type == "calculation" and not mids):
             result["missing_evidence_claims"].append(cid)
         if claim_type == "fact" and NUMBER_RE.search(text) and not fids:
             result["missing_evidence_claims"].append(cid)

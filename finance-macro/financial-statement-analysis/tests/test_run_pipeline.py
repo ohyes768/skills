@@ -16,7 +16,7 @@ def run(command: str, run_dir: Path, **kwargs) -> tuple[dict, int]:
     if command == "prepare":
         return run_pipeline.cmd_prepare(kwargs["url"], run_dir)
     if command == "compute":
-        return run_pipeline.cmd_compute(run_dir)
+        return run_pipeline.cmd_compute(run_dir, pdf_only=True)
     if command == "report":
         return run_pipeline.cmd_report(run_dir)
     return run_pipeline.cmd_review(run_dir)

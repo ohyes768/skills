@@ -12,12 +12,15 @@ import argparse
 import re
 import sys
 from datetime import date, timedelta
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from artifacts import emit_status, read_json, write_json
 from fact_selection import prior_year
 from financial_schema import (
     METRIC_CONTRACTS,
+    STRUCTURED_FIELD_MAP,
+    STRUCTURED_UNSUPPORTED,
     parse_amount,
     resolve_metric_label,
     validate_financials,
@@ -31,6 +34,18 @@ _AGGREGATIONS = {"cumulative", "single_period"}
 _REVIEW_STATUSES = {"verified", "ambiguous", "missing", "conflict"}
 _PERIOD_REFS = {"duration": {"current", "prior"}, "instant": {"closing", "opening"}}
 _RAW_UNITS = {"元", "千元", "万元", "亿元"}
+# inspect_pdf 把文档类型写入 period.frequency（如 semi_annual）；事实合同的
+# frequency 值域是 annual/half_year/quarter，构造时归一化，不让 agent 改 document.json。
+_FREQUENCY_ALIASES = {"semi_annual": "half_year", "q1": "quarter", "q3": "quarter"}
+
+# 结构化模式建议抽查的科目：覆盖全部指标输入与风险信号引用。fact_inputs 未覆盖
+# 本期值时给 warning 提示补充（不阻塞）——报告用到的每个数都应有 PDF 背书。
+RECOMMENDED_SAMPLE_METRICS = (
+    "revenue", "net_profit_owners", "net_profit_group", "cfo", "total_assets",
+    "monetary_funds", "cost_of_sales", "total_equity", "total_liabilities",
+    "cash_equivalents", "fx_effect_on_cash", "accounts_receivable", "inventory",
+    "short_term_borrowings", "long_term_borrowings",
+)
 
 
 def _normalize_label(label: str) -> str:
@@ -60,6 +75,7 @@ def _resolve_period(document: dict, period_kind: str, period_ref: str,
     if not isinstance(base, dict) or not base.get("end"):
         return None, "document.json has no usable period; clarify before mapping"
     frequency = base.get("frequency") or "annual"
+    frequency = _FREQUENCY_ALIASES.get(frequency, frequency)
     if period_kind == "duration":
         start, end = base.get("start"), base["end"]
         if period_ref == "prior":
@@ -273,8 +289,262 @@ def _build_one(run_dir: Path, index: int, document: dict, item: dict,
         "evidence_ids": evidence_ids,
         "review_status": review_status,
         "missing_reason": missing_reason,
+        "source": item.get("source") or "extracted",
     })
     return problems
+
+
+def _date_for_ref(period: dict, period_ref: str) -> str | None:
+    """把 period_ref 映射到结构化数据需要的报告期末日期。"""
+    if period_ref in ("current", "closing"):
+        return period.get("end")
+    if period_ref == "prior" and period.get("end"):
+        return prior_year(period["end"])
+    if period_ref == "opening" and period.get("start"):
+        return (date.fromisoformat(period["start"]) - timedelta(days=1)).isoformat()
+    return None
+
+
+def _structured_value(row: dict, field: str) -> tuple[Decimal | None, str | None]:
+    """取结构化字段值；返回 (Decimal | None, None) 或 (None, 跳过原因)。"""
+    if field not in row:
+        return None, "field missing in structured response"
+    raw = row[field]
+    if raw is None:
+        return None, None
+    if isinstance(raw, Decimal):
+        return raw, None
+    if isinstance(raw, int) and not isinstance(raw, bool):
+        return Decimal(raw), None
+    if isinstance(raw, str):
+        try:
+            return Decimal(raw), None
+        except InvalidOperation:
+            return None, f"non-numeric structured value: {raw!r}"
+    return None, f"unsupported structured value type: {type(raw).__name__}"
+
+
+def _evidence_value_index(run_dir: Path) -> set[Decimal]:
+    """收集 PDF 证据中出现的全部数值（含单位缩放），供全量存在性检查。"""
+    from report_values import NUMBER_RE, SCALES
+
+    manifest_path = run_dir / "extraction_manifest.json"
+    if not manifest_path.exists():
+        return set()
+    values: set[Decimal] = set()
+    for record in read_json(manifest_path).get("evidences", []):
+        path = run_dir / record.get("file", "")
+        if not path.exists():
+            continue
+        texts: list[str] = []
+        if record.get("kind") == "table":
+            try:
+                data = read_json(path)
+            except (OSError, ValueError):
+                continue
+            texts.extend(str(cell) for row in data.get("rows", []) for cell in row)
+        else:
+            try:
+                texts.append(path.read_text(encoding="utf-8"))
+            except OSError:
+                continue
+        for text in texts:
+            for match in NUMBER_RE.finditer(text):
+                try:
+                    num = Decimal(match.group("number").replace(",", ""))
+                except InvalidOperation:
+                    continue
+                scale = SCALES.get((match.group("unit") or "").lower(), Decimal(1))
+                values.add(num * scale)
+    return values
+
+
+def build_financials_structured(run_dir: Path, structured: dict,
+                                inputs: dict | None = None) -> tuple[dict | None, dict]:
+    """从 structured_financials.json 生成 facts（source=structured，无 evidence 链）。
+
+    为每个可映射指标生成本期与比较期事实（duration: current+prior，instant:
+    closing+opening）。字段缺失生成 missing 事实；响应缺字段记 warning 跳过。
+    inputs 为可选的抽查单（AI 从 PDF 抽取的关键数，过 evidence 核对）；与结构化
+    事实双源并存，比对结果写入 validation.structured_check，不一致转 conflict。
+    """
+    run_dir = Path(run_dir)
+    document = read_json(run_dir / "document.json")
+    source = read_json(run_dir / "source.json")
+    period = document.get("period") or {}
+    validation: dict = {
+        "schema_version": 1,
+        "document_sha256": source.get("sha256"),
+        "input_facts": 0,
+        "mapped_facts": 0,
+        "issues": [],
+        "warnings": [],
+        "data_source": "structured",
+    }
+    if not period.get("end"):
+        validation["issues"].append(_issue(-1, "document.json has no usable period"))
+        return None, validation
+    reports = structured.get("reports") or {}
+
+    built: list[dict] = []
+    for metric, (kind, field) in STRUCTURED_FIELD_MAP.items():
+        contract = METRIC_CONTRACTS[metric]
+        for period_ref in sorted(_PERIOD_REFS[contract["period_kind"]]):
+            day = _date_for_ref(period, period_ref)
+            if not day or day not in reports or not (reports[day] or {}).get(kind):
+                validation["issues"].append(_issue(
+                    -1, f"structured data for {metric} {period_ref} ({day}) not fetched; "
+                    "fetch dates must cover current, prior and opening periods",
+                    field="structured"))
+                continue
+            row = reports[day][kind][0]
+            value, skip = _structured_value(row, field)
+            if skip:
+                validation["warnings"].append(_issue(
+                    -1, f"{metric} {period_ref}: {skip}", field="structured"))
+                continue
+            fact_period, period_error = _resolve_period(document, contract["period_kind"],
+                                                        period_ref, None)
+            if period_error:
+                validation["issues"].append(_issue(-1, period_error, field="period"))
+                continue
+            built.append({
+                "fact_id": f"f-{len(built) + 1:04d}",
+                "metric": metric,
+                "raw_label": field,
+                "raw_value": None if value is None else format(value, "f"),
+                "raw_unit": "元",
+                "value": None if value is None else format(value, "f"),
+                "unit": "元",
+                "currency": document.get("currency"),
+                "scope": "consolidated",
+                "attribution": contract["attribution"],
+                "period": fact_period,
+                "basis": "as_reported",
+                "evidence_ids": [],
+                "review_status": "verified",
+                "missing_reason": None if value is not None else "not disclosed in structured source",
+                "source": "structured",
+            })
+
+    for metric in STRUCTURED_UNSUPPORTED:
+        validation["warnings"].append(_issue(
+            -1, f"{metric} has no structured field; supply via PDF evidence or derivation",
+            field="structured"))
+
+    if validation["issues"]:
+        return None, validation
+
+    # 抽样核对：fact_inputs（AI 从 PDF 抽查的关键数，过 evidence 核对）与结构化
+    # 事实同台并存——值一致由 pick_usable 去重，不一致自动 conflict（既有语义）。
+    check = {"schema_version": 1, "samples": [], "verified": 0, "conflicts": 0,
+             "unchecked": 0}
+    extracted_facts: list[dict] = []
+    if inputs and isinstance(inputs.get("facts"), list) and inputs["facts"]:
+        input_result = build_financials(run_dir, inputs)
+        extracted_financials, extracted_validation = input_result
+        if extracted_financials is None:
+            validation["issues"].extend(extracted_validation["issues"])
+            return None, validation
+        validation["warnings"].extend(extracted_validation["warnings"])
+        extracted_facts = extracted_financials["facts"]
+        offset = len(built)
+        for i, fact in enumerate(extracted_facts):
+            fact["fact_id"] = f"f-{offset + i + 1:04d}"
+
+    extracted_index = {(f["metric"], f["period"]["end"]): f for f in extracted_facts}
+    for fact in built:
+        if fact["value"] is None:
+            continue
+        twin = extracted_index.get((fact["metric"], fact["period"]["end"]))
+        sample = {
+            "metric": fact["metric"], "period_end": fact["period"]["end"],
+            "structured_value": fact["value"],
+            "extracted_value": twin["value"] if twin else None,
+            "extracted_fact_id": twin["fact_id"] if twin else None,
+            "evidence_ids": twin.get("evidence_ids", []) if twin else [],
+            "pdf_pages": sorted({p for fid in (twin.get("evidence_ids", []) if twin else [])
+                                 for p in _evidence_pages(run_dir, fid)}),
+        }
+        if twin is None:
+            sample["status"] = "unchecked"
+            check["unchecked"] += 1
+        elif _same_amount(fact["value"], twin["value"]):
+            sample["status"] = "verified"
+            check["verified"] += 1
+        else:
+            sample["status"] = "conflict"
+            fact["review_status"] = "conflict"
+            check["conflicts"] += 1
+            validation["issues"].append(_issue(
+                -1, f"structured/extracted mismatch for {fact['metric']} "
+                f"({fact['period']['end']}): structured {fact['value']} vs "
+                f"extracted {twin['value']}", field="structured_check"))
+        check["samples"].append(sample)
+
+    # 全量数值存在性检查：structured 的每个非空值应在 PDF 证据文本中出现过
+    # （弱背书——不配对科目，只验证数值真实出现在原文；找不到通常是证据未覆盖该页）。
+    value_index = _evidence_value_index(run_dir)
+    presence = {"found": 0, "not_found": 0, "no_value": 0, "not_found_metrics": []}
+    for fact in built:
+        if fact["value"] is None:
+            presence["no_value"] += 1
+            continue
+        if Decimal(fact["value"]) in value_index:
+            presence["found"] += 1
+        else:
+            presence["not_found"] += 1
+            if len(presence["not_found_metrics"]) < 20:
+                presence["not_found_metrics"].append(
+                    {"metric": fact["metric"], "period_end": fact["period"]["end"]})
+    check["presence"] = presence
+
+    # 抽查覆盖建议：fact_inputs 未覆盖本期建议科目时提示补充（不阻塞）。
+    covered = {f["metric"] for f in extracted_facts
+               if f["period"]["end"] == period.get("end")}
+    missing_reco = [m for m in RECOMMENDED_SAMPLE_METRICS
+                    if m not in covered and m in STRUCTURED_FIELD_MAP]
+    if missing_reco:
+        validation["warnings"].append(_issue(
+            -1, "sample sheet does not cover current-period metrics: "
+            f"{', '.join(missing_reco)}; add PDF-verified samples for full conclusion backing",
+            field="structured_check", severity="warning"))
+    validation["structured_check"] = check
+
+    all_facts = built + extracted_facts
+    validation["input_facts"] = len(all_facts)
+    validation["mapped_facts"] = len(all_facts)
+    financials = {
+        "schema_version": 1,
+        "document_sha256": source.get("sha256"),
+        "currency": document.get("currency"),
+        "facts": all_facts,
+    }
+    errors = validate_financials(financials)
+    if errors:
+        for error in errors:
+            validation["issues"].append(_issue(
+                -1, f"contract violation: {error['fact_id']} {error['field']}: {error['error']}"))
+        return None, validation
+    return financials, validation
+
+
+def _same_amount(left: str, right: str) -> bool:
+    """双源一致：金额差不超过 1 分（两源的舍入级差异不视为冲突）。"""
+    try:
+        return abs(Decimal(left) - Decimal(right)) <= Decimal("0.01")
+    except InvalidOperation:
+        return False
+
+
+def _evidence_pages(run_dir: Path, evidence_id: str) -> list[int]:
+    manifest_path = run_dir / "extraction_manifest.json"
+    if not manifest_path.exists():
+        return []
+    for record in read_json(manifest_path).get("evidences", []):
+        if record.get("evidence_id") == evidence_id:
+            return record.get("pdf_pages", [])
+    return []
 
 
 def main(argv: list[str] | None = None) -> int:

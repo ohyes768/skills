@@ -275,3 +275,195 @@ def test_document_period_frequency_passes_through(run_dir):
     assert financials is not None, validation["issues"]
     assert financials["facts"][0]["period"]["frequency"] == "half_year"
     assert validate_financials(financials) == []
+
+
+def test_inspect_frequency_semi_annual_is_normalized(run_dir):
+    """回归（b1a13cc 曾修复后被覆盖）：semi_annual 必须归一化为合同值 half_year。"""
+    prepare_build_run(run_dir, document_period={
+        "kind": "duration", "start": "2026-01-01", "end": "2026-06-30",
+        "frequency": "semi_annual", "aggregation": "cumulative",
+    })
+    inputs = {"schema_version": 1, "facts": [fact_input()]}
+    financials, validation = build_financials.build_financials(run_dir, inputs)
+    assert financials is not None, validation["issues"]
+    assert financials["facts"][0]["period"]["frequency"] == "half_year"
+    assert validate_financials(financials) == []
+
+
+def structured_doc() -> dict:
+    def row(**kv):
+        return [kv]
+
+    return {
+        "schema_version": 1, "source": "structured_eastmoney",
+        "security_code": "300000", "secucode": "300000.SZ",
+        "report_dates": ["2026-06-30", "2025-06-30", "2025-12-31"],
+        "reports": {
+            "2026-06-30": {
+                "balance": row(TOTAL_ASSETS="1366525227.25", MONETARYFUNDS="123625294.67",
+                               ACCOUNTS_RECE="288607514.94"),
+                "income": row(TOTAL_OPERATE_INCOME="230730296.15", OPERATE_COST="158078681.91",
+                              PARENT_NETPROFIT="-77252801.33"),
+                "cashflow": row(NETCASH_OPERATE="-57969741.72", END_CCE="105663595.93",
+                                CONSTRUCT_LONG_ASSET="10575340.49"),
+            },
+            "2025-06-30": {
+                "balance": row(TOTAL_ASSETS="1400000000.00", MONETARYFUNDS="150000000.00",
+                               ACCOUNTS_RECE="250000000.00"),
+                "income": row(TOTAL_OPERATE_INCOME="319200000.00", OPERATE_COST="230000000.00",
+                              PARENT_NETPROFIT="-46860200.00"),
+                "cashflow": row(NETCASH_OPERATE="-20000000.00", END_CCE="154376097.57",
+                                CONSTRUCT_LONG_ASSET="30000000.00"),
+            },
+            "2025-12-31": {
+                "balance": row(TOTAL_ASSETS="1397677219.66", MONETARYFUNDS="140000000.00",
+                               ACCOUNTS_RECE="260000000.00"),
+                "income": row(TOTAL_OPERATE_INCOME="600000000.00", OPERATE_COST="470000000.00",
+                              PARENT_NETPROFIT="0.00"),
+                "cashflow": row(NETCASH_OPERATE="10000000.00", END_CCE="140000000.00",
+                                CONSTRUCT_LONG_ASSET="50000000.00"),
+            },
+        },
+    }
+
+
+def test_structured_branch_generates_dual_period_facts(run_dir):
+    prepare_build_run(run_dir)
+    financials, validation = build_financials.build_financials_structured(
+        run_dir, structured_doc())
+    assert financials is not None, validation["issues"]
+    by_metric = {}
+    for fact in financials["facts"]:
+        by_metric.setdefault((fact["metric"], fact["period"]["end"]), fact)
+    revenue_cur = by_metric[("revenue", "2026-06-30")]
+    revenue_prior = by_metric[("revenue", "2025-06-30")]
+    cash_opening = by_metric[("cash_equivalents", "2025-12-31")]
+    assert revenue_cur["value"] == "230730296.15"
+    assert revenue_cur["source"] == "structured"
+    assert revenue_cur["evidence_ids"] == []
+    assert revenue_prior["value"] == "319200000.00"
+    assert cash_opening["period"]["kind"] == "instant"
+    assert cash_opening["period"]["end"] == "2025-12-31"
+    assert validate_financials(financials) == []
+    assert validation["warnings"], "unsupported metrics must surface as warnings"
+
+
+def test_structured_missing_date_blocks(run_dir):
+    prepare_build_run(run_dir)
+    doc = structured_doc()
+    doc["reports"].pop("2025-06-30")
+    financials, validation = build_financials.build_financials_structured(run_dir, doc)
+    assert financials is None
+    assert any("not fetched" in i["error"] for i in validation["issues"])
+
+
+def test_structured_null_value_becomes_missing_fact(run_dir):
+    prepare_build_run(run_dir)
+    doc = structured_doc()
+    doc["reports"]["2026-06-30"]["income"][0]["RESEARCH_EXPENSE"] = None
+    doc["reports"]["2025-06-30"]["income"][0]["RESEARCH_EXPENSE"] = None
+    financials, _ = build_financials.build_financials_structured(run_dir, doc)
+    r_and_d = [f for f in financials["facts"] if f["metric"] == "r_and_d_expense"]
+    assert r_and_d and all(f["value"] is None for f in r_and_d)
+    assert all(f["missing_reason"] == "not disclosed in structured source" for f in r_and_d)
+
+
+def test_structured_missing_field_warns_and_skips(run_dir):
+    prepare_build_run(run_dir)
+    doc = structured_doc()
+    for date in doc["reports"]:
+        doc["reports"][date]["balance"][0].pop("GOODWILL", None)
+    financials, validation = build_financials.build_financials_structured(run_dir, doc)
+    assert financials is not None
+    assert not [f for f in financials["facts"] if f["metric"] == "goodwill"]
+    assert any("field missing" in w["error"] and "goodwill" in w["error"]
+               for w in validation["warnings"])
+
+
+def _override_income_cell(run_dir: Path, row: int, value: str) -> None:
+    path = run_dir / "excerpts" / "ev-0001.table.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["rows"][row][1] = value
+    write_json_file(path, data)
+
+
+def test_sample_check_verified_when_twin_matches(run_dir):
+    """抽查数与结构化值一致：双源并存、check 记 verified、值由 pick_usable 去重。"""
+    prepare_build_run(run_dir)
+    _override_income_cell(run_dir, 0, "230,730,296.15")
+    inputs = {"schema_version": 1, "facts": [
+        fact_input(raw_value="230,730,296.15"),
+    ]}
+    financials, validation = build_financials.build_financials_structured(
+        run_dir, structured_doc(), inputs)
+    assert financials is not None, validation["issues"]
+    check = validation["structured_check"]
+    revenue = next(s for s in check["samples"] if s["metric"] == "revenue"
+                   and s["period_end"] == "2026-06-30")
+    assert revenue["status"] == "verified"
+    assert check["verified"] >= 1
+    assert check["conflicts"] == 0
+    rev_facts = [f for f in financials["facts"] if f["metric"] == "revenue"
+                 and f["period"]["end"] == "2026-06-30"]
+    assert {f["source"] for f in rev_facts} == {"structured", "extracted"}
+    assert validate_financials(financials) == []
+
+
+def test_sample_check_conflict_marks_fact(run_dir):
+    """抽查数与结构化值不一致：structured fact 转 conflict，check 记 conflicts。"""
+    prepare_build_run(run_dir)
+    inputs = {"schema_version": 1, "facts": [
+        fact_input(metric="cost_of_sales", raw_label="营业成本",
+                   raw_value="800,000,000.00",
+                   evidence={"evidence_id": "ev-0001", "locator": {"row": 1, "col": 1}}),
+    ]}
+    financials, validation = build_financials.build_financials_structured(
+        run_dir, structured_doc(), inputs)
+    assert financials is not None, "conflict is recorded, not fatal"
+    check = validation["structured_check"]
+    cost = next(s for s in check["samples"] if s["metric"] == "cost_of_sales"
+                and s["period_end"] == "2026-06-30")
+    assert cost["status"] == "conflict"
+    assert check["conflicts"] >= 1
+    conflicted = [f for f in financials["facts"]
+                  if f["metric"] == "cost_of_sales" and f["source"] == "structured"]
+    assert conflicted and conflicted[0]["review_status"] == "conflict"
+    assert any("mismatch" in i["error"] for i in validation["issues"])
+
+
+def test_unchecked_without_sample_inputs(run_dir):
+    prepare_build_run(run_dir)
+    _, validation = build_financials.build_financials_structured(run_dir, structured_doc())
+    check = validation["structured_check"]
+    assert check["unchecked"] == check["verified"] + check["conflicts"] + check["unchecked"]
+    assert check["verified"] == 0 and check["conflicts"] == 0
+    assert all(s["status"] == "unchecked" for s in check["samples"])
+
+
+def test_presence_scan_counts_found_and_not_found(run_dir):
+    """全量数值存在性：值在证据文本中出现计 found，否则 not_found（不阻塞）。"""
+    prepare_build_run(run_dir)
+    doc = structured_doc()
+    # 把本期营收值写入证据文本（ev-0002 任一行），使其可被存在性命中。
+    txt = run_dir / "excerpts" / "ev-0002.txt"
+    txt.write_text(txt.read_text(encoding="utf-8") + "\n[p.55] 230,730,296.15\n",
+                   encoding="utf-8")
+    financials, validation = build_financials.build_financials_structured(run_dir, doc)
+    assert financials is not None
+    presence = validation["structured_check"]["presence"]
+    assert presence["found"] >= 1, "revenue current value exists in evidence text"
+    assert presence["not_found"] >= 1, "values not in extracted pages stay not_found"
+    assert presence["found"] + presence["not_found"] + presence["no_value"] == len(financials["facts"])
+
+
+def test_recommended_sample_metrics_warning(run_dir):
+    """抽查单未覆盖建议科目时给 warning 提示，不阻塞。"""
+    prepare_build_run(run_dir)
+    inputs = {"schema_version": 1, "facts": [fact_input()]}
+    financials, validation = build_financials.build_financials_structured(
+        run_dir, structured_doc(), inputs)
+    assert financials is not None
+    reco_warnings = [w for w in validation["warnings"]
+                     if "sample sheet does not cover" in w["error"]]
+    assert reco_warnings, "missing recommended samples must be surfaced"
+    assert "net_profit_owners" in reco_warnings[0]["error"]
