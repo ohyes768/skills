@@ -5,8 +5,9 @@ Optional values are `null`, never absent keys. Amounts use decimal strings; floa
 financial amount fields. Every artifact file lists `schema_version` unless noted.
 
 Script stdout carries exactly one status line from `emit_status`: `{"status": ..., "artifacts": {...}, "issues": [...]}`.
-Detailed logs go to stderr or files. Exit codes: 0 success/complete, 1 fatal fetch or contract error,
-2 deliverable but incomplete (agent must read `issues` and downgrade affected conclusions).
+Detailed logs go to stderr or files. Exit codes: 0 success/complete, 1 fatal fetch or contract error, 2 not passed — read stdout
+`status`: `repair_needed` means fix inputs and rerun, `partial` means deliverable but
+incomplete (agent must read `issues` and downgrade affected conclusions).
 
 ## source.json — fetch_pdf.py
 
@@ -82,22 +83,28 @@ Evidence object fields: `evidence_id` (stable, e.g. `ev-0001`), `section_id` \| 
 `issues` (list[string], e.g. cross-page header mismatch, OCR unavailable).
 
 Semantic constraints learned from real runs: `pdf_pages` is where the content physically
-sits; `section_id` reflects the extraction REQUEST, not the content's statement. When a
-page carries multiple statements, a `kind=table` evidence is that page's FIRST usable
-table only — other tables produce no table evidence (an explicit `multiple tables` issue
-is recorded instead). Consumers must verify content attribution (title + headers + account
-rows) and never infer consolidated/parent scope from `section_id` alone.
+sits; `section_id` reflects the extraction REQUEST, not the content's statement. A
+`kind=table` evidence is that page's FIRST usable table only — other tables produce no
+table evidence (an explicit `multiple tables` issue is recorded instead). Content
+attribution rules live in [extraction-rules.md](extraction-rules.md) ("Same-page dual
+tables"): verify title + headers + account rows, never infer scope from `section_id` alone.
 
 Image crops are `complete: false` until visually reviewed; context packets contain `file`
 (absolute image path), `requires_visual_review: true`, IDs and pages, never decoded PNG text.
 The initial `locate` packet works before any extraction manifest exists.
 
-## fact_inputs.json — written by agent, consumed by build_financials.py
+## fact_inputs.json — generated from spec.json or written by agent; consumed by build_financials.py
 
-Compact fact input; see [fact-inputs-example.md](fact-inputs-example.md) for the full contract.
-Each entry carries only judgment fields: `metric` (contracted name or registered alias),
-`raw_label`, `raw_value`, `raw_unit`, `period_ref` (`current`/`prior`/`closing`/`opening`),
-optional `scope`/`basis`/`aggregation`/`review_status`/`note`, and an `evidence` object
+Two paths produce this file: for plain text-evidence facts the agent writes a compact
+`spec.json` (`metric`/`label`/`cur`/`prior`/`page`/`raw_unit`, explicit `ref: opening` for
+opening cash — see [reusable-tools.md](reusable-tools.md)) and `compute --spec` generates
+`fact_inputs.json` via `build_fact_inputs_verified.py`, which also checks excerpt line
+numbers and amounts. For complex mappings (table locators, missing values, duplicate
+labels) the agent writes `fact_inputs.json` directly per
+[fact-inputs-example.md](fact-inputs-example.md). Either way, each entry carries only
+judgment fields: `metric` (contracted name or registered alias), `raw_label`, `raw_value`,
+`raw_unit`, `period_ref` (`current`/`prior`/`closing`/`opening`), optional
+`scope`/`basis`/`aggregation`/`review_status`/`note`, and an `evidence` object
 (`evidence_id` plus `locator` `{row, col}` for tables or `{line}` for text).
 Attribution is never an input — the metric contract fixes it. Undisclosed tokens
 (`—`/`–`/`-`/`--`) produce `value: null` with a program-supplied `missing_reason`.
@@ -170,17 +177,24 @@ reported here as data problems, independent of financial risk conclusions.
 `schema_version`, `document_sha256`, `input_facts`, `mapped_facts`, `issues`, `warnings`.
 Each issue: `input_index` (position in fact_inputs.json), `error` (with row/col locator or
 unknown-label detail), optional `field`/`evidence_id`/`severity`. Any issue blocks
-`financials.json`; the agent fixes `fact_inputs.json` per `input_index` and reruns.
+`financials.json`; the agent fixes the SOURCE per `input_index` — `spec.json` when
+fact_inputs was generated, `fact_inputs.json` when hand-written — and reruns compute.
 
-## report_inputs.json — written by agent, consumed by render_report.py
+## report_inputs.json — generated via report_inputs_builder.py; consumed by render_report.py
 
 Structured rendering input; see [report-inputs-example.md](report-inputs-example.md).
+The agent normally writes a declarative report spec and runs `report --spec <path>`:
+spec sections mirror this contract, the builder validates bindings, formats and sources
+while building, and a trailing empty table cell expands to the row's united source-page
+citation. Writing report_inputs.json by hand is allowed for special cases.
 Sections carry `anchor`, `statements` (template + bindings + claim_type), `paragraphs`
-(qualitative free text — static numbers limited to years and page citations), and optional
+(qualitative free text — no static numbers at all, not even years or page citations;
+quantitative content belongs in statements/tables), and optional
 `table` (display_unit, columns, rows of label + bound cells). Placeholders `{name:format}`
 bind one `fact_id` or `metric_id` each; formats cover amount scales, percent precision,
 percentage points, and `decline_*` variants (positive value with a decline format is a
-render-time contract violation).
+render-time contract violation; table cells render decline with an automatic 「下降」
+prefix while statement templates must supply the direction word themselves).
 
 ## render_issues.json — render_report.py
 
@@ -262,6 +276,25 @@ use `report --include-report`: only successful validation adds `report_markdown`
 rendered analysis.md body, so the final response can deliver it once without another file read.
 Failed reports never include this field or a successful terminal signal. Existing validation
 and repair budgets remain in force; machine checks do not prove semantic correctness.
+
+New analyses use `report --independent-review` (plus `--include-report` when needed).
+Preflight writes `report_preflight.json` on input failure without consuming a formal report
+submission. After rendering and the original validation pass, `independent_review.json` records
+`passed`, `checks`, `issues`, `not_applicable` and `categories`. Independent failure sets run state
+to partial, uses the existing formal report retry budget and returns neither body nor terminal
+success. The no-flag API retains its original machine-validation-only behavior for compatibility.
+Missing data is explicit, never converted to zero. Semantic review still precedes the command.
+
+`compute --spec <path>` generates fact_inputs from extracted text before the existing compute
+stage. Each entry requires `metric`, `label`, `cur`, `page`, `raw_unit`; optional `prior`, `ref`,
+`scope`. Generation failure does not replace inputs or consume a compute submission. Period
+kinds come from the authoritative metric contracts. Complex evidence can still use direct inputs.
+
+`report --spec <path>` builds report_inputs from a declarative spec before the existing report
+flow (preflight → render → validation → independent review). Construction failure writes no
+file, consumes no report submission and returns `repair_needed`; construction success writes
+report_inputs.json and continues in the same call, so the spec write and the final report
+command merge into one tool call.
 
 ## model_usage.json — optional
 

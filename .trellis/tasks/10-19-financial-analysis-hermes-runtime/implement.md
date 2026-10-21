@@ -1,5 +1,20 @@
 # 执行计划（P0-P3 已完成实现，P4 部分完成）
 
+## 2026-10-21：接入 sibling 工具（用户已确认）
+
+- [x] 核对远程 sibling：996 行/7 个 Python 文件；主 skill 无入口。研究记录见
+  [research/sibling-tool-integration.md](research/sibling-tool-integration.md)。
+- [x] 迁入有效生成器、构造器和预检，适配单位、主指标合同、重复标签与当前格式。
+- [x] compute --spec 合并事实生成；report --independent-review 合并预检与独立复核。
+  保留旧入口兼容；成功前完成所有检查，失败不返回正文或成功终态。
+- [x] 主文档接入短指南；更新模板及产物合同，不复制历史避坑大全。
+- [x] 动态变异回归替代原公司的硬编码，维护阶段运行。初始 10 例 RED。
+- [x] 本地全量 252 passed，Ruff、Skill 元数据及 git diff --check 通过。
+- 本次未提交或推送，未覆盖 NAS 的活动 Skill：检查时 gateway_busy=true、active_agents=1。
+  变更保留在本地工作区；后续同步应在空闲时进行，不重启或修改 Hermes。
+
+Hermes 核心、调用端、模型配置不变；不宣称真实模型性能基准完成。
+
 ## P0：锁住运行边界并补失败样本 ✅
 
 - [x] 去敏负例回归 tests/test_hermes_regressions.py：3D、范围页码 56-57、下降正幅度、2026上半年、百分点（10 例）；不提交原始私有日志。

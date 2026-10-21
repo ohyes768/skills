@@ -127,6 +127,14 @@ def test_document_metadata_extracted(full_report):
     assert doc["applicability"]["audit_available"] is True
 
 
+def test_period_frequency_uses_contract_values():
+    """period.frequency 直接产事实合同值，下游不再归一化（semi_annual→half_year 等）。"""
+    assert set(inspect_pdf._FREQUENCY_BY_TYPE) == set(inspect_pdf._PERIOD_END)
+    assert inspect_pdf._FREQUENCY_BY_TYPE["semi_annual"] == "half_year"
+    assert inspect_pdf._FREQUENCY_BY_TYPE["q1"] == "quarter"
+    assert inspect_pdf._FREQUENCY_BY_TYPE["q3"] == "quarter"
+
+
 def test_year_conflict_recorded(run_dir):
     data, _pm = build_annual_report(year_conflict=True)
     prepare_run_dir(run_dir, data)

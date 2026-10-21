@@ -2,7 +2,7 @@
 
 新入口只做确定性编排：不调用模型、不修改校验规则、不重置预算。
 run_state.json 是诊断状态，不是安全权威；受保护模式的最终校验由宿主控制。
-退出码：0 阶段成功；1 致命合同/维护错误；2 可保留但未通过或需修复。
+退出码：0 阶段成功；1 致命合同/维护错误；2 未通过（status=repair_needed 需修复重跑，partial 可交付但不完整）。
 quality_status：verified（报告通过）/ partial（预算内可修复）/ maintenance_required。
 """
 
@@ -137,19 +137,28 @@ def cmd_prepare(url: str, run_dir: Path) -> tuple[dict, int]:
                      ("company_name", "stock_code", "report_type", "period",
                       "currency", "audit_status", "page_count")},
         "sections": sections,
-        "next_action": ("pick key sections, run extract_sections.py, then pack_context.py "
-                        "--stage map to read evidence"),
+        "next_action": "pick key sections; run run_pipeline.py evidence for extraction and context",
         "quality_status": "partial",
     }
     return result, 0
 
 
-def cmd_compute(run_dir: Path) -> tuple[dict, int]:
+def cmd_compute(run_dir: Path, *, spec_path: Path | None = None) -> tuple[dict, int]:
     import build_financials
     from calculate_metrics import calculate_metrics as compute_metrics
     from financial_schema import validate_financials
 
     run_dir = Path(run_dir)
+    if spec_path is not None:
+        from build_fact_inputs_verified import build_inputs
+
+        try:
+            inputs = build_inputs(run_dir, read_json(Path(spec_path)))
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            return ({"status": "repair_needed", "stage": "compute",
+                     "quality_status": "partial", "terminal": False,
+                     "issues": [str(exc)], "next_action": "fix spec.json from source evidence"}, 2)
+        write_json(run_dir / "fact_inputs.json", inputs)
     state = _load_state(run_dir)
     remaining, blocked = _budget(state, run_dir, "compute", "fact_inputs.json")
     if blocked:
@@ -209,18 +218,53 @@ def cmd_compute(run_dir: Path) -> tuple[dict, int]:
         ],
         "remaining_repairs": remaining,
         "quality_status": "partial",
-        "next_action": "write report_inputs.json with bindings into facts/metrics, then run report",
+        "next_action": ("write a report spec and run report --spec <spec> "
+                        "--independent-review; complete semantic review first"),
     }
     from pack_context import build_packet
     result["context"] = build_packet(run_dir, stage="analyze", request_id="compute-analysis")
     return result, (0 if not issues else 2)
 
 
-def cmd_report(run_dir: Path, *, include_report: bool = False) -> tuple[dict, int]:
+def cmd_report(run_dir: Path, *, include_report: bool = False,
+               independent_review: bool = False,
+               spec_path: Path | None = None) -> tuple[dict, int]:
     import render_report
     import validate_report
 
     run_dir = Path(run_dir)
+    if spec_path is not None:
+        from report_inputs_builder import build_report_inputs
+
+        try:
+            spec_inputs = build_report_inputs(run_dir, read_json(Path(spec_path)))
+        except (OSError, ValueError, KeyError, TypeError, render_report.RenderIssue) as exc:
+            return ({"status": "repair_needed", "stage": "report", "terminal": False,
+                     "quality_status": "partial",
+                     "issues": [f"report spec construction failed: {exc}"],
+                     "next_action": "fix the report spec against financials/metrics facts"}, 2)
+        write_json(run_dir / "report_inputs.json", spec_inputs)
+    if independent_review:
+        from verify_report_inputs import verify_inputs
+
+        try:
+            preflight = verify_inputs(run_dir, read_json(run_dir / "report_inputs.json"))
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            state = _load_state(run_dir)
+            state.update(stage="report", quality_status="maintenance_required")
+            _save_state(run_dir, state)
+            return ({"status": "failed", "stage": "report", "terminal": False,
+                     "quality_status": "maintenance_required", "issues": [str(exc)]}, 1)
+        if preflight:
+            errors, total = _limited(preflight, "report_preflight.json")
+            write_json(run_dir / "report_preflight.json", {"issues": preflight})
+            state = _load_state(run_dir)
+            state.update(stage="report", quality_status="partial")
+            _save_state(run_dir, state)
+            return ({"status": "repair_needed", "stage": "report", "terminal": False,
+                     "quality_status": "partial", "issues": errors,
+                     "error_counts": {"preflight": total},
+                     "next_action": "fix report_inputs.json before final report"}, 2)
     state = _load_state(run_dir)
     remaining, blocked = _budget(state, run_dir, "report", "report_inputs.json")
     if blocked:
@@ -258,6 +302,25 @@ def cmd_report(run_dir: Path, *, include_report: bool = False) -> tuple[dict, in
     (run_dir / "analysis.md").write_text(markdown, encoding="utf-8", newline="\n")
     validation = validate_report.validate_report(run_dir)
     state["stage"] = "report"
+    independent = None
+    if validation["passed"] and independent_review:
+        from verify_report_independent import verify_run
+
+        try:
+            independent = verify_run(run_dir)
+        except (OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
+            independent = {"passed": False, "issues": [f"independent review unavailable: {exc}"]}
+        write_json(run_dir / "independent_review.json", independent)
+        if not independent["passed"]:
+            state["quality_status"] = "partial"
+            _save_state(run_dir, state)
+            errors, total = _limited(independent["issues"], "independent_review.json")
+            return ({"status": "repair_needed", "stage": "report", "terminal": False,
+                     "quality_status": "partial", "issues": errors,
+                     "error_counts": {"independent_review": total},
+                     "remaining_repairs": remaining,
+                     "artifacts": {"independent_review": str(run_dir / "independent_review.json")},
+                     "next_action": "fix inputs using independent_review.json; rerun report"}, 2)
     if validation["passed"]:
         state["quality_status"] = "verified"
         _save_state(run_dir, state)
@@ -268,6 +331,9 @@ def cmd_report(run_dir: Path, *, include_report: bool = False) -> tuple[dict, in
                  "issues": [], "remaining_repairs": remaining,
                  "quality_status": "verified",
                  "terminal": True, "next_action": None}
+        if independent is not None:
+            result["independent_review"] = {
+                key: independent[key] for key in ("passed", "checks", "not_applicable")}
         if include_report:
             result["report_markdown"] = markdown
         return result, 0
@@ -336,7 +402,9 @@ def cmd_evidence(run_dir: Path, *, section_ids: list[str] | None = None,
               "quality_status": "partial", "terminal": False, "context": context,
               "issues": [issue for ev in selected for issue in ev.get("issues", [])],
               "incomplete_evidence_ids": incomplete,
-              "next_action": "continue cursor if present; otherwise write fact_inputs.json"}
+              "next_action": ("continue cursor if present; otherwise assemble spec.json with "
+                              "all required facts, then compute --spec; complex mappings may "
+                              "use direct fact_inputs.json")}
     return result, (2 if incomplete else 0)
 
 
@@ -350,9 +418,13 @@ def main(argv: list[str] | None = None) -> int:
 
     compute = subparsers.add_parser("compute", help="fact_inputs.json → financials + metrics")
     compute.add_argument("--run-dir", required=True)
+    compute.add_argument("--spec", help="spec → verified fact inputs → compute in one call")
 
     report = subparsers.add_parser("report", help="report_inputs.json → analysis + claims + 校验")
     report.add_argument("--run-dir", required=True)
+    report.add_argument("--spec", help="声明式 report spec → report_inputs.json → 同次执行 report")
+    report.add_argument("--independent-review", action="store_true",
+                        help="预检、渲染、机器校验、独立复核全部通过后才交付")
     report.add_argument("--include-report", action="store_true",
                         help="调用方要求完整正文时，同次返回已校验的报告，免去额外读取")
 
@@ -371,9 +443,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "prepare":
         result, code = cmd_prepare(args.url, run_dir)
     elif args.command == "compute":
-        result, code = cmd_compute(run_dir)
+        result, code = cmd_compute(run_dir, spec_path=Path(args.spec) if args.spec else None)
     elif args.command == "report":
-        result, code = cmd_report(run_dir, include_report=args.include_report)
+        result, code = cmd_report(run_dir, include_report=args.include_report,
+                                  independent_review=args.independent_review,
+                                  spec_path=Path(args.spec) if args.spec else None)
     elif args.command == "evidence":
         from pack_context import parse_pages
         result, code = cmd_evidence(

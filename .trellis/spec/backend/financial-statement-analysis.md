@@ -82,3 +82,22 @@ Markdown text, display values and pages to the resolved source chain.
   financial client to consume an out-of-band artifact receipt. Hermes remains unmodified.
 - Machine validation does not prove semantic correctness. A stopped agent is distinct from
   a host process that might still be cleaning up; diagnose actual host failures separately.
+
+## 9. Reusable analysis tools (Skill only)
+
+- Tools migrated from the profile-local `financial-pitfall-recovery` belong to this skill's
+  scripts/tests. Never require a hard-coded profile path or load the entire historical skill.
+- Normal text mapping uses `compute --spec`: validate excerpt line numbers and literal values
+  before replacing inputs, then run the existing construction/calculation stage. Require the
+  source unit explicitly; read period kinds from METRIC_CONTRACTS, never a copied constant.
+  Ambiguous labels require explicit analyst mapping, not the first match.
+- Report builders reuse the current renderer contract (including pp and decline table cells).
+  Normal delivery uses `report --independent-review`: input preflight, render, original
+  validator, independent numeric/structure checks, then a single terminal result. The old
+  no-flag API remains compatible. Independent failure cannot return report_markdown or leave
+  state verified. Formal report retries share the original persisted repair budget.
+- Independent checks must not assume a company, year, fact ID, zero minority interests or
+  complete data. Recompute computed metrics using their input facts; unavailable metrics and
+  accounting checks are explicitly not_applicable. Scope comparisons stay separate.
+- Maintenance mutation tests use synthetic fixtures and dynamically selected fields, never
+  literal numbers/IDs from a live company's report. They do not run per financial analysis.

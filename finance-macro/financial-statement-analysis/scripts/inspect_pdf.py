@@ -42,6 +42,8 @@ _PERIOD_END = {
     "q1": "-03-31",
     "q3": "-09-30",
 }
+# period.frequency 直接产事实合同值（financial_schema._FREQUENCIES），下游不再归一化。
+_FREQUENCY_BY_TYPE = {"annual": "annual", "semi_annual": "half_year", "q1": "quarter", "q3": "quarter"}
 _FINANCIAL_KEYWORDS = ("商业银行", "保险公司", "证券公司", "信托公司", "银行业")
 _BASIS_RANK = {"bookmark": 0, "printed_toc": 1, "keyword_scan": 2}
 
@@ -266,7 +268,7 @@ def _extract_document_meta(doc: pymupdf.Document, pages: list[dict], sections: l
             "kind": "duration",
             "start": f"{year}-01-01",
             "end": f"{year}{_PERIOD_END[report_type]}",
-            "frequency": report_type,
+            "frequency": _FREQUENCY_BY_TYPE[report_type],
             "aggregation": "cumulative",
         }
 

@@ -1,6 +1,8 @@
 # fact_inputs.json — 紧凑事实输入合同
 
-由 agent 编写，`run_pipeline.py compute`（或 `build_financials.py`）消费。
+简单场景由 `spec.json` 经 `compute --spec` 程序生成（见[可复用工具](reusable-tools.md)）；
+表格 locator、缺失值、重复标签等复杂映射时由 agent 按本合同手写。
+`run_pipeline.py compute`（或 `build_financials.py`）消费。
 模型只提交需要判断的字段：指标映射、原文值、证据定位；公共公司、币种、期间结构、
 归属维度、`fact_id`、`missing_reason` 全部由程序从 `document.json` / `source.json` /
 `extraction_manifest.json` 推导。**`attribution` 不接受输入**——由指标合同固定
@@ -87,10 +89,9 @@
 
 ## 表格证据与文本证据的选择
 
-同页承载多张报表时，`kind=table` 证据只是该页**第一张**可识别表格（证据的 `issues`
-里有 `multiple tables` 告警），第二张表可能才是你要的——此时 table 证据会指向另一张
-报表（合同负债 vs 短期借款量级差异巨大，误用会直接算错资产负债结构）。此类场景对
-非第一张表一律使用 text 证据（`kind=text`）并用 `locator.line` 定位：
+同页双表、跨页表尾的内容归属一律按 [extraction-rules.md](extraction-rules.md) 的
+"Same-page dual tables" 节处理：以"表标题 + 列头 + 科目行"判断归属，不按页码或
+`section_id`；非该页第一张的表一律用 text 证据（`kind=text`）并用 `locator.line` 定位。此类场景的典型写法：
 
 ```json
 {
@@ -104,8 +105,6 @@
 ```
 
 注意：text 证据只校验 `raw_label` 出现，**不校验数值**；数值正确性由你对照原文负责。
-归属判断以"表标题 + 列头 + 科目行"三者同时出现为准，不要按页码或 `section_id`
-推断合并/母公司口径（见 extraction-rules.md 的同页双表节）。
 
 ## 指标与期间类型
 

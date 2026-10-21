@@ -30,3 +30,16 @@ gateway helper, custom tests and bridge installer. Restarted only the idle profi
 Validation: local Skill 232 passed; NAS 227 passed/5 optional skips; original API 23 passed;
 original caller 26 passed; Ruff and Skill metadata passed. No model run or publication.
 
+## 2026-10-21 — Bring sibling tools into the main financial skill
+
+User approved tool migration and concise main-skill routing. Migrated verified fact generation,
+report construction and preflights/independent review into main scripts. New compute --spec and
+report --independent-review combine deterministic steps before the final terminal response;
+legacy calls stay compatible. Adapted stale metric types, unit defaults, sample-year checks,
+minority-profit assumptions and sample-specific mutations. Added a short usage guide and aligned
+the report template, contracts and next_action hints. Historical sibling remains case reference.
+
+Validation: ten failing tests before implementation; final local suite 252 passed, Ruff and skill
+metadata passed. No real model benchmark or publication. NAS still has an active agent/busy gateway,
+so its live skill was not overwritten. No Hermes/client edits, restart, Git commit or push this turn.
+

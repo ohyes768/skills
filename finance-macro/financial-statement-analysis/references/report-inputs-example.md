@@ -1,6 +1,8 @@
 # report_inputs.json — 同源渲染输入合同
 
-由 agent 编写，`run_pipeline.py report`（或 `render_report.py`）消费。
+通常用 `report_inputs_builder.py` 按 spec 生成（构造时自动查绑定、格式与来源）；
+特殊场景可直接手写本 JSON。
+`run_pipeline.py report`（或 `render_report.py`）消费。
 正文与 `report_claims.json` 由渲染器从结构化绑定**同时生成**——不手写正文再补引用，
 禁止根据正文数值在 facts 里搜索碰巧相等的支持事实。渲染产物直接交给固定
 `validate_report` 校验；渲染后篡改正文会被拒绝。

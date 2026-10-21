@@ -6,10 +6,8 @@ from decimal import Decimal, InvalidOperation
 
 
 def period_key(period: dict) -> tuple:
-    frequency = {"semi_annual": "half_year", "q1": "quarter", "q3": "quarter"}.get(
-        period.get("frequency"), period.get("frequency")
-    )
-    return (period.get("start"), period.get("end"), frequency, period.get("aggregation"))
+    return (period.get("start"), period.get("end"),
+            period.get("frequency"), period.get("aggregation"))
 
 
 def prior_year(value: str) -> str:
