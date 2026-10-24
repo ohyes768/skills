@@ -35,6 +35,8 @@ The skill makes no platform API calls and has no publishing side effects.
   2/3/4/5 stars, inclusive at each threshold.
 - Boundary distance is strictly less than 0.25; validate actual legal ±1
   changes before claiming a transition. Scale endpoints 1 and 5 are not boundaries.
+  The boundary text is one verifiable sentence ("踩线 N 星：…direction…"),
+  not a per-dimension enumeration (simplified 2026-10-24, v2.2.1).
 - E uses supplied financial numbers only. Financial-sector leverage thresholds
   are skipped; absent sector indicators require an explicit provisional result.
 - Missing evidence must remain visible beside scores and in summary/watch points.
