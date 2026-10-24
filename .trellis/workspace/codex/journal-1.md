@@ -43,3 +43,16 @@ Validation: ten failing tests before implementation; final local suite 252 passe
 metadata passed. No real model benchmark or publication. NAS still has an active agent/busy gateway,
 so its live skill was not overwritten. No Hermes/client edits, restart, Git commit or push this turn.
 
+## 2026-10-24 — Develop dividend quality scoring skill
+
+Resumed the approved personal-web 10-23-dividend-hermes-quality handoff after the
+user reported frontend/backend complete. Added the standalone JSON automation
+skill in finance-macro/dividend-quality-scoring and synchronized its Web source
+copy. Kept basic-quality-rating unchanged and preserved all existing dirty work.
+Clarified financial caps, provisional evidence, bank limitations and exact boundary
+transitions. Read-only baseline/green evaluations covered six synthetic branches;
+metadata checks and actual-consumer compatibility across all 3,125 score vectors
+passed. Reproducible checks and remaining live acceptance are recorded in
+.trellis/tasks/10-23-dividend-hermes-quality/skill-validation.md.
+No NAS installation, live model rating, publication, commit or push this session.
+

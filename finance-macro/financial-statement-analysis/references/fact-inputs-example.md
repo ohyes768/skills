@@ -76,7 +76,7 @@ PDF 抽取的关键数字（带 evidence 定位），程序与东财结构化数
 | aggregation | 否 | duration 默认 `cumulative`；单季值显式给 `single_period` |
 | review_status | 否 | 默认 `verified`（表示已对照原文核实）；`ambiguous` / `conflict` 需注明 |
 | evidence | 数值必填 | `evidence_id` 必须存在于 extraction_manifest.json |
-| evidence.locator | 表格必填 | `{"row": int, "col": int}`（0 起的数据行/列）；文本证据可给 `{"line": int}` |
+| evidence.locator | 表格必填 | `{"row": int, "col": int}`：table JSON 的 `rows[row][col]`，均从 0 起；文本证据可给 `{"line": int}`，为 excerpt 文件从 1 起的行号，详见下节 |
 | note | 否 | 备注或缺席原因补充，写入 `missing_reason` |
 
 ## 程序强制的行为
@@ -91,6 +91,44 @@ PDF 抽取的关键数字（带 evidence 定位），程序与东财结构化数
 - `document.json` 缺少可用期间时拒绝构造——先澄清期间，不猜默认值。
 
 ## 表格证据与文本证据的选择
+
+### 表格 locator：按 rows 与 headers 定位
+
+从 `extraction_manifest.json` 找到该 evidence_id 对应的表格 JSON 文件，读取其 `headers`
+和目标附近的 `rows` 即可定位，无需读取 `build_financials.py`。`locator.row` 是该文件
+**`rows[]` 的 0 起下标，不是 PDF 页内行号，也不是去掉空行/分类行后的序号**。
+`headers` 不计入 row；`rows` 内的分类占位行、空行都占下标，不得先过滤再计数。
+`locator.col` 是该行数组的 **0 起下标**，科目名、附注和空单元格同样占列位。
+
+例如某资产负债表抽取为：
+
+```json
+{
+  "headers": ["项目", "附注", "2026年6月30日", "2025年12月31日"],
+  "rows": [
+    ["流动资产：", "", "", ""],
+    ["货币资金", "七、1", "500,000,000.00", "450,000,000.00"]
+  ]
+}
+```
+
+这张表中 col=0 为科目名，col=1 为附注，数据从 col=2 开始；货币资金是 row=1，
+不是 row=0。因此期末值用 `{"row": 1, "col": 2}`，上年末值用 `{"row": 1, "col": 3}`。
+若报告期间从年初开始，上年末才对应期初 opening；仍须核对 document 的实际期间。
+
+**列的数量与本期/上期顺序不固定**。上述 col=2 仅适用于该示例；没有附注列时数据列
+可能从 col=1 开始，也可能比较期列在前。每张表都要根据 `headers` 的日期/期间判断，
+再与 `period_ref` 配对；不能默认 col=2 总是本期，或 col=3 总是上期。
+列头缺失、错位或无法确认期间时，不猜列义，改用可确认归属的文本证据或保留未验证状态。
+
+### 文本 locator：excerpt 文件行号从 1 起
+
+文本的 `locator.line` 是 evidence 对应 excerpt 文件按原样读取时的 **1 起行号**，
+包含文件中的页码标记行、空行等；不是 PDF 页内行号，也不是 pages.jsonl 的下标。
+不要删掉标记/空行后再数行。表格 `row=0` 指 rows 第一项，文本 `line=1` 指 excerpt 第一行，
+两种基准不能混用。
+
+### 同页多表与跨页表尾
 
 同页双表、跨页表尾的内容归属一律按 [extraction-rules.md](extraction-rules.md) 的
 "Same-page dual tables" 节处理：以"表标题 + 列头 + 科目行"判断归属，不按页码或

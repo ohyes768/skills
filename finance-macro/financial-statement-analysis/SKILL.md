@@ -20,7 +20,7 @@ description: A 股财报 PDF 深度分析。输入一份财报 PDF 链接（年�
 
 ## 执行顺序（统一阶段入口）
 
-主流程已接入 `financial-pitfall-recovery` 的可复用生成器与预检工具，入口和最小示例见[可复用工具](references/reusable-tools.md)。新标的开工先读此短指南，不逐个读源码、不重建 locator/报告生成器，也不整份加载 sibling 的历史记录。冲突时以主 skill 当前合同为准。
+主 skill 自带事实生成器、报告构造器与预检工具，入口和最小示例见[可复用工具](references/reusable-tools.md)。新标的开工先读此短指南，不逐个读源码、不重建 locator/报告生成器。工具、合同和验收规则均在本 skill 内维护，无需加载其他财报 skill。
 
 日常分析用 `run_pipeline.py`（prepare/evidence/compute/report）；旧提取/读包 CLI 保留兼容，默认不拆开调用；`review` 仅诊断恢复时用。写入紧凑输入后可在同一次工具调用中执行下一阶段，无需先读回刚写入的文件。仅使用 Skill 自带流程，不安装宿主补丁、不改调用端或 Hermes 配置。
 

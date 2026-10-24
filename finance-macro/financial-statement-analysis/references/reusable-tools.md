@@ -1,12 +1,10 @@
 # 可复用工具与开工纪律
 
-这些工具从 Hermes profile 的 `financial-pitfall-recovery` 迁入主 skill，主流程无需再寻找
-sibling 或读取其全部历史案例。主 skill 的脚本、合同与测试是迁入工具的维护入口。
-`financial-pitfall-recovery` 仍可作为历史案例参考；其中旧 workaround、`report → review`、
-固定公司页码与旧预算解释不能覆盖本 skill 当前流程。
+这些工具随主 skill 提供，统一在本 skill 的 `scripts/`、`references/` 与 `tests/` 内维护。
+事实生成、报告构造、预检和独立复核均使用下表入口，无需寻找其他财报 skill 或历史案例。
 
 写报告时先查[指标目录](metric-catalog.md)与[独立复核合同](independent-review-contract.md)，
-无需去 sibling 或源码寻找 metric_id 枚举及 A1–E1 验收条件。
+无需读取源码寻找 metric_id 枚举及 A1–E1 验收条件。
 
 ## 工具入口
 
@@ -82,7 +80,7 @@ run_pipeline.py compute --run-dir <run-dir> --spec <run-dir>/spec.json
 
 行尾空串在构造时替换为该行所有绑定证据页并集的页码（`PDF 第 N 页`）。构造器逐项
 校验绑定、格式与来源，失败不写文件、不消耗 report 预算；格式规则与渲染合同共用，
-支持年份、百分点及表格 decline_* 自带方向词，不沿用旧 sibling 的过期禁令。
+支持年份、百分点及表格 decline_* 自带方向词，具体规则以当前报告输入合同为准。
 定性段落一律零数字，含年份和页码引用也不行。
 
 ```bash
