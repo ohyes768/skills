@@ -20,6 +20,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill |
 | [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | To fill |
 | [Financial Statement Analysis](./financial-statement-analysis.md) | Evidence identity, compatible facts and Markdown validation | Implemented |
+| [Basic Quality Rating](./basic-quality-rating.md) | Automation JSON contract, provisional evidence, Web consumer compatibility | Implemented |
 
 ---
 
