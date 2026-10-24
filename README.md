@@ -23,6 +23,7 @@ dev-workflow/         # 开发工程
 agent-methods/        # Agent 方法论
 design/               # UI/UX 设计
 knowledge/            # 知识管理
+environment/          # 环境与空气质量
 README.md
 ```
 
@@ -78,6 +79,12 @@ README.md
 |---|---|---|
 | [notes-deal](knowledge/notes-deal) | 浏览器采集知识点的自动分类整理 | active |
 | [bilibili-subtitle-rss](bilibili-subtitle-rss) | 提取 B站完整字幕、按停顿和字数合并分段，并查重推送到 RSS Relay；已安装到 Codex | active |
+
+### 环境与空气质量 `environment/`
+
+| Skill | 说明 | 状态 |
+|---|---|---|
+| [hangzhou-pm25](environment/hangzhou-pm25) | 杭州 PM2.5 站点实测、未来五天模型趋势及通俗天气解释；附独立 Python 脚本 | 源码可用，待发布 |
 
 ## 外部 skill（GitHub）
 
