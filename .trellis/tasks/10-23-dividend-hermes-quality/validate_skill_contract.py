@@ -44,6 +44,8 @@ def main():
     model = namespace["QualityScore"]
     sample = json.loads(re.search(r"```json\n(.*?)\n```", text, re.S)[1])
     assert set(sample) == set(model.model_fields), "Output fields drifted from consumer"
+    declared_count = re.search(r"固定\s*(\d+)\s*个顶层字段", text)
+    assert declared_count and int(declared_count[1]) == len(sample), "Declared field count contradicts example"
     result = parse(json.dumps(sample, ensure_ascii=False), sample["code"], sample["name"])
     assert result.code == "000001", "Leading zeros lost"
     assert result.weighted_score == 3.8 and result.stars == 3
@@ -69,7 +71,7 @@ def main():
             pass
         else:
             raise AssertionError(f"Consumer accepted invalid fixture: {changes}")
-    print(f"PASS: {len(input_keys)} input fields, 11 output fields, example JSON, leading zeros")
+    print(f"PASS: {len(input_keys)} input fields, {len(sample)} output fields, example JSON, leading zeros")
     print("PASS: all 3,125 dimension combinations accepted by actual Web scoring validator")
     print("PASS: wrong sum, wrong stars, blank report and missing dimension rejected")
     print("Scope: numeric/schema compatibility only; not live-model research/report validation")
