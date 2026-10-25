@@ -66,7 +66,7 @@ class RatingMathTests(unittest.TestCase):
         self.assertIn("业务模式、护城河或行业前景升1分即升至4星", text)
 
     def test_rejects_non_integer_or_wrong_dimensions(self):
-        for value in (True, 3.0, "3", None, 0, 6):
+        for value in (True, 3.0, "3", 0, 6):
             dims = self.dimensions(3, 3, 3, 3, value)
             with self.assertRaises(ValueError):
                 rating.calculate(dims)
@@ -74,6 +74,53 @@ class RatingMathTests(unittest.TestCase):
             rating.calculate({"business": 3})
         with self.assertRaises(ValueError):
             rating.calculate(dict(self.dimensions(3, 3, 3, 3, 3), extra=1))
+
+    def test_unknown_dimensions_do_not_produce_a_rating(self):
+        for values in itertools.product((None, 1, 5), repeat=5):
+            if None not in values:
+                continue
+            self.assertEqual(
+                rating.calculate(self.dimensions(*values)),
+                {"weighted_score": None, "stars": None, "boundary": None},
+            )
+
+    def test_unknown_does_not_hide_invalid_scores(self):
+        for invalid in (True, 3.0, "3", 0, 6):
+            with self.assertRaises(ValueError):
+                rating.calculate(self.dimensions(None, 4, 4, 4, invalid))
+
+    def test_finalize_preserves_known_scores_and_clears_stale_rating(self):
+        dims = self.dimensions(4, None, 3, 4, 5)
+        draft = dict(
+            self.draft(),
+            dimensions=dims,
+            stars=4,
+            weighted_score=4.1,
+            boundary="旧边界",
+        )
+        result = rating.finalize(draft)
+        self.assertEqual(result["dimensions"], dims)
+        self.assertEqual(len(result), 10)
+        for field in rating.DERIVED:
+            self.assertIsNone(result[field])
+
+    def test_cli_serializes_unknown_as_json_null(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent) as work:
+            path = Path(work) / "dimensions.json"
+            path.write_text(json.dumps(self.dimensions(5, None, 5, 5, 5)))
+            run = subprocess.run(
+                [sys.executable, str(SCRIPT), "calculate", "--input", str(path)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                check=False,
+            )
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(
+                json.loads(run.stdout),
+                {"weighted_score": None, "stars": None, "boundary": None},
+            )
+            self.assertEqual(run.stderr, "")
 
     def test_finalize_exact_contract_and_recomputes_derived_fields(self):
         draft = dict(self.draft(), weighted_score=5, stars=5, boundary="错误边界")

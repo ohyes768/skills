@@ -56,9 +56,12 @@ def calculate(dimensions):
             "dimensions 必须恰含 business/moat/industry/management/financial 五键"
         )
     if any(
-        type(value) is not int or not 1 <= value <= 5 for value in dimensions.values()
+        value is not None and (type(value) is not int or not 1 <= value <= 5)
+        for value in dimensions.values()
     ):
-        raise ValueError("五维分数必须为 1-5 整数（不接受布尔值、小数或字符串）")
+        raise ValueError("五维分数必须为 1-5 整数或 null（不接受布尔值、小数或字符串）")
+    if any(value is None for value in dimensions.values()):
+        return {"weighted_score": None, "stars": None, "boundary": None}
     total = sum(dimensions[key] * weight for key, weight in WEIGHTS.items())
     stars = _stars(total)
     boundary = None

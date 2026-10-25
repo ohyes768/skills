@@ -20,7 +20,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Quality Guidelines](./quality-guidelines.md) | Code standards, forbidden patterns | To fill |
 | [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | To fill |
 | [Financial Statement Analysis](./financial-statement-analysis.md) | Evidence identity, compatible facts and Markdown validation | Implemented |
-| [Basic Quality Rating](./basic-quality-rating.md) | Automation JSON contract, provisional evidence, Web consumer compatibility | Implemented |
+| [Basic Quality Rating](./basic-quality-rating.md) | Nullable JSON contract, moat depth/trend, ungraded evidence and consumer migration | Implemented |
 | [Hangzhou PM2.5](./hangzhou-pm25.md) | Station/model separation, calendar coverage, weather evidence and CLI failure contracts | Implemented |
 
 ---

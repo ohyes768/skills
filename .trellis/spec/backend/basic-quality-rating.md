@@ -4,7 +4,7 @@
 
 Apply when changing
 `finance-macro/basic-quality-rating/SKILL.md` or its Web consumer contract.
-This skill is automation-only as of v2.3.0. Its single scoring rubric lives in
+This skill is automation-only as of v2.3.0 (nullable scores since v3.0.0). Its single scoring rubric lives in
 SKILL.md; the old interactive workflow and scoring reference were removed.
 `dividend-quality-scoring` was removed on 2026-10-24; its JSON contract now
 lives inside `basic-quality-rating` v2.2+.
@@ -23,7 +23,7 @@ Single stock payload → one bare JSON object. The existing consumer lives in
 The skill makes no platform API calls and has no publishing side effects.
 
 `scripts/rating_math.py` (Python standard library only) is the arithmetic owner:
-- `calculate --input dimensions.json`: five integer dimension keys → the three
+- `calculate --input dimensions.json`: five integer-or-null dimension keys → the three
   derived fields `weighted_score`, `stars`, `boundary`.
 - `finalize --input draft.json --stock stock.json`: seven non-derived output
   fields (derived fields optional) → exact 10-field JSON. Supplied derived fields
@@ -38,7 +38,8 @@ The skill makes no platform API calls and has no publishing side effects.
 - Exactly 10 output fields: `code`, `name`, `dimensions`, `weighted_score`,
   `stars`, `boundary`, `summary`, `risks`, `watch_points`, `report_md`.
 - Dimensions: `business`, `moat`, `industry`, `management`, `financial`;
-  integer scores 1–5, weights 25/25/20/15/15.
+  integer scores 1–5 or null, weights 25/25/20/15/15. Any null dimension
+  makes weighted_score, stars and boundary all null; never reweight known scores.
 - Integer weighted numerator divided by 100; thresholds 2/3/4/4.5 map to
   2/3/4/5 stars, inclusive at each threshold.
 - Boundary distance is strictly less than 0.25; validate actual legal ±1
@@ -46,27 +47,29 @@ The skill makes no platform API calls and has no publishing side effects.
   The boundary text is one verifiable sentence ("踩线 N 星：…direction…"),
   not a per-dimension enumeration (simplified 2026-10-24, v2.2.1).
 - E uses supplied financial numbers only. Financial-sector leverage thresholds
-  are skipped; absent sector indicators require an explicit provisional result.
+  are skipped; absent sector indicators make E null.
 - Missing evidence must remain visible beside scores and in summary/watch points.
-  The integer-only consumer cannot represent an unscored dimension; conservative
-  placeholders must never be described as verified poor business quality.
+  Missing key evidence produces null, never a conservative numeric placeholder.
+  Summary starts with 灰色地带（证据不足，未评级） when any dimension is null.
+  Reports retain known scores and facts and list concrete verification questions.
+  Secondary gaps that do not prevent grading do not impose automatic score caps.
 - No environment variables, URLs, credentials or storage paths belong in the skill.
 
 ## Validation & Error Matrix
 
 | Situation | Required behavior |
 |---|---|
-| Missing/mismatched stock identity | Request correction, do not fabricate a valid result |
+| Missing/mismatched stock identity | Terminate with input error; no interactive question or fabricated result |
 | Wrong dimension keys/range, sum, stars, empty report | Consumer rejects output |
-| Financial values missing | Apply documented caps; disclose provisional status |
-| All financial evidence absent | Provisional 1, explicitly an evidence placeholder |
-| Bank with high debt and no regulatory metrics | Skip debt penalty; provisional E capped at 3 |
+| Required financial values missing | E null; preserve known weaknesses as risks |
+| All financial evidence absent | E null; no overall score or stars |
+| Bank with high debt and no regulatory metrics | Skip debt penalty; E null |
 | Invalid stock identity in automation | Terminate as failed; no interactive question or fabricated rating |
 
 Evidence gathering ends per dimension when its checklist is covered, or after
-two targeted follow-up rounds leave an explicit provisional gap. Completed facts
+two targeted follow-up rounds leave an explicit unscored gap. Completed facts
 are reused. A concrete conflict that might change a score allows one extra round;
-unresolved conflicts remain disclosed/provisional. Do not restart open-ended
+unresolved material conflicts remain disclosed and unscored. Do not restart open-ended
 search while drafting or load the removed company-example scoring reference.
 
 As of v2.3.1, financial cross-checking is materiality-based: identify the affected
@@ -75,7 +78,7 @@ caliber differences are recorded without open-ended arithmetic/research. Derived
 figures that use the supplied value are consistency checks, not independent
 verification; restated and original comparison bases must not be mixed.
 
-Only the business and management 2/3 boundaries were clarified. Business 2 needs
+The business and management 2/3 boundaries retain their v2.3.1 clarifications. Business 2 needs
 concrete dominant-business structural erosion or demonstrated damage from
 unrelated diversification. Cyclicality or a minor segment's substitution risk
 alone does not qualify. Management inquiries alone do not establish misconduct;
@@ -90,32 +93,33 @@ allows one full rewrite, under the existing research budget. Arithmetic/schema
 tests do not verify compliance with these behavioral rules.
 
 The consumer currently validates numeric/schema consistency, not research quality,
-source links, provisional labeling, identity equality or boundary truthfulness.
+source links, evidence-status labeling, identity equality or boundary truthfulness.
 Do not claim those properties are enforced by Pydantic.
 
 ## Good / Base / Bad Cases
 
 - Good: 4/5/3/3/5 → 4.05, 4 stars, business 4→3 gives 3.80 and 3 stars.
 - Base: high ROE, low debt, positive annual/two-quarter profit, rising three-year
-  history → E 5; two-year history alone limits this to provisional E 4.
+  history → E 5; two-year history alone means E null and no overall rating.
 - Bad: treating null as zero, a bank's leverage as industrial distress, or an
-  unverified dimension as a researched neutral score.
+  unverified dimension as any numeric placeholder.
 
 ## Tests Required
 
-Run `python -X utf8 .trellis/tasks/10-23-dividend-hermes-quality/validate_skill_contract.py`
-from the skills repository, with the sibling personal-web checkout present.
-This checks the actual consumer definitions without starting the application:
-input/output keys, example JSON, code preservation, all 3,125 score combinations,
-and rejection of malformed numerical results. Also run the skill metadata validator
-against `finance-macro/basic-quality-rating`. Use behavioral evaluations for
-scoring branches. Real Hermes research/report validation is a separate deployment
-acceptance step, not established by these checks.
+Run the skill metadata validator against `finance-macro/basic-quality-rating`.
+Use behavioral evaluations for moat depth/trend and evidence sufficiency.
+Real Hermes research/report validation is a separate deployment acceptance step.
+The historical `10-23-dividend-hermes-quality/validate_skill_contract.py` checks
+the v2 integer-only Web consumer. It remains useful for fully scored outputs,
+but passing it does not establish v3 null compatibility. Do not weaken that
+consumer validation or claim v3 deployment readiness from its passing result.
 
 Run `python -X utf8 -m unittest discover -s tests/basic-quality-rating -v` and Ruff
 on the new helper/tests. Tests cover all 3,125 combinations, exact threshold and
 strict-distance behavior, grouped boundary truthfulness, 002128 reproduction,
 input rejection, identity matching, 10-field assembly and real CLI behavior.
+Nullable tests cover all 211 incomplete combinations over null/1/5, rejection of
+invalid scores even beside null, stale-score removal and JSON null serialization.
 
 ## Wrong vs Correct
 
@@ -128,3 +132,29 @@ synchronize it only when deployment/synchronization is authorized and inspect
 both hashes before reporting synchronization. On 2026-10-24 the user explicitly
 limited this optimization to the local skills repository; Web/NAS copies remain
 unchanged in that iteration.
+
+## v3.0.0 scoring and migration (2026-10-25)
+
+Moat scores follow depth, durability and trend rather than counting categories:
+4 accepts one strong stable moat; 5 requires mutually reinforcing moats with
+widening evidence; 3 accepts a demonstrated but shallow advantage or unclear
+trend; 2 requires actual erosion; 1 requires researched absence of advantage.
+Unknown existence/stability is null, not 1 or 2. Do not double-count evidence.
+
+E no longer defaults missing ROE to 3 or applies caps for missing data. Required
+input values, industry, periods and the latest consecutive three-year history
+must support the rules; otherwise E is null. Existing verified financial
+thresholds remain unchanged. Financial firms lack required sector metrics under
+the current payload and therefore cannot receive a complete E score.
+
+The ten field names remain unchanged. Fully scored arithmetic remains identical.
+The helper accepts null dimensions, validates all other scores before returning
+null derived fields, and clears stale derived scores in finalize. It cannot
+validate evidence sufficiency, narrative consistency or research quality.
+
+The user authorized nullable scores on 2026-10-25. The existing sibling Web
+consumer and deployed copies have NOT been migrated by this local skill change.
+Before deployment, adapt consumer models, parser, persistence and UI to nullable
+dimension/total/star fields, show an explicit ungraded state, and prevent null
+from becoming zero, low stars or a previous rating. Synchronization requires its
+own authorized scope. Source metadata version 3.0.0 marks this breaking change.
