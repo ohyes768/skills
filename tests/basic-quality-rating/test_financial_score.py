@@ -259,7 +259,12 @@ class FinancialScoreTests(unittest.TestCase):
                 )
                 self.assertIsNone(result["score"])
                 self.assertEqual(result["sector"], sector)
-                self.assertEqual(result["status"], "not_applicable")
+                self.assertEqual(
+                    result["status"],
+                    "insufficient_data"
+                    if sector in ("bank", "insurance")
+                    else "not_applicable",
+                )
                 self.assertFalse(
                     any(
                         c["rule"] == "debt" and c.get("cap") == 2

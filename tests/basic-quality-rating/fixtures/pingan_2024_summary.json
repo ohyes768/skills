@@ -1,0 +1,17 @@
+{
+  "description": "Historical official exchange-distributed 2024 summary. Only verified group and subsidiary comprehensive solvency are provided; core ratios and full evidence are deliberately absent. Not a current rating.",
+  "source_url": "https://static.cninfo.com.cn/finalpage/2025-03-20/1222847467.PDF",
+  "source_sha256": "5d452a6f91ea17947622dd416d2df72dd08b69f5e5bf8f35391661cce2a4d2e9",
+  "stock": {"code": "601318", "name": "中国平安", "sw_level1": "非银金融", "sw_level2": "保险Ⅱ"},
+  "as_of": "2025-10-27",
+  "period_end": "2024-12-31",
+  "published_at": "2025-03-20",
+  "solvency_pdf_page": 6,
+  "group_solvency_ratio": 204.1,
+  "life_comprehensive_solvency": 189.2,
+  "property_comprehensive_solvency": 205.3,
+  "nbv_cny_million": {"2024": 28534, "2023_original": 31080, "2023_comparable_restated": 22710},
+  "nbv_original_pdf_page": 6,
+  "nbv_restated_pdf_page": 16,
+  "comparability_note": "Original 2023 overview NBV is not interchangeable with restated comparison on page16. Numeric candidate extraction cannot select the right basis without analyst review."
+}

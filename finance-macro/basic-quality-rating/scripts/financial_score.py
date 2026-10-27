@@ -49,8 +49,6 @@ BANK_SUBINDUSTRIES = frozenset(
 NONBANK_SUBINDUSTRIES = frozenset(("证券", "多元金融", "金融控股", "资产管理", "信托"))
 UTILITY_SUBINDUSTRIES = frozenset(("电力", "燃气", "铁路公路", "航空机场", "航运港口", "物流"))
 FINANCIAL_ISSUES = {
-    "bank": "银行输入缺少不良率、拨备覆盖率与资本充足率，E 未评分；不以高负债率扣分",
-    "insurance": "保险输入缺少偿付能力、准备金与资产质量指标，E 未评分；不套企业负债阈值",
     "nonbank_financial": "非银金融输入缺少适用的监管资本、杠杆与资产质量指标，E 未评分",
 }
 
@@ -168,7 +166,7 @@ def _history(stock, anchor, issues):
     return None if invalid or missing else [by_year[year] for year in sorted(window)]
 
 
-def score_financial(stock: dict) -> dict:
+def score_financial(stock: dict, bank_data=None, insurance_data=None) -> dict:
     """Return a score or explicit ungraded state plus an auditable rule trace.
 
     Values are percentages in the caller's original units. This function never
@@ -178,6 +176,20 @@ def score_financial(stock: dict) -> dict:
         raise TypeError("stock 必须为原始股票 JSON 对象")
     issues, risks, checks = [], [], []
     sector = _sector(stock, issues)
+    if bank_data is not None and insurance_data is not None:
+        raise ValueError("bank_data 与 insurance_data 不能同时提供")
+    if bank_data is not None and sector != "bank":
+        raise ValueError("bank_data 仅用于行业已确认为银行的原始输入")
+    if insurance_data is not None and sector != "insurance":
+        raise ValueError("insurance_data 仅用于行业已确认为保险的原始输入")
+    if sector == "insurance":
+        from insurance_financial import score_insurance
+
+        return score_insurance(stock, insurance_data)
+    if sector == "bank":
+        from bank_financial import score_bank
+
+        return score_bank(stock, bank_data)
     if sector in FINANCIAL_ISSUES:
         return {
             "score": None,

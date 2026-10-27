@@ -37,3 +37,31 @@ integration; do not archive with an automatic Git commit.
   old entrypoints. Add regression tests before integration edits.
 - [x] Update skill/tools/reference/spec and run complete tests, lint, metadata
   checks and an end-to-end failure -> fallback -> evidence -> stop/submit smoke.
+
+## Follow-up v3.3: bank evidence and scoring
+
+Design contract: bank-design.md. Use existing checkout and shared E result shape.
+
+- [x] Tests first: bank packet provenance, chronology, missing vs weak, ratios,
+  capital requirements and scoring caps. Worker owns bank_financial.py and tests.
+- [x] Tests first: bank candidate search from hash-verified cached PDF pages,
+  bounded output/cursors and ambiguous columns. Worker owns bank_evidence.py/tests.
+- [x] Parent: test optional --bank-data through financial/finalize/validator,
+  preserve original stock and old command compatibility; integrate sector routing.
+- [x] Parent: document packet/rubric/budget and banking A-D questions, update
+  version/tools/backend spec; record actual official-PDF smoke and limitations.
+- [x] Run whole suite, Ruff lint/format, metadata check, and independent review.
+
+Commands: python -X utf8 -m unittest discover -s tests/basic-quality-rating -q;
+python -m ruff check finance-macro/basic-quality-rating/scripts tests/basic-quality-rating;
+python -m ruff format --check finance-macro/basic-quality-rating/scripts tests/basic-quality-rating.
+No commit, push, installed-copy migration or remote deployment in this request.
+
+## Follow-up v3.4: insurance analysis
+
+Detailed design and ordered execution: insurance-design.md. Tests first; preserve
+all v3.3 changes. Worker owns insurance schema/scorer and tests; second worker
+owns common candidate engine plus insurance locator and bank candidate regressions.
+Parent owns sidecar CLI, sector routing, research mode, docs and verification.
+Final gate: whole-suite unittest, Ruff lint/format, skill metadata, diff checks,
+official-source smoke and independent review. No Git or remote installation.

@@ -1,0 +1,24 @@
+{
+  "description": "Official 2025 H1 group snapshot only; deliberately lacks 2022-2024 annual earnings. Facts transcribed after reading PDF tables, not accepted automatically from candidate output. Disclosure date uses 2025-08-30 exchange-publication date conservatively.",
+  "source_url": "https://ir.cmbc.com.cn/media/ykvm0snm/2025%E5%B9%B4%E5%8D%8A%E5%B9%B4%E5%BA%A6%E6%8A%A5%E5%91%8A.pdf",
+  "source_sha256": "58aace1a93fc7d5ff335651f77e3e18fa558b10722307ede2ff34821cc43c294",
+  "stock": {"code": "600016", "name": "民生银行", "sw_level1": "银行", "sw_level2": "股份制银行"},
+  "as_of": "2025-10-27",
+  "period_end": "2025-06-30",
+  "published_at": "2025-08-30",
+  "snapshot": {
+    "npl_ratio": {"value": 1.48, "pdf_page": 9},
+    "provision_coverage": {"value": 145.06, "pdf_page": 9},
+    "loan_provision_ratio": {"value": 2.14, "pdf_page": 9},
+    "cet1_ratio": {"value": 9.50, "pdf_page": 9},
+    "tier1_ratio": {"value": 11.62, "pdf_page": 9},
+    "total_capital_ratio": {"value": 13.25, "pdf_page": 9},
+    "lcr": {"value": 155.16, "pdf_page": 11},
+    "nsfr": {"value": 106.68, "pdf_page": 11}
+  },
+  "requirements": {
+    "cet1_ratio": {"value": 7.75, "pdf_page": 46},
+    "tier1_ratio": {"value": 8.75, "pdf_page": 46},
+    "total_capital_ratio": {"value": 10.75, "pdf_page": 46}
+  }
+}

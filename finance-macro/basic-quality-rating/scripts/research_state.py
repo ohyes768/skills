@@ -24,6 +24,9 @@ REQUIRED_TOPICS = {
     "industry": ("demand_driver", "substitution_risk"),
     "management": ("decisions", "allocation_alignment", "governance_succession"),
 }
+BANK_TOPICS = {"financial": ("profitability", "asset_quality", "capital", "liquidity")}
+INSURANCE_TOPICS = ("profitability", "solvency", "insurance_business", "asset_liability")
+ALL_TOPICS = {**REQUIRED_TOPICS, **BANK_TOPICS}
 MAX_ROUNDS = 3  # Initial research plus two follow-ups, shared by each dimension.
 
 
@@ -50,7 +53,10 @@ def _check_shape(state):
         if type(state["version"]) is not int or state["version"] != 1:
             raise ValueError("不支持的取证状态版本")
         _identity(state["stock"])
-        if len(state["input_sha256"]) != 64 or set(state["dimensions"]) != set(REQUIRED_TOPICS):
+        if len(state["input_sha256"]) != 64 or set(state["dimensions"]) not in (
+            set(REQUIRED_TOPICS),
+            set(ALL_TOPICS),
+        ):
             raise ValueError("状态身份或维度结构损坏")
         new_routes(list(state["providers"]))
         for route in state["providers"].values():
@@ -62,6 +68,8 @@ def _check_shape(state):
                 raise ValueError("渠道状态损坏")
         ids = []
         for key, dim in state["dimensions"].items():
+            if key == "financial" and dim.get("mode", "bank") not in ("bank", "insurance"):
+                raise ValueError("financial 取证模式损坏")
             if (
                 dim["status"] not in ("open", "complete", "gap")
                 or type(dim["reopen_used"]) is not bool
@@ -71,7 +79,7 @@ def _check_shape(state):
                 dim["reopen_used"]
             ):
                 raise ValueError("维度轮次超出预算")
-            validated = {"evidence": []}
+            validated = {"evidence": [], "mode": dim.get("mode", "bank")}
             _evidence(key, validated, dim["evidence"])
             if dim["status"] == "complete" and _missing(key, dim):
                 raise ValueError("complete 状态缺少必要主题")
@@ -98,21 +106,27 @@ def _load(path):
 
 
 def _dimension(state, dimension):
-    if dimension not in REQUIRED_TOPICS:
-        raise ValueError("dimension 仅支持 business/moat/industry/management")
+    if dimension not in state["dimensions"]:
+        raise ValueError("未知 dimension；金融 financial 取证须先用 init 的对应行业模式启用")
     return state["dimensions"][dimension]
 
 
 def _missing(dimension, dim):
     covered = {fact["topic"] for fact in dim["evidence"]}
-    return [topic for topic in REQUIRED_TOPICS[dimension] if topic not in covered]
+    return [topic for topic in _topics(dimension, dim) if topic not in covered]
+
+
+def _topics(dimension, dim):
+    if dimension == "financial" and dim.get("mode", "bank") == "insurance":
+        return INSURANCE_TOPICS
+    return ALL_TOPICS[dimension]
 
 
 def _evidence(dimension, dim, facts):
     if not isinstance(facts, list) or len(facts) > 12:
         raise ValueError("evidence 必须为至多 12 条事实的数组")
     for raw in facts:
-        if not isinstance(raw, dict) or raw.get("topic") not in REQUIRED_TOPICS[dimension]:
+        if not isinstance(raw, dict) or raw.get("topic") not in _topics(dimension, dim):
             raise ValueError("事实必须指向本维度的 required topic")
         fact = {
             key: _text(raw.get(key), key, limit)
@@ -139,6 +153,7 @@ def _summary(state, dimension=None):
     def brief(key, dim):
         return {
             "status": dim["status"],
+            **({"mode": dim.get("mode", "bank")} if key == "financial" else {}),
             "rounds_used": len(dim["rounds"]),
             "rounds_remaining": 0
             if dim["status"] != "open"
@@ -243,14 +258,44 @@ class ResearchRun:
                 self._save(state)
             return response
 
-    def init(self, stock, providers):
+    def init(self, stock, providers, *, bank_research=False, insurance_research=False):
         identity, input_sha = _identity(stock), _digest(stock)
         routes = new_routes(providers)
+        if bank_research and insurance_research:
+            raise ValueError("银行与保险取证模式不能同时启用")
+        financial_mode = "insurance" if insurance_research else "bank" if bank_research else None
+        if financial_mode:
+            from financial_score import _sector
+
+            if _sector(stock, []) != financial_mode:
+                raise ValueError("金融取证模式与原始输入行业不一致")
+
+        def empty_dimension(key):
+            result = {
+                "status": "open",
+                "reopen_used": False,
+                "rounds": [],
+                "evidence": [],
+                "reason": None,
+            }
+            if key == "financial":
+                result["mode"] = financial_mode
+            return result
+
         with self._lock():
             if self.path.exists():
                 state = _load(self.path)
                 if state["input_sha256"] != input_sha or list(state["providers"]) != providers:
                     raise ValueError("状态已绑定其他输入或渠道配置；不能重新 init 重置预算")
+                if (
+                    financial_mode
+                    and "financial" in state["dimensions"]
+                    and state["dimensions"]["financial"].get("mode", "bank") != financial_mode
+                ):
+                    raise ValueError("financial 已绑定其他行业模式，不能重置取证预算")
+                if financial_mode and "financial" not in state["dimensions"]:
+                    state["dimensions"]["financial"] = empty_dimension("financial")
+                    self._save(state)
             else:
                 state = {
                     "version": 1,
@@ -258,14 +303,8 @@ class ResearchRun:
                     "input_sha256": input_sha,
                     "providers": routes,
                     "dimensions": {
-                        key: {
-                            "status": "open",
-                            "reopen_used": False,
-                            "rounds": [],
-                            "evidence": [],
-                            "reason": None,
-                        }
-                        for key in REQUIRED_TOPICS
+                        key: empty_dimension(key)
+                        for key in (ALL_TOPICS if financial_mode else REQUIRED_TOPICS)
                     },
                 }
                 self._save(state)
@@ -398,12 +437,20 @@ class ResearchRun:
         return self._update(change)
 
 
-def check_research(path, draft, stock=None):
+def check_research(path, draft, stock=None, *, require_bank=False, require_insurance=False):
     state = _load(Path(path))
     if _identity(draft) != state["stock"]:
         raise ValueError("取证状态与本次评级股票身份不一致")
     if stock is not None and _digest(stock) != state["input_sha256"]:
         raise ValueError("取证状态与原始 stock 输入不一致")
+    if require_bank and require_insurance:
+        raise ValueError("只能使用一种金融取证模式")
+    required_mode = "bank" if require_bank else "insurance" if require_insurance else None
+    if required_mode and (
+        "financial" not in state["dimensions"]
+        or state["dimensions"]["financial"].get("mode", "bank") != required_mode
+    ):
+        raise ValueError("金融补数须先 init 对应行业模式，并结案 financial 取证")
     for key, dim in state["dimensions"].items():
         if dim["status"] == "open":
             raise ValueError(f"{key} 尚未结案，先 complete 或 gap")
@@ -422,6 +469,14 @@ def main(argv=None):
     parser.add_argument("--state", required=True)
     parser.add_argument("--stock")
     parser.add_argument("--providers", nargs="+")
+    parser.add_argument(
+        "--bank-research", action="store_true", help="Enable bank E evidence budget (init only)"
+    )
+    parser.add_argument(
+        "--insurance-research",
+        action="store_true",
+        help="Enable insurance E evidence budget (init only)",
+    )
     parser.add_argument("--dimension")
     parser.add_argument("--question")
     parser.add_argument("--impact")
@@ -433,10 +488,17 @@ def main(argv=None):
     args = parser.parse_args(argv)
     run = ResearchRun(args.state)
     try:
+        if (args.bank_research or args.insurance_research) and args.command != "init":
+            raise ValueError("金融取证模式参数仅用于 init")
         if args.command == "init":
             if not args.stock:
                 raise ValueError("init 需要 --stock 和 --providers")
-            result = run.init(_read(args.stock), args.providers)
+            result = run.init(
+                _read(args.stock),
+                args.providers,
+                bank_research=args.bank_research,
+                insurance_research=args.insurance_research,
+            )
         elif args.command == "status":
             result = run.status(args.dimension)
         elif args.command == "start":

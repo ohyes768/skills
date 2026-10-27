@@ -11,7 +11,7 @@ import math
 import re
 import sys
 
-from rating_math import DERIVED, LABELS, OUTPUT_FIELDS, _read, finalize
+from rating_math import DERIVED, LABELS, OUTPUT_FIELDS, _read, _read_bank, _read_sidecar, finalize
 
 
 def _report_warnings(data):
@@ -41,14 +41,27 @@ def _report_warnings(data):
     return warnings
 
 
-def validate(data, stock=None, *, check_financial=False, research_state=None):
+def validate(
+    data,
+    stock=None,
+    *,
+    check_financial=False,
+    research_state=None,
+    bank_data=None,
+    insurance_data=None,
+):
     """Validate without correcting or mutating the supplied rating."""
     errors = []
     try:
         if not isinstance(data, dict) or set(data) != set(OUTPUT_FIELDS):
             raise ValueError("评级必须为固定 10 字段 JSON 对象")
         expected = finalize(
-            data, stock, check_financial=check_financial, research_state=research_state
+            data,
+            stock,
+            check_financial=check_financial,
+            research_state=research_state,
+            bank_data=bank_data,
+            insurance_data=insurance_data,
         )
         for field in DERIVED:
             actual, wanted = data[field], expected[field]
@@ -85,6 +98,13 @@ def main(argv=None):
     parser.add_argument("--stock", help="Original stock JSON for identity verification")
     parser.add_argument("--check-financial", action="store_true", help="Verify E against --stock")
     parser.add_argument("--research-state", help="Verify terminal research ledger")
+    sidecars = parser.add_mutually_exclusive_group()
+    sidecars.add_argument(
+        "--bank-data", help="Explicit bank evidence sidecar; requires financial check"
+    )
+    sidecars.add_argument(
+        "--insurance-data", help="Explicit insurance evidence sidecar; requires financial check"
+    )
     args = parser.parse_args(argv)
     try:
         if args.check_financial and not args.stock:
@@ -94,6 +114,10 @@ def main(argv=None):
             _read(args.stock) if args.stock else None,
             check_financial=args.check_financial,
             research_state=args.research_state,
+            bank_data=_read_bank(args.bank_data) if args.bank_data else None,
+            insurance_data=_read_sidecar(args.insurance_data, "--insurance-data")
+            if args.insurance_data
+            else None,
         )
     except (OSError, ValueError, TypeError) as exc:
         result = {"status": "failed", "errors": [str(exc)], "warnings": []}

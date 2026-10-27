@@ -81,9 +81,21 @@ def _text(value, field):
         raise ValueError(f"{field} 必须为非空字符串")
 
 
-def finalize(draft, stock=None, *, check_financial=False, research_state=None):
+def finalize(
+    draft,
+    stock=None,
+    *,
+    check_financial=False,
+    research_state=None,
+    bank_data=None,
+    insurance_data=None,
+):
     if check_financial and stock is None:
         raise ValueError("财务评分校验必须提供 --stock 原始输入")
+    if bank_data is not None and insurance_data is not None:
+        raise ValueError("--bank-data 与 --insurance-data 不能同时提供")
+    if (bank_data is not None or insurance_data is not None) and not check_financial:
+        raise ValueError("金融证据包必须配合 --stock 与 --check-financial，不能忽略资料")
     if not isinstance(draft, dict):
         raise TypeError("草稿必须为 JSON 对象")
     required = set(OUTPUT_FIELDS) - DERIVED
@@ -108,7 +120,9 @@ def finalize(draft, stock=None, *, check_financial=False, research_state=None):
     if check_financial:
         from financial_score import score_financial
 
-        expected = score_financial(stock)["score"]
+        expected = score_financial(stock, bank_data=bank_data, insurance_data=insurance_data)[
+            "score"
+        ]
         dimensions = draft["dimensions"]
         if not isinstance(dimensions, dict) or dimensions.get("financial") != expected:
             raise ValueError(f"financial 与原始输入计算不一致，应为 {expected!r}")
@@ -116,7 +130,13 @@ def finalize(draft, stock=None, *, check_financial=False, research_state=None):
     if research_state is not None:
         from research_state import check_research
 
-        check_research(research_state, draft, stock)
+        check_research(
+            research_state,
+            draft,
+            stock,
+            require_bank=bank_data is not None,
+            require_insurance=insurance_data is not None,
+        )
     result = {**draft, **derived}
     return {field: result[field] for field in OUTPUT_FIELDS}
 
@@ -127,6 +147,17 @@ def _reject_constant(value):
 
 def _read(path):
     return json.loads(Path(path).read_text(encoding="utf-8-sig"), parse_constant=_reject_constant)
+
+
+def _read_sidecar(path, flag):
+    packet = _read(path)
+    if not isinstance(packet, dict):
+        raise TypeError(f"{flag} 文件必须为证据 JSON 对象，不能为 null 或数组")
+    return packet
+
+
+def _read_bank(path):
+    return _read_sidecar(path, "--bank-data")
 
 
 def main():
@@ -150,6 +181,11 @@ def main():
         help="Verify E against original --stock (finalize only)",
     )
     parser.add_argument("--research-state", help="Verify terminal research ledger (finalize only)")
+    sidecars = parser.add_mutually_exclusive_group()
+    sidecars.add_argument("--bank-data", help="Explicit bank evidence sidecar (financial/finalize)")
+    sidecars.add_argument(
+        "--insurance-data", help="Explicit insurance evidence sidecar (financial/finalize)"
+    )
     args = parser.parse_args()
     try:
         data = _read(args.input)
@@ -159,8 +195,16 @@ def main():
             if args.command == "financial":
                 from financial_score import score_financial
 
-                result = score_financial(data)
+                result = score_financial(
+                    data,
+                    bank_data=_read_bank(args.bank_data) if args.bank_data else None,
+                    insurance_data=_read_sidecar(args.insurance_data, "--insurance-data")
+                    if args.insurance_data
+                    else None,
+                )
             else:
+                if args.bank_data or args.insurance_data:
+                    raise ValueError("金融证据包仅用于 financial/finalize")
                 result = calculate(data)
         else:
             result = finalize(
@@ -168,6 +212,10 @@ def main():
                 _read(args.stock) if args.stock else None,
                 check_financial=args.check_financial,
                 research_state=args.research_state,
+                bank_data=_read_bank(args.bank_data) if args.bank_data else None,
+                insurance_data=_read_sidecar(args.insurance_data, "--insurance-data")
+                if args.insurance_data
+                else None,
             )
         print(json.dumps(result, ensure_ascii=False, allow_nan=False))
     except (OSError, ValueError, TypeError) as exc:

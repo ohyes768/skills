@@ -43,3 +43,24 @@ research state and null scores for dimensions closed with evidence gaps.
 Host tools are still called by the agent: these helpers govern documented
 before/after calls, not a network proxy or a host-level interception mechanism.
 No remote installation, application changes or automatic commit/push in this follow-up.
+
+## Follow-up: bank financial analysis (user approved 2026-10-27)
+
+Support bank E with a dedicated rubric and explicit official-source evidence
+sidecar; keep original input immutable and the ten-field nullable output intact.
+Assess profitability, asset quality, capital surplus and liquidity rather than
+industrial leverage. Required evidence gaps remain ungraded; verified weakness
+receives a low score. Keep report dates/scopes/provenance and reject future data.
+Provide reusable candidate extraction and validation, not unchecked PDF-to-score
+conversion. Document heuristic score bands and absence of empirical calibration.
+Preserve other sectors. Verify against real official disclosures and regressions.
+
+## Follow-up: insurance financial analysis (user approved 2026-10-27)
+
+Support life, property and mixed insurance groups with traceable official-source
+sidecars and a dedicated E rubric. Preserve bank/enterprise behavior, immutable
+stock and ten-field nullable output. Distinguish group from legal insurers and
+material bank/asset-management segments; no averaged solvency or bank proxies.
+Separate missing evidence from real weakness, research bands from legal minima,
+and NBV/CSM business value from regulatory capital. Reuse PDF cache and budgets.
+Plan and execute locally; no commit/push/deployment or published company rating.

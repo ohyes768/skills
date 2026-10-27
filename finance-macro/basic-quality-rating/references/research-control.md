@@ -1,6 +1,13 @@
 # 有预算的取证与失败换路
 
-用于 A–D，不改变评分标准或最终 10 字段；E 仍用原始输入直接计算。
+银行 E 同样使用本工具：init 增加 --bank-research，dimension=financial，主题为 profitability、
+asset_quality、capital、liquidity。已有 A-D 账本可原样追加该模式，保留预算和故障；详细数字
+保存在 [银行证据包](bank-financial.md)。其他行业不启用银行模式。
+
+保险 E 用 init --insurance-research，主题为 profitability、solvency、insurance_business、asset_liability，
+详见 [保险参考](insurance-financial.md)。同一 financial 账本模式不能银行/保险互换；旧银行账本仍兼容。
+
+用于 A–D，以及显式启用的银行/保险 E，不改变最终 10 字段；其他行业 E 用原始输入直接计算。
 工具只需标准库，不联网、不安装依赖、不执行网页中的命令。
 
 ## 开工一次

@@ -13,7 +13,9 @@ lives inside `basic-quality-rating` v2.2+.
 
 - E uses the input-contract caliber
   (3-year ROE base + debt/earnings/trend caps). The payload has no cash-flow
-  data. Do not load other skills or historical company score examples.
+  data. Since v3.3, banks use the explicit sourced sidecar and bank rubric below;
+  ordinary companies retain original-input-only scoring. Do not load historical
+  company score examples as scoring rules.
 
 ## Signatures
 
@@ -48,8 +50,9 @@ The skill makes no platform API calls and has no publishing side effects.
   changes before claiming a transition. Scale endpoints 1 and 5 are not boundaries.
   The boundary text is one verifiable sentence ("踩线 N 星：…direction…"),
   not a per-dimension enumeration (simplified 2026-10-24, v2.2.1).
-- E uses supplied financial numbers only. Financial-sector leverage thresholds
-  are skipped; absent sector indicators make E null.
+- Ordinary E uses supplied financial numbers only. Banks/insurers may use explicit
+  sourced --bank-data/--insurance-data without mutating stock; other financial
+  firms remain ungraded. Financial-sector enterprise leverage is skipped.
 - Missing evidence must remain visible beside scores and in summary/watch points.
   Missing key evidence produces null, never a conservative numeric placeholder.
   Summary starts with 灰色地带（证据不足，未评级） when any dimension is null.
@@ -235,3 +238,90 @@ live model research speed or factual rating correctness.
 Tests cover quota/auth fallback, transient waits, empty results, persisted budgets,
 duplicate/cancelled receipts, global blocks with outstanding calls, completed/gap
 evidence, conflict reopening, corruption/locking and checked CLI finalization.
+
+## v3.3.0 bank evidence sidecar (2026-10-27)
+
+- `bank_financial.py` owns make_template/validate_bank_data/score_bank and the
+  `bank-research-v1` heuristic. Its finite numeric percentage metrics carry source
+  URL, bounded locator and explicit basis. Identity plus canonical stock hash
+  bind the sidecar; keep original stock immutable. Explicit as_of controls data
+  availability; future disclosures, mixed scope, duplicates/conflicts, latest
+  history gaps and stale snapshots block grading. The source shape is checked,
+  not source truth or completeness of online disclosures.
+- Require three latest consecutive annual ROE/ROA/NPL observations, latest same
+  period NPL/coverage, all three capital ratios and LCR/NSFR. Require sourced FULL
+  applicable capital requirements, requirements_period_end matching latest and
+  requirements_published_at <= as_of. Missing optional peers/auxiliary facts
+  do not penalize. Unsupported liquidity regimes stay ungraded and cannot claim
+  LCR/NSFR noncompliance. Invalid requirement timing prevents applicable capital
+  or provision breach assertions; retain raw dated facts separately.
+- Research bands are explicit in references/bank-financial.md and the module,
+  not empirically calibrated nor regulator-issued. Use the weaker ROE/ROA base,
+  asset-quality/capital-buffer/liquidity/trend caps; do not offset safety weakness
+  with profitability. A 150% provision quality band is NOT a uniform legal floor.
+  Null on a required gap; preserve separately verified weakness. No bank debt
+  penalty or industrial consecutive-quarter earnings rule. Insurance/nonbank
+  behavior is unchanged.
+- `bank_evidence.py` reuses pdf_evidence cache validation/packet cursors; label
+  candidates retain raw strings, context and PDF/source identity. Longer capital
+  labels avoid nested false matches. No automatic value/column/unit acceptance,
+  source-authenticity certification, download, parsing or OCR on cached searches.
+- Optional --bank-data flows through score_financial, rating_math financial and
+  finalize, and canonical validator. Finalize with sidecar requires original
+  stock + check_financial. Reject explicit nonobject/null CLI sidecars instead
+  of treating them as absence. Keep final exact ten keys and nullable arithmetic.
+- `research_state init --bank-research` adds E profitability/asset_quality/capital/
+  liquidity topics, retaining old A-D states, rounds and provider failures. Mode
+  cannot be enabled for nonbanks or removed by ordinary init. E gets the same
+  persisted shared round budget/reopen rules; sidecar plus research gate requires
+  terminal E evidence. Legacy four-dimensional states remain compatible.
+
+Test schema/provenance/chronology, safety caps vs missingness, applicability and
+partial-invalid facts, checked CLI flow and null-sidecar regressions, ledger
+migration/budgets, cached candidates and source-bound pagination. Official bank
+snapshot fixture tests no invented annual history or generic provision breach.
+Local tests/live PDF smoke do not establish calibration, model research accuracy,
+consumer deployment, or installed-copy synchronization.
+
+## v3.4.0 insurance evidence and scoring (2026-10-27)
+
+- insurance_data.py owns the identity/hash-bound evidence contract; reuse bank
+  date/hash helpers, explicit pct/cny_million units and period/point-in-time
+  basis. Listed group and legal insurer scopes are distinct; core/comprehensive
+  ratios are never averaged or substituted with subsidiary bank metrics.
+- Coverage identifies material insurance entities and separately documents bank/
+  asset-management/other important segments. Statements/assessment statuses are
+  analyst-sourced evidence, not automatic factual or compliance certification.
+  Core ALM/reserve/risk-rating gaps yield null; adverse supported facts impose
+  explicit caps. A clean audit opinion alone is insufficient reserve evidence.
+- Require the current continuous three annual ROE window and relevant life value/
+  net-yield or property combined-ratio history with supported comparable basis.
+  NBV/CSM are business value, not regulatory capital. Conflicting report periods
+  are excluded from trusted observations, avoiding order-dependent derived risks.
+  Optional investment returns may legitimately be negative, not missing evidence.
+- insurance_financial.py implements uncalibrated insurance-research-v1. Separate
+  numeric solvency/risk-rating conditions from quality bands and full regulatory
+  compliance. Preserve valid dated weaknesses when other evidence is incomplete;
+  do not infer a violation from rejected identity/date/scope facts.
+- Shared metric_candidates.py powers bank and insurance cached locators. Preserve
+  bank API/CLI/cursor semantics; insurance mode has distinct source-bound cursor.
+  Raw numeric strings require year/unit/legal-entity confirmation; no auto-accept,
+  network, reparsing, OCR or source certification on a cached search.
+- Explicit --insurance-data is exclusive with --bank-data throughout scorer,
+  financial/finalize and canonical validator. Sidecar checked finalize requires
+  original stock+check_financial; null/nonobject CLI packets are rejected. Keep
+  ten-field arithmetic. Insurance without sidecar is insufficient_data, not an
+  assertion that the sector cannot be rated. Other nonbank sectors unchanged.
+- init --insurance-research adds E's profitability/solvency/insurance_business/
+  asset_liability topics. Store dimensions.financial.mode; absent mode on existing
+  bank ledgers means bank. Never switch mode or reset source/round history.
+  check_research with an insurance sidecar requires the correct terminal mode.
+  Normal workflows pass research-state; legacy API without it remains a numeric/
+  structural check only, not proof of completed evidence collection.
+
+Tests include issuer types, provenance/units, chronological windows/comparability,
+group/legal scope/roster, missing vs weak, signed yields, conflicting periods,
+CLI sidecar rejection and successful assembly, mode-preserving research, shared
+candidate regression, and an official historical Ping An snapshot fixture that
+does not fill missing core solvency from group ratios. No calibration, deployed
+consumer compatibility or live-model research correctness is established.
