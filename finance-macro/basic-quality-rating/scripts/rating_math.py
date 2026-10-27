@@ -43,18 +43,12 @@ def _group(keys):
     if len(keys) == len(WEIGHTS):
         return "任一维度"
     labels = [LABELS[key] for key in keys]
-    return (
-        "或".join(labels)
-        if len(labels) <= 2
-        else "、".join(labels[:-1]) + "或" + labels[-1]
-    )
+    return "或".join(labels) if len(labels) <= 2 else "、".join(labels[:-1]) + "或" + labels[-1]
 
 
 def calculate(dimensions):
     if not isinstance(dimensions, dict) or set(dimensions) != set(WEIGHTS):
-        raise ValueError(
-            "dimensions 必须恰含 business/moat/industry/management/financial 五键"
-        )
+        raise ValueError("dimensions 必须恰含 business/moat/industry/management/financial 五键")
     if any(
         value is not None and (type(value) is not int or not 1 <= value <= 5)
         for value in dimensions.values()
@@ -71,14 +65,11 @@ def calculate(dimensions):
             crossings = [
                 key
                 for key, weight in WEIGHTS.items()
-                if 1 <= dimensions[key] + delta <= 5
-                and _stars(total + delta * weight) != stars
+                if 1 <= dimensions[key] + delta <= 5 and _stars(total + delta * weight) != stars
             ]
             if crossings:
                 target = _stars(total + delta * WEIGHTS[crossings[0]])
-                parts.append(
-                    f"{_group(crossings)}{direction}1分即{movement}至{target}星"
-                )
+                parts.append(f"{_group(crossings)}{direction}1分即{movement}至{target}星")
             else:
                 parts.append(f"单维{direction}1分不足以{movement}星")
         boundary = f"踩线 {stars} 星：" + "，".join(parts)
@@ -90,7 +81,9 @@ def _text(value, field):
         raise ValueError(f"{field} 必须为非空字符串")
 
 
-def finalize(draft, stock=None):
+def finalize(draft, stock=None, *, check_financial=False):
+    if check_financial and stock is None:
+        raise ValueError("财务评分校验必须提供 --stock 原始输入")
     if not isinstance(draft, dict):
         raise TypeError("草稿必须为 JSON 对象")
     required = set(OUTPUT_FIELDS) - DERIVED
@@ -112,6 +105,13 @@ def finalize(draft, stock=None):
             _text(stock.get(field), f"stock.{field}")
             if stock[field] != draft[field]:
                 raise ValueError(f"{field} 与输入股票不一致")
+    if check_financial:
+        from financial_score import score_financial
+
+        expected = score_financial(stock)["score"]
+        dimensions = draft["dimensions"]
+        if not isinstance(dimensions, dict) or dimensions.get("financial") != expected:
+            raise ValueError(f"financial 与原始输入计算不一致，应为 {expected!r}")
     result = {**draft, **calculate(draft["dimensions"])}
     return {field: result[field] for field in OUTPUT_FIELDS}
 
@@ -121,9 +121,7 @@ def _reject_constant(value):
 
 
 def _read(path):
-    return json.loads(
-        Path(path).read_text(encoding="utf-8-sig"), parse_constant=_reject_constant
-    )
+    return json.loads(Path(path).read_text(encoding="utf-8-sig"), parse_constant=_reject_constant)
 
 
 def main():
@@ -131,7 +129,7 @@ def main():
         sys.stdout.reconfigure(encoding="utf-8")
         sys.stderr.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("calculate", "finalize"))
+    parser.add_argument("command", choices=("financial", "calculate", "finalize"))
     parser.add_argument(
         "--input",
         required=True,
@@ -141,15 +139,29 @@ def main():
         "--stock",
         help="Optional original stock JSON for exact code/name verification (finalize only)",
     )
+    parser.add_argument(
+        "--check-financial",
+        action="store_true",
+        help="Verify E against original --stock (finalize only)",
+    )
     args = parser.parse_args()
     try:
         data = _read(args.input)
-        if args.command == "calculate":
-            if args.stock:
-                raise ValueError("--stock 仅用于 finalize")
-            result = calculate(data)
+        if args.command != "finalize":
+            if args.stock or args.check_financial:
+                raise ValueError("--stock 与 --check-financial 仅用于 finalize")
+            if args.command == "financial":
+                from financial_score import score_financial
+
+                result = score_financial(data)
+            else:
+                result = calculate(data)
         else:
-            result = finalize(data, _read(args.stock) if args.stock else None)
+            result = finalize(
+                data,
+                _read(args.stock) if args.stock else None,
+                check_financial=args.check_financial,
+            )
         print(json.dumps(result, ensure_ascii=False, allow_nan=False))
     except (OSError, ValueError, TypeError) as exc:
         print(f"rating_math: {exc}", file=sys.stderr)

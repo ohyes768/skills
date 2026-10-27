@@ -31,6 +31,8 @@ The skill makes no platform API calls and has no publishing side effects.
 - Success prints JSON only; invalid dimensions, unknown/missing fields, blank
   required strings, invalid lists or identity mismatch fail without JSON stdout.
   CLI errors go to stderr with exit code 2. This does not validate report semantics.
+  Since v3.1, `financial --input stock.json` calculates E and its trace, and
+  finalize's optional `--check-financial` checks E against the original --stock.
 
 ## Contracts
 
@@ -158,3 +160,45 @@ Before deployment, adapt consumer models, parser, persistence and UI to nullable
 dimension/total/star fields, show an explicit ungraded state, and prevent null
 from becoming zero, low stars or a previous rating. Synchronization requires its
 own authorized scope. Source metadata version 3.0.0 marks this breaking change.
+
+## v3.1.0 execution tools (2026-10-27)
+
+- `financial_score.score_financial(stock)` is the sole executable E scorer.
+  `rating_math financial` exposes score/status/checks/issues/risks/sector.
+  Return null for incomplete inputs; financial firms are not_applicable under
+  this enterprise rubric. Values must be finite numbers, not bool/string.
+  ROE and annual-profit years align; history uses the anchor's latest three
+  consecutive years. Quarter labels must unambiguously denote adjacent single
+  quarters (including Q4 -> Q1). Invalid chronology cannot establish consecutive
+  decline or verified severe earnings weaknesses. Do not recompute absent averages.
+- Finalize without the new flag retains compatibility. Normal v3.1 runs use
+  `--stock --check-financial` to reject E drift. An explicitly documented material
+  outside-source conflict can require E null despite a computable input score;
+  only then may the analyst use the unflagged path, preserving original inputs
+  and explicitly disclosing the conflict in the report/watch points.
+- `validate_rating_json.py` is a read-only validator of final ten-field outputs.
+  It reuses finalize/calculate rather than defining weights, bands or boundary
+  enumeration. Check original derived values, don't silently repair them. Canonical
+  grouped boundary text and nullable results are valid. Optional stock verifies
+  identity; `--check-financial` also verifies E. CLI emits one JSON with
+  status/errors/warnings; exit 0/2. Report wording checks are advisory, not proof.
+  Disclaimers and coincident financial numbers must not trigger semantic rejection.
+- `pdf_evidence.py prepare/search/read` reuses existing fetch_pdf/inspect_pdf
+  functions from sibling financial-statement-analysis (or explicit --tools-dir).
+  Declare httpx/PyMuPDF at installation; don't install packages during analysis.
+  URL-keyed cache binds source PDF, provenance, metadata and page index hashes.
+  Cached prepare/search/read never downloads or reparses the PDF. Refresh is
+  explicit; failed refresh preserves the previous cache. No OCR is implied.
+  Search is literal, first hit per query/page; no hit doesn't prove absence.
+  Packets contain PDF page, text offsets, source URL/hash, bounded text and
+  source/selection-bound continuation cursor. Never print entire annual reports.
+- `retire_legacy_runbook.py` is installation maintenance only: default read-only
+  preview, explicit --apply backs up legacy SKILL/validator and forwards the old
+  command. Preserve conflicting backups; don't delete history or patch arithmetic
+  to satisfy stale validators. Its documented deployment is distinct from local
+  development; no remote files were changed in this iteration.
+
+Regression tests include threshold/weakness combinations, period/null inputs,
+real-PDF mock HTTP cache/continuation/scan cases, canonical validation/disclaimer
+cases, and migration preview/backup/idempotent forwarding. Tests do not establish
+live model research speed or factual rating correctness.
