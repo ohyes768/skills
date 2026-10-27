@@ -29,6 +29,31 @@
 | D2 | 期初现金及等价物+CFO+CFI+CFF+汇率影响−期末现金及等价物，绝对残差 ≤ `0.005` | 查现金等价物与货币资金区别、ref=opening、期间、汇率影响；缺失不是零 |
 | E1 | 每个表格绑定单元格可格式化且以 `元`/`万元`/`亿元`/`%`/`个百分点` 之一结尾 | 用支持的 amount/percent/pp 格式，不能只在表头写单位或自造倍数格式 |
 
+## 母公司口径标注（C4，`record_scope_context`）
+
+C4 先收集所有被 statement/table 使用的 fact，再逐个判断口径：
+
+- `scope: consolidated` 的事实直接通过。
+- `scope: parent` 的事实，只有它所在位置的文字含“母公司”三个字才算已披露：
+  statement 看 `anchor + template`，表格行看 `anchor + label`。`record_scope_context`
+  按此拼接文本，命中后把该处绑定的 fact_id 记为已披露。
+  只写在段落、表头、别的行或别的 section 里都不算。
+- 来源防混表：对每个 evidence 的 excerpt 逐行扫描最近一次出现的
+  `(合并|母公司)(资产负债表|利润表|现金流量表)` 标题，找到与 `raw_label` 整行相等的行。
+  若该标签只出现在“母公司…表”标题之后，而事实又未按上条披露，C4 失败。
+
+写法示例：
+
+```json
+{"anchor": "## 数据质量评估",
+ "table": {"columns": ["指标", "本期", "来源"],
+           "rows": [{"label": "母公司货币资金（对照）",
+                     "cells": [{"fact_id": "<parent货币资金fact_id>", "format": "amount_wan"}, ""]}]}}
+```
+
+statement 同理，例如 template 写“母公司口径营业收入 {rev:amount_wan}。”。
+母公司事实不能进入任何合并口径的 metric 计算，只能单独对照展示。
+
 ## 缺数据与输出
 
 - B3 对非 computed 或 null 指标记录 `not_applicable`，不复算；这些指标不能数值绑定。

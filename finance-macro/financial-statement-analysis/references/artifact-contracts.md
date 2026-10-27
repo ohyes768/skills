@@ -189,7 +189,7 @@ Full supported metric IDs, formulas, display scales and availability rules:
 [metric-catalog.md](metric-catalog.md). Independent check IDs and missing-data behavior:
 [independent-review-contract.md](independent-review-contract.md).
 
-### red_flags — calculated alongside metrics
+### red_flags — calculated alongside metrics（造假红旗 / 红旗筛查 / 风险信号）
 
 Risk-discovery layer, deliberately separate from `validation.json` (data quality): a
 triggered flag never affects exit codes or `quality_status`. The list is constant — always
@@ -197,9 +197,27 @@ the same 8 `flag_id` entries (`dual_high_cash_debt`, `receivable_outpacing_reven
 `inventory_sudden_rise`, `negative_cfo_positive_profit`, `minority_interest_anomaly`,
 `goodwill_heavy`, `prepayment_surge`, `construction_not_converting`) — so the report can
 annotate every item. Each entry: `flag_id`, `status` (flagged / clear / insufficient_data),
-`value`, `threshold`, `detail`, thresholds live in `calculate_metrics._RED_FLAG_THRESHOLDS`
-and are locked by tests. Correlated-party dealings and auditor changes are NOT programmable
-(they need notes/non-financial data) and stay qualitative.
+`value`, `threshold`, `detail`. Correlated-party dealings and auditor changes are NOT
+programmable (they need notes/non-financial data) and stay qualitative.
+
+Thresholds (`calculate_metrics._RED_FLAG_THRESHOLDS`, 红旗阈值) and decision rules. All
+inputs are consolidated facts; "期初" means the opening balance of the reporting period.
+Comparisons are strict (`>` / `<`); a value exactly at the threshold is `clear`.
+
+| flag_id | 中文 | 阈值键 = 值 | flagged 条件 | insufficient_data 条件 |
+|---|---|---|---|---|
+| `dual_high_cash_debt` | 存贷双高 | `dual_high_ratio` = 0.30 | 货币资金/营收 > 0.30 **且** (短期借款+长期借款)/营收 > 0.30 | 缺 `monetary_funds`、任一借款或营收，或营收 ≤ 0 |
+| `receivable_outpacing_revenue` | 应收暴增 | `outpacing_factor` = 1.5 | 应收增速 > 营收增速 × 1.5；增速 = 本期/基期 − 1，应收比期初，营收比上年同期 | 缺任一值或基期 ≤ 0 |
+| `inventory_sudden_rise` | 存货突升 | `inventory_surge_factor` = 1.5 | 期末存货/本期营收 > (期初存货/上期营收) × 1.5，且基期比值 > 0 | 缺本期或基期比值（含营收 ≤ 0） |
+| `negative_cfo_positive_profit` | CFO 为负而净利为正 | 无 | `cfo` < 0 且 `net_profit_group` > 0 | 缺 `cfo` 或 `net_profit_group` |
+| `minority_interest_anomaly` | 少数股东损益异常 | `minority_shift` = 0.20 | \|本期少数股东占比 − 上期占比\| > 0.20；占比 = (集团净利 − 归母净利)/集团净利 | 缺任一期集团或归母净利，或集团净利 ≤ 0 |
+| `goodwill_heavy` | 商誉占比高 | `goodwill_ratio` = 0.30 | `goodwill` / 期末 `total_equity_owners`（归母权益）> 0.30 | 缺商誉或归母权益，或归母权益 ≤ 0 |
+| `prepayment_surge` | 预付突升 | `prepayment_surge_factor` = 1.5 | 期末预付/本期营收 > (期初预付/上期营收) × 1.5，且基期比值 > 0 | 同存货突升 |
+| `construction_not_converting` | 在建不转固 | `construction_ratio` = 0.50 | `construction_in_progress` / `fixed_assets` > 0.50 | 缺任一值或固定资产 ≤ 0 |
+
+These are screening thresholds, not verdicts: a `flagged` item still needs industry context
+and notes before it becomes a 「触发」 conclusion. `tests/test_reference_contracts.py` locks
+this table to the code.
 
 ## validation.json — calculate_metrics.py
 
@@ -254,6 +272,11 @@ Protected-mode budgets and final verification belong to the host.
 Each entry: `claim_id`, `report_anchor` (exact Markdown heading in analysis.md), `text`,
 `fact_ids` (list), `metric_ids` (list), `evidence_ids` (list), `source_pages` (list[int]),
 `claim_type` (fact / calculation / inference / company_explanation).
+
+`claim_type` 合法值（`_CLAIM_TYPES`，`render_report.py` 与 `validate_report.py` 共用）只有这四个；
+`metric`、`derived`、`ratio` 等其他值一律报 `illegal claim_type`。statement 省略时默认
+`inference`。`fact` 必须绑定 fact，`calculation` 必须绑定 metric；`inference` 与
+`company_explanation` 中出现的数字同样需要绑定支撑。
 
 The nonempty claim text must occur in that heading's section. Cover every numeric statement,
 including table rows, headings, explanations and inferences. `fact` values must be verified;

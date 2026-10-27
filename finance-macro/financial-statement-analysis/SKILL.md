@@ -24,6 +24,16 @@ description: A 股财报 PDF 深度分析。输入一份财报 PDF 链接（年�
 
 日常分析用 `run_pipeline.py`（prepare/evidence/compute/report）；旧提取/读包 CLI 保留兼容，默认不拆开调用；`review` 仅诊断恢复时用。写入紧凑输入后可在同一次工具调用中执行下一阶段，无需先读回刚写入的文件。仅使用 Skill 自带流程，不安装宿主补丁、不改调用端或 Hermes 配置。
 
+`run_pipeline.py` 子命令速查（全部参数如下，无需读源码找 argparse）：
+
+| 子命令 | 必填 | 可选 | 用途 |
+|---|---|---|---|
+| `prepare` | `--url` `--run-dir` | — | 下载、缓存、索引，返回章节定位包 |
+| `evidence` | `--run-dir` | `--sections <ID,...>` `--pages 1,3,5-9` `--request-id <id>`（默认 `evidence`） `--cursor <游标>` | 增量提取并返回首个证据包；续读带相同 sections/pages 加 `--cursor` |
+| `compute` | `--run-dir` | `--spec <spec.json>` `--pdf-only` | 东财 F10 打底 + 抽查单比对；`--spec` 同次生成 fact_inputs；`--pdf-only` 走纯 PDF |
+| `report` | `--run-dir` | `--spec <spec.json>` `--independent-review` `--include-report` | 构造、预检、渲染、校验；正式交付必须带 `--independent-review` |
+| `review` | `--run-dir` | — | 只读当前状态与剩余修复预算，仅诊断恢复时用 |
+
 1. `run_pipeline.py prepare --url <URL> --run-dir <运行目录>` — 下载、缓存（核对 URL 与哈希，防误复用旧 PDF），生成 `document.json`/`sections.json` 并返回章节定位摘要。
 2. `run_pipeline.py evidence --run-dir <运行目录> --sections <重点章节ID> --request-id map-01` — 增量提取与首包交付一次完成，保留旧 ID 与文件。证据页的内容归属（含同页双表与跨页表尾）统一按[提取规则](references/extraction-rules.md)的 "Same-page dual tables" 节处理：以表标题、列头和科目行判断，不按页码或 `section_id` 推断合并/母公司口径。扫描页缺 OCR 能力时退出 2，把未提取页列入报告"未验证事项"。
 3. 直接读取上一步 JSON 的 `context.packet`（每包 ≤12,000 字符）；`next_cursor` 非空才以相同 sections/pages 和 `--cursor` 续读 `evidence`，续读不重新提取。`--pages` 支持 `1,3,5-9`。`image_crop` 必须实际查看图片后才能据其确认数字。

@@ -80,8 +80,16 @@
 - **claim 随片段生成**：每个 statement / 表格行各生成一条 claim，`fact_ids`、`metric_ids`、
   `evidence_ids`、`source_pages` 全部从台账解析，正文页码引用 `（PDF第N、M页）` 自动附加
   （`cite_pages: false` 可关闭）。
-- **定量陈述必须绑定**：自由段落与模板静态文本中的数字只允许年份（`2026上半年`、`2026年`）
-  和页码引用；出现其他静态数字阻塞渲染。
+- **定量陈述必须绑定（数字校验 / 静态数字检查，`render_report._check_static_text`）**：
+  数字按 `report_values.NUMBER_RE` 识别（含千分位、小数、正负号及 元/万元/亿元/% 单位）。
+  两种文本宽严不同：
+  - 模板静态文本（template 去掉占位符后、表格中的字符串单元格）只放行两类：
+    紧跟 `PDF第` / `p.` 的整数页码；以及后接期间后缀（`年`、`上半年`、`下半年`、
+    `Q1`–`Q4`、`H1`/`H2`、`第一季度` 等，即 `_PERIOD_SUFFIX_RE`）的四位整数年份。
+    `2026年` 可以，单写 `2026`、`30%`、`3家` 都会被拒。
+  - `paragraphs` 定性段落为严格模式：任何数字都拒，年份和页码也不例外。
+  报错信息分别为 `static number in free text must be a year or page citation` 与
+  `qualitative paragraphs must not contain numbers`；处理方式是把数字改成绑定占位符。
 - **类型一致性**：amount 格式不能用于 ratio 值，反之亦然；`simplified_fcf` 视为 amount。
 - **claim_type 约束**：`calculation` 必须有 metric 绑定；`fact` 必须有 fact 绑定。
 - **标题自动生成**：document 元数据完整时正文标题固定为
