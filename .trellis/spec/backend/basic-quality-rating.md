@@ -202,3 +202,36 @@ Regression tests include threshold/weakness combinations, period/null inputs,
 real-PDF mock HTTP cache/continuation/scan cases, canonical validation/disclaimer
 cases, and migration preview/backup/idempotent forwarding. Tests do not establish
 live model research speed or factual rating correctness.
+
+## v3.2.0 bounded research (2026-10-27)
+
+- `research_policy.py` classifies tool error envelopes only. Quota/auth/access
+  failures disable that configured route for the run; transient failures first
+  yield a ready alternate, with one bounded retry per route in a round. Counters
+  remain bounded for multiple outstanding receipts. Preserve a permanent block's
+  original cause when late results arrive. 404/410/empty are request-specific.
+- `research_state.py init/start/result/close/reopen/status` persists A-D evidence
+  and budgets in a stock-input-hash-bound JSON. Writes use an exclusive lock and
+  atomic replace. Init never resets existing state. One initial + two follow-up
+  rounds are shared per dimension (not per renamed question); fallback stays in
+  the same round. Start requires a question and grading impact. Replayed IDs
+  cannot change intent or overwrite outcomes. Revalidate global route blocks
+  when replaying pending reservations; cancelled receipts reject late results.
+- Evidence is compact, referenced and topic-keyed; complete requires all required
+  topics. Revalidate persisted facts, not only newly inserted ones. Keep source,
+  locator, period and statement fields. This proves reference shape, not truth.
+  Gap preserves facts and missing topics. Last-round success can still complete.
+  Closed dimensions freeze; a concrete material conflict allows one reopen round
+  per dimension, with old evidence and budgets retained.
+- Normal v3.2 finalize includes --research-state; the optional gate also works
+  in validate_rating_json. Require terminal A-D states and null scores for gaps,
+  verify stock identity/input hash, and retain the exact ten output fields.
+  Legacy unflagged calls remain compatible. E is outside this research ledger.
+- No credentials, new search services or arbitrary subprocess execution. The
+  agent still invokes actual host tools and records outcomes. These scripts do
+  not intercept bypassing calls; host-enforced receipts require separate caller
+  integration. Neither live deployment nor measured speedup is established here.
+
+Tests cover quota/auth fallback, transient waits, empty results, persisted budgets,
+duplicate/cancelled receipts, global blocks with outstanding calls, completed/gap
+evidence, conflict reopening, corruption/locking and checked CLI finalization.

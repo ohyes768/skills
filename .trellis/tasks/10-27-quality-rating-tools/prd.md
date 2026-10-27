@@ -28,3 +28,18 @@ E scoring, reusable PDF caching/retrieval, and one coherent validation contract.
   financial numbers equal to total score.
 - Existing rating tests and any impacted PDF tests, lint and metadata validation pass.
 - Run an end-to-end invocation through each new CLI and record limitations.
+
+## Follow-up: bounded research (user approved 2026-10-27)
+
+Implement remembered source failures/fallback and per-dimension evidence progress.
+Permanent quota/auth failures stop reuse of that route for this run. Transient
+failures have bounded retries and return an alternative without blocking sleep.
+No source available means a disclosed evidence gap, never invented findings.
+Persist evidence and initial+two follow-up rounds per A-D dimension. Completed
+dimensions freeze; one concrete material conflict permits one reopen round.
+Repeated commands/restarts must not reset counters or change the stock identity.
+Keep the final ten output keys; optional finalization gate requires terminal
+research state and null scores for dimensions closed with evidence gaps.
+Host tools are still called by the agent: these helpers govern documented
+before/after calls, not a network proxy or a host-level interception mechanism.
+No remote installation, application changes or automatic commit/push in this follow-up.

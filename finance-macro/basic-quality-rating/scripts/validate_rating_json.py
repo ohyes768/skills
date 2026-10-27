@@ -41,13 +41,15 @@ def _report_warnings(data):
     return warnings
 
 
-def validate(data, stock=None, *, check_financial=False):
+def validate(data, stock=None, *, check_financial=False, research_state=None):
     """Validate without correcting or mutating the supplied rating."""
     errors = []
     try:
         if not isinstance(data, dict) or set(data) != set(OUTPUT_FIELDS):
             raise ValueError("评级必须为固定 10 字段 JSON 对象")
-        expected = finalize(data, stock, check_financial=check_financial)
+        expected = finalize(
+            data, stock, check_financial=check_financial, research_state=research_state
+        )
         for field in DERIVED:
             actual, wanted = data[field], expected[field]
             if wanted is None:
@@ -65,7 +67,7 @@ def validate(data, stock=None, *, check_financial=False):
                     errors.append(f"weighted_score 应为 {wanted}")
             elif actual != wanted:
                 errors.append("boundary 应原样使用 calculate 生成的规范文本")
-    except (ValueError, TypeError, KeyError) as exc:
+    except (OSError, ValueError, TypeError, KeyError) as exc:
         errors.append(str(exc))
     return {
         "status": "failed" if errors else "passed",
@@ -82,6 +84,7 @@ def main(argv=None):
     parser.add_argument("input", help="Final rating JSON (not a draft)")
     parser.add_argument("--stock", help="Original stock JSON for identity verification")
     parser.add_argument("--check-financial", action="store_true", help="Verify E against --stock")
+    parser.add_argument("--research-state", help="Verify terminal research ledger")
     args = parser.parse_args(argv)
     try:
         if args.check_financial and not args.stock:
@@ -90,6 +93,7 @@ def main(argv=None):
             _read(args.input),
             _read(args.stock) if args.stock else None,
             check_financial=args.check_financial,
+            research_state=args.research_state,
         )
     except (OSError, ValueError, TypeError) as exc:
         result = {"status": "failed", "errors": [str(exc)], "warnings": []}

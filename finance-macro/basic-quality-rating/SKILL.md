@@ -3,7 +3,7 @@ name: basic-quality-rating
 description: "收到单只 A 股结构化财务 JSON、需要五维基本面评分与星级及 Markdown 报告 JSON 时使用。仅用于自动化经营质量分析，不做估值或买卖建议。"
 license: MIT
 metadata:
-  version: 3.1.0
+  version: 3.2.0
   author: xbtlin (https://github.com/xbtlin/ai-berkshire) + Hermes Agent
   source: adapted from ai-berkshire
   hermes:
@@ -76,6 +76,10 @@ E 评分、加权与 JSON 校验使用本 skill 脚本；PDF 取证按需使用�
 
 ## 取证完成条件与停止规则
 
+本轮用持久化 research.json 管理 A-D 进度与渠道故障，按 [有预算的取证](references/research-control.md) 执行 init → start → 宿主工具 → result → close。init 一次，start 指定具体缺口及评分影响，result 直接返回换源、等待、结案或停止决定，不重复 status 确认。宿主真实搜索仍由 agent 调用，本工具不拦截绕过它的调用。
+
+余额不足、鉴权失败等渠道问题在本轮跨维度停用；临时故障优先换备用路径，同一渠道失败两次即停用。只配置现有能力，没有可用渠道时据已有证据 gap 收口，不临时安装环境、开发抓取工具或反复测试已知失败渠道。
+
 本文件包含唯一评分标准，不加载其他 skill 或旧评分参考；旧公司案例不作为当期评分依据。先核实业务，再按下表建立简短证据清单（事实、来源链接/位置、期间、覆盖的问题、是否有冲突）；同一来源可以覆盖多个维度，不为每维重复下载。证据清单用于本轮工作，不加入最终 JSON 顶层字段。
 
 | 维度 | 可结束取证的条件 |
@@ -88,8 +92,8 @@ E 评分、加权与 JSON 校验使用本 skill 脚本；PDF 取证按需使用�
 
 - 某维满足条件且无未解决的分档冲突，即标记完成。其后只复用证据，不因撰写报告而重新搜索或重读已核实段落。
 - 每次追加搜索/读取前，指定一个尚未解决的问题，以及它可能影响的维度或评分依据；无法指出问题时不调用工具。已有来源先定位相关段落；命中后保存位置，不反复扫描全文。
-- 对未覆盖的问题最多再做两轮定向取证；一轮是针对该问题检索并读取相关候选内容，不是两次下载全篇。仍不可得则写入 watch_points，按证据不足规则决定是否记 null；不得靠不断换关键词无限追搜。
-- 完成后仅因新的具体冲突可能改变分档才重开该维度，且同一冲突只允许一次补证轮次；仍无法裁决则披露冲突，受影响维度记 null。没有实证的“再确认一下”不重开。
+- 每维共享一次初查及最多两轮定向补证，换问题名或关键词不重置预算；一轮指针对具体缺口检索并读取相关候选内容。仍缺关键证据则 close gap，写入 watch_points 并令该维 null。已有缓存事实可直接登记后 complete，无需强行搜索。
+- 完成后仅因新的具体冲突可能改变分档才 reopen，每维只允许一次、额外一轮补证；旧证据不丢弃，仍无法裁决就披露冲突并 close gap。没有实证的“再确认一下”不重开。
 - 所有维度进入“完成”或“证据不足未评分”后结束取证，进入评分和输出。
 
 ## A-D 评分：证据支持时为 1-5 整数，否则为 null
@@ -207,13 +211,13 @@ boundary 保持一句可验证的踩线说明，按固定脚本枚举合法单�
    `python3 <skill目录>/scripts/rating_math.py calculate --input <工作目录>/dimensions.json`
    stdout 返回 `weighted_score`、`stars`、`boundary`；将结果原样用于报告，禁止自行改写成未经验证的跨档描述。脚本不替代 A-D 搜证和分项判断。
 3. 准备 `draft.json`，包含输出合同中的七个非派生字段：code、name、dimensions、summary、risks、watch_points、report_md。可保留三个派生字段，脚本会重算覆盖。正常交付运行：
-   `python3 <skill目录>/scripts/rating_math.py finalize --input <工作目录>/draft.json --stock <工作目录>/stock.json --check-financial`
+   `python3 <skill目录>/scripts/rating_math.py finalize --input <工作目录>/draft.json --stock <工作目录>/stock.json --check-financial --research-state <工作目录>/research.json`
    stock.json 是调用方原始输入，用于核对 code/name。两个命令通过普通 terminal 在同一个工作目录使用，避免把 execute_code 隔离环境里的临时路径交给另一工具。
-4. finalize 检查必需字段、精确字段集合、类型、非空报告和股票身份，启用 --check-financial 时复核 E 与原始输入一致，再补齐三个派生字段。成功时 stdout 只有合法的 10 字段 JSON，最终回复原样交付；失败时非零退出且错误只写 stderr，不交付半成品或凭印象补分。只修错误指向的问题，再运行同一命令。
+4. finalize 检查必需字段、精确字段集合、类型、非空报告和股票身份，启用 --check-financial 时复核 E 与原始输入一致，启用 --research-state 时要求 A-D 已结案、缺口分项为 null，再补齐三个派生字段。成功时 stdout 只有合法的 10 字段 JSON，最终回复原样交付；失败时非零退出且错误只写 stderr，不交付半成品或凭印象补分。只修错误指向的问题，再运行同一命令。
 
-E 因已披露的外部关键口径冲突记 null、而原始输入仍能算出数字时，先在报告和 watch_points 明确冲突及受影响规则，本轮 finalize 使用不带 --check-financial 的兼容入口；不得用该入口绕过普通缺失/分数不一致。该例外需分析者语义复核，脚本无法证明冲突成立。
+E 因已披露的外部关键口径冲突记 null、而原始输入仍能算出数字时，先在报告和 watch_points 明确冲突及受影响规则，本轮 finalize 保留 --research-state，使用不带 --check-financial 的兼容入口；不得用该入口绕过普通缺失/分数不一致。该例外需分析者语义复核，脚本无法证明冲突成立。
 
-只读复核已生成文件时用 `scripts/validate_rating_json.py <rating.json> [--stock <stock.json>] [--check-financial]`。它复用主算分规则，不改文件；数值/结构错误失败，文字检查仅返回 warnings，不能因免责声明含“目标价”或财务数值恰与总分相等而判失败。不再运行旧 runbook 校验器。finalize 后无需为了“再验一次”重复执行同样的数值校验。
+只读复核已生成文件时用 `scripts/validate_rating_json.py <rating.json> [--stock <stock.json>] [--check-financial] [--research-state <research.json>]`。它复用主算分规则，不改文件；数值/结构错误失败，文字检查仅返回 warnings，不能因免责声明含“目标价”或财务数值恰与总分相等而判失败。不再运行旧 runbook 校验器。finalize 后无需为了“再验一次”重复执行同样的数值校验。
 
 脚本只校验数值与结构，不证明事实、来源、未评级标注或报告与各字段语义一致；这些仍由分析者按本文件检查。
 

@@ -30,3 +30,30 @@ Compatibility: version 3.1.0, no new final output keys. Existing calculate/final
 commands remain compatible; finalize with --stock verifies E against financial
 rules once this mode is explicitly enabled/documented to avoid silently accepting
 hand-calculated E. A-D remain analyst judgments.
+
+## Follow-up v3.2: bounded research
+
+Add research_policy.py for deterministic error classification and source circuit
+decisions, and research_state.py for a persisted stock-bound research ledger.
+The CLI exposes init/start/result/close/reopen/status. start reserves one logical
+question/round before host tools, including a specific grading impact and a
+request id. result records only a bounded outcome/error, returning the next route
+or a stop action; fallback stays in the same round. Each route has bounded
+attempts within the round and terminal quota/auth blocks across all dimensions.
+The agent invokes actual host search tools; no arbitrary command execution,
+credential configuration or new external provider is introduced.
+
+Each dimension has named required topics, cumulative evidence, initial+2-round
+budget and one reopen allowance. close complete requires coverage with text,
+source URL, locator and period (semantic truth is still analyst-owned). A
+budget-exhausted acquisition can still close complete using its last valid
+evidence; otherwise close gap and preserve facts. No empty match implies good
+governance or absent risk. Completed dimensions cannot search again without a
+documented material conflict; unchanged init/request replay does not consume or
+reset state. Use exclusive local file locking and atomic replace for writes.
+
+Expose optional --research-state on finalize and the canonical validator. It
+checks stock identity, terminal state, and null for gap dimensions without adding
+final output fields or changing legacy unflagged signatures. State CLI rejects
+corrupt files and cannot clear budgets with init. Note the boundary: an agent or
+host bypassing the CLI is not physically intercepted by these local tools.

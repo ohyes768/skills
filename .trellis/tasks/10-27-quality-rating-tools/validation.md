@@ -17,3 +17,20 @@
   migration retargeting; original regression cases remain covered.
 - Remote installed files were read for context only. No deployment, full live
   Hermes analysis or production speed benchmark is claimed.
+
+## v3.2 follow-up validation
+
+- Full suite: 71 tests pass; Ruff lint/format, skill metadata and diff checks pass.
+- New policy tests cover quota/auth/access, bounded transient retries, no-source
+  stop, empty/404 scope and stable permanent causes for late outcomes.
+- Ledger tests cover persisted budgets/identity, source fallback, last-round
+  completion, topic/reference coverage, one reopen, corruption and lock failures.
+- Read-only independent review found three defects and verified all fixes:
+  blocked-source pending replay, outstanding failure counter and persisted fact
+  shape validation. Reproducing regression tests remain in the suite.
+- Real CLI smoke with synthetic host outcomes: 402 -> backup; business uses one
+  round; industry uses three, fourth rejected; terminal state passes checked
+  finalize and validator, with ten fields and stars null for the evidence gap.
+  Receipt: .tmp/bounded-research-smoke-f8ywlxuj/smoke-result.json.
+- This iteration does not execute host network tools, deploy to NAS, modify the
+  application, benchmark live research speed, or create a Git commit/push.

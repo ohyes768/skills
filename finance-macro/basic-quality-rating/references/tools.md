@@ -3,6 +3,8 @@
 以下 `<skill目录>` 是当前 skill 的实际目录；运行数据放在宿主指定的工作目录，不放源码目录。
 财务计算、算分与校验只需 Python 3 标准库。PDF 依赖在安装时准备，见 [安装与兼容迁移](setup-and-migration.md)。
 
+A-D 取证开工先按 [有预算的取证与失败换路](research-control.md) 初始化 research.json，保存渠道故障、当前缺口、紧凑证据与轮次；已查清就复用，缺证则以 null 收口。
+
 ## 1. 财务 E：原始输入直接算
 
 ```text
@@ -30,7 +32,7 @@ ROE 历史取 roe_year 及前两年；同年相同值可去重，同年冲突、
 行业缺失、不支持或两级冲突时未评分，不从公司名字猜。金融股缺少专用监管指标时返回 null，保留子行业缺口说明。
 完整支持的行业集合与标签解析由 `financial_score.py` 维护；脚本返回具体问题，无需为常规运行读取源码。
 
-五维确定后继续用主 skill 的 calculate/finalize。正常 finalize 加 `--stock stock.json --check-financial`，
+五维确定后继续用主 skill 的 calculate/finalize。正常 finalize 加 `--stock stock.json --check-financial --research-state research.json`，
 能拦截手抄 E 分数错误。若有已披露的外部口径冲突，只能按主 skill 的受限兼容入口交付，不能偷偷替换输入数字。
 
 ## 2. PDF：准备一次，搜索和读页复用
@@ -67,7 +69,7 @@ python3 <skill目录>/scripts/pdf_evidence.py read --document-dir <document_dir>
 ## 3. 只读校验已有结果
 
 ```text
-python3 <skill目录>/scripts/validate_rating_json.py <rating.json> --stock <stock.json> --check-financial
+python3 <skill目录>/scripts/validate_rating_json.py <rating.json> --stock <stock.json> --check-financial --research-state <research.json>
 ```
 
 输出 `status/errors/warnings/scope`。退出 0 表示数值结构通过，退出 2 表示输入或合同失败。

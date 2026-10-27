@@ -81,7 +81,7 @@ def _text(value, field):
         raise ValueError(f"{field} 必须为非空字符串")
 
 
-def finalize(draft, stock=None, *, check_financial=False):
+def finalize(draft, stock=None, *, check_financial=False, research_state=None):
     if check_financial and stock is None:
         raise ValueError("财务评分校验必须提供 --stock 原始输入")
     if not isinstance(draft, dict):
@@ -112,7 +112,12 @@ def finalize(draft, stock=None, *, check_financial=False):
         dimensions = draft["dimensions"]
         if not isinstance(dimensions, dict) or dimensions.get("financial") != expected:
             raise ValueError(f"financial 与原始输入计算不一致，应为 {expected!r}")
-    result = {**draft, **calculate(draft["dimensions"])}
+    derived = calculate(draft["dimensions"])
+    if research_state is not None:
+        from research_state import check_research
+
+        check_research(research_state, draft, stock)
+    result = {**draft, **derived}
     return {field: result[field] for field in OUTPUT_FIELDS}
 
 
@@ -144,12 +149,13 @@ def main():
         action="store_true",
         help="Verify E against original --stock (finalize only)",
     )
+    parser.add_argument("--research-state", help="Verify terminal research ledger (finalize only)")
     args = parser.parse_args()
     try:
         data = _read(args.input)
         if args.command != "finalize":
-            if args.stock or args.check_financial:
-                raise ValueError("--stock 与 --check-financial 仅用于 finalize")
+            if args.stock or args.check_financial or args.research_state:
+                raise ValueError("--stock、--check-financial 与 --research-state 仅用于 finalize")
             if args.command == "financial":
                 from financial_score import score_financial
 
@@ -161,6 +167,7 @@ def main():
                 data,
                 _read(args.stock) if args.stock else None,
                 check_financial=args.check_financial,
+                research_state=args.research_state,
             )
         print(json.dumps(result, ensure_ascii=False, allow_nan=False))
     except (OSError, ValueError, TypeError) as exc:

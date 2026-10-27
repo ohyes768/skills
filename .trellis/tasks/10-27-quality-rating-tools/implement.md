@@ -25,3 +25,15 @@ may be smoke-tested separately when available, without fabricating success.
 Local implementation/verification complete. No commit, push, remote migration or
 consumer deployment was performed. Keep task in progress until the user chooses
 integration; do not archive with an automatic Git commit.
+
+## Follow-up v3.2
+
+- [x] Add failing tests for quota/auth, rate/transient failure, no-source stop,
+  permanent blocks across dimensions, and bounded fallback decisions.
+- [x] Add persistent research CLI tests for evidence coverage, budgets,
+  idempotent/restarted operations, identity binding, terminal/reopen states.
+- [x] Implement policy and ledger with standard library only.
+- [x] Integrate optional finalization/validation research-state gate; preserve
+  old entrypoints. Add regression tests before integration edits.
+- [x] Update skill/tools/reference/spec and run complete tests, lint, metadata
+  checks and an end-to-end failure -> fallback -> evidence -> stop/submit smoke.
