@@ -160,25 +160,51 @@ def _structured_dates(document: dict) -> list[str]:
     return sorted(dates)
 
 
+def _structured_note(doc: dict) -> str | None:
+    """留档仍有缺失项时生成分类回退说明；齐全返回 None。"""
+    failures = doc.get("fetch_failures") or {}
+    if not failures:
+        return None
+    no_data = sorted(k for k, v in failures.items() if v.get("reason") == "no_data")
+    failed = sorted(k for k, v in failures.items() if v.get("reason") == "fetch_failed")
+    parts = []
+    if no_data:
+        parts.append("no data (report may be undisclosed yet, or the issuer is a "
+                     f"bank/insurer not covered by the general-enterprise tables): "
+                     f"{', '.join(no_data)}")
+    if failed:
+        parts.append(f"request failed: {', '.join(failed)}")
+    return ("structured fetch incomplete: " + "; ".join(parts)
+            + "; fell back to PDF-only (archived parts are reused; "
+              "the next run retries only the missing parts)")
+
+
 def _load_or_fetch_structured(run_dir: Path) -> tuple[dict | None, str | None]:
-    """加载（必要时拉取）结构化数据；失败返回 (None, 回退说明)。"""
+    """加载（必要时拉取）结构化数据；不完整时返回 (None, 回退说明) 并留档已拉部分。"""
     from fetch_structured import FetchStructuredError, fetch_structured
 
     struct_path = run_dir / "structured_financials.json"
     if struct_path.exists():
         try:
-            return read_json(struct_path), None
+            candidate = read_json(struct_path)
         except (OSError, ValueError) as exc:
             return None, f"structured data unreadable ({exc}); fell back to PDF-only"
+        if _structured_note(candidate) is None:
+            return candidate, None
+        # 留档不完整（缺项留待披露）：继续走增量拉取，仅补缺失项
     document = read_json(run_dir / "document.json")
     code = document.get("stock_code")
     dates = _structured_dates(document)
     if not code or not dates:
         return None, "document lacks stock_code or period; fell back to PDF-only"
     try:
-        return fetch_structured(code, dates, run_dir), None
+        doc = fetch_structured(code, dates, run_dir)
     except (FetchStructuredError, OSError, ValueError) as exc:
         return None, f"structured fetch failed ({exc}); fell back to PDF-only"
+    note = _structured_note(doc)
+    if note:
+        return None, note
+    return doc, None
 
 
 def cmd_compute(run_dir: Path, *, spec_path: Path | None = None,

@@ -22,6 +22,21 @@ def run(command: str, run_dir: Path, **kwargs) -> tuple[dict, int]:
     return run_pipeline.cmd_review(run_dir)
 
 
+def test_structured_note_classifies_failures():
+    """回退说明按失败原因分类：no_data 指向未披露/银行保险，fetch_failed 指向请求故障。"""
+    doc = {"fetch_failures": {
+        "2026-09-30/income": {"reason": "no_data", "detail": "empty"},
+        "2026-09-30/balance": {"reason": "fetch_failed", "detail": "HTTP 502"},
+    }}
+    note = run_pipeline._structured_note(doc)
+    assert "no data" in note and "undisclosed" in note and "bank/insurer" in note
+    assert "2026-09-30/income" in note
+    assert "request failed" in note and "2026-09-30/balance" in note
+    assert note.endswith("the next run retries only the missing parts)")
+    assert run_pipeline._structured_note({"fetch_failures": {}}) is None
+    assert run_pipeline._structured_note({}) is None
+
+
 def test_compute_builds_metrics_and_reports_unresolved(run_dir):
     prepare_build_run(run_dir)
     fact_inputs_file(run_dir, [

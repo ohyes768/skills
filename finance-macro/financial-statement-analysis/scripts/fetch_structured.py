@@ -3,6 +3,8 @@
 只封装 datacenter 接口 HTTP（不引入 akshare）；响应原样保存，映射规则演进时无需重拉。
 数值以 Decimal 解析留档（parse_float），避免 float 失真。缓存按「已拉取的 (日期, 报表)
 集合」增量复用——远程数据可能合法更新，哈希仅作审计留档。
+数据缺失（未披露、银行/保险不在通用三表）不视为致命：逐项记入 fetch_failures 留档，
+已拉到的部分照常落盘，下次运行只补缺失项。
 """
 
 from __future__ import annotations
@@ -74,10 +76,7 @@ def _parse_rows(payload: bytes, label: str) -> list[dict]:
         doc = json.loads(payload.decode("utf-8"), parse_float=Decimal)
     except (ValueError, UnicodeDecodeError) as exc:
         raise _TransientError(f"{label}: response is not valid JSON") from exc
-    rows = ((doc or {}).get("result") or {}).get("data") or []
-    if not rows:
-        raise FetchStructuredError(f"{label}: no data for the requested security/report date")
-    return rows
+    return ((doc or {}).get("result") or {}).get("data") or []
 
 
 def _request_once(client: httpx.Client, url: str) -> bytes:
@@ -93,17 +92,35 @@ def _request_once(client: httpx.Client, url: str) -> bytes:
 
 
 def _fetch_report(client: httpx.Client, label: str, url: str, max_attempts: int,
-                  sleep: Callable[[float], None]) -> tuple[list[dict], str]:
+                  sleep: Callable[[float], None]) -> tuple[list[dict] | None, str | None,
+                                                           dict | None]:
+    """返回 (rows, digest, failure)：rows 非 None 即成功（此时 failure 为 None）；
+    rows 为 None 时 failure 形如 {"reason": "no_data" | "fetch_failed", "detail": ...}。
+    空数据（接口正常但无该期记录）记 no_data，不重试。"""
     last_error: Exception | None = None
     for attempt in range(1, max_attempts + 1):
         try:
             payload = _request_once(client, url)
-            return _parse_rows(payload, label), hashlib.sha256(payload).hexdigest()
+        except FetchStructuredError as exc:
+            return None, None, {"reason": "fetch_failed", "detail": str(exc)}
         except _TransientError as exc:
             last_error = exc
             if attempt < max_attempts:
                 sleep(RETRY_BACKOFF_SECONDS[min(attempt - 1, len(RETRY_BACKOFF_SECONDS) - 1)])
-    raise FetchStructuredError(f"{label}: failed after {max_attempts} attempts: {last_error}")
+            continue
+        try:
+            rows = _parse_rows(payload, label)
+        except _TransientError as exc:
+            last_error = exc
+            if attempt < max_attempts:
+                sleep(RETRY_BACKOFF_SECONDS[min(attempt - 1, len(RETRY_BACKOFF_SECONDS) - 1)])
+            continue
+        if not rows:
+            return None, None, {"reason": "no_data",
+                                "detail": f"{label}: no data for the requested security/report date"}
+        return rows, hashlib.sha256(payload).hexdigest(), None
+    return None, None, {"reason": "fetch_failed",
+                        "detail": f"failed after {max_attempts} attempts: {last_error}"}
 
 
 def _cached_entries(doc: dict | None, dates: list[str]) -> set[tuple[str, str]]:
@@ -127,6 +144,7 @@ def fetch_structured(code: str, dates: list[str], run_dir: Path, *,
     """拉取多期三表并写 structured_financials.json；返回带 reused 标记的留档文档。
 
     dates 为报告期末列表（如本期、上年同期、上年末）；已拉取的 (日期, 报表) 增量复用。
+    缺失项记入 fetch_failures（reason: no_data / fetch_failed），不中断其余请求。
     """
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -163,6 +181,7 @@ def fetch_structured(code: str, dates: list[str], run_dir: Path, *,
                 if (date, kind) in done:
                     reports[date][kind] = previous["reports"][date][kind]
 
+    failures: dict[str, dict[str, str]] = {}
     try:
         for date in dates:
             for kind, report_name in REPORTS.items():
@@ -170,10 +189,13 @@ def fetch_structured(code: str, dates: list[str], run_dir: Path, *,
                     continue
                 label = f"{report_name}@{date}"
                 url = _report_url(report_name, secu, date)
-                rows, digest = _fetch_report(client, label, url, max_attempts,
-                                             effective_sleep)
-                reports[date][kind] = rows
-                digests[f"{date}/{kind}"] = digest
+                rows, digest, failure = _fetch_report(client, label, url, max_attempts,
+                                                      effective_sleep)
+                if rows is not None:
+                    reports[date][kind] = rows
+                    digests[f"{date}/{kind}"] = digest
+                else:
+                    failures[f"{date}/{kind}"] = failure
     finally:
         if owned_client:
             client.close()
@@ -191,6 +213,7 @@ def fetch_structured(code: str, dates: list[str], run_dir: Path, *,
         "requested": {"report_names": sorted(REPORTS.values()), "secucode": secu,
                       "report_dates": dates},
         "response_sha256": fetched_all,
+        "fetch_failures": failures,
         "reports": reports,
     }
     write_json(output_path, doc)
@@ -218,10 +241,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"fetch_structured failed: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
 
-    emit_status("reused" if doc["reused"] else "ok",
+    issues = [f"{key}: {info['reason']} ({info['detail']})"
+              for key, info in sorted(doc["fetch_failures"].items())]
+    has_any = any(rows for per_date in doc["reports"].values() for rows in per_date.values())
+    if issues and not has_any:
+        print("fetch_structured failed: no data retrieved; " + "; ".join(issues),
+              file=sys.stderr)
+        raise SystemExit(1)
+    status = "partial" if issues else ("reused" if doc["reused"] else "ok")
+    emit_status(status,
                 {"structured_financials": str(Path(args.run_dir) / "structured_financials.json"),
                  "report_dates": doc["report_dates"]},
-                [])
+                issues)
     return 0
 
 

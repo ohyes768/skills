@@ -109,28 +109,73 @@ def test_transient_error_retried(run_dir):
     assert attempts["n"] == 4, "first date retries once (2), later dates succeed once each"
 
 
-def test_persistent_failure_raises(run_dir):
+def test_persistent_failure_recorded_and_archived(run_dir):
+    """接口故障（持续 5xx）不再整体致命：逐项记 fetch_failed，留档不写任何 rows。"""
     def always_500(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500)
 
-    with pytest.raises(fetch_structured.FetchStructuredError):
-        fetch_structured.fetch_structured("301313", DATES.split(","), run_dir,
-                                          client=make_client(always_500), sleep=lambda s: None)
-    assert not (run_dir / "structured_financials.json").exists()
+    doc = fetch_structured.fetch_structured("301313", DATES.split(","), run_dir,
+                                            client=make_client(always_500), sleep=lambda s: None)
+    expected_keys = {f"{d}/{k}" for d in DATES.split(",")
+                     for k in ("balance", "cashflow", "income")}
+    assert set(doc["fetch_failures"]) == expected_keys
+    assert all(v["reason"] == "fetch_failed" for v in doc["fetch_failures"].values())
+    assert all(not rows for per_date in doc["reports"].values() for rows in per_date.values())
+    stored = json.loads((run_dir / "structured_financials.json").read_text(encoding="utf-8"))
+    assert stored["fetch_failures"] == doc["fetch_failures"]
 
 
-@pytest.mark.parametrize("payload", [
-    b"not json",
-    json.dumps({"result": None}).encode(),
-    json.dumps({"result": {"data": []}}).encode(),
-])
-def test_bad_responses_rejected(run_dir, payload):
-    def bad(request: httpx.Request) -> httpx.Response:
+def test_empty_responses_recorded_as_no_data(run_dir):
+    """接口正常但无数据（未披露/银行保险不在通用表）→ no_data，不是致命错误。"""
+    payload = json.dumps({"result": None}).encode()
+
+    def empty(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=payload)
 
-    with pytest.raises(fetch_structured.FetchStructuredError):
-        fetch_structured.fetch_structured("301313", DATES.split(","), run_dir,
-                                          client=make_client(bad), sleep=lambda s: None)
+    doc = fetch_structured.fetch_structured("301313", ["2026-06-30"], run_dir,
+                                            client=make_client(empty), sleep=lambda s: None)
+    assert set(doc["fetch_failures"]) == {f"2026-06-30/{k}"
+                                          for k in ("balance", "cashflow", "income")}
+    assert all(v["reason"] == "no_data" for v in doc["fetch_failures"].values())
+
+
+def test_bad_json_retries_then_records_fetch_failed(run_dir):
+    def bad(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"not json")
+
+    doc = fetch_structured.fetch_structured("301313", ["2026-06-30"], run_dir,
+                                            client=make_client(bad), sleep=lambda s: None)
+    assert {v["reason"] for v in doc["fetch_failures"].values()} == {"fetch_failed"}
+
+
+def missing_income_handler(request: httpx.Request) -> httpx.Response:
+    """income 表正常返回但无数据（如未披露），其余两表正常。"""
+    if request.url.params.get("reportName") == "RPT_F10_FINANCE_GINCOME":
+        return httpx.Response(200, content=json.dumps({"result": None}).encode(),
+                              headers={"content-type": "application/json"})
+    return ok_handler(request)
+
+
+def test_partial_fetch_archived_and_completed_on_rerun(run_dir):
+    """一次缺数（如未披露）不拖垮其余请求：缺项留档，重跑只补缺、补齐后视为完整。"""
+    counter: list[tuple] = []
+
+    doc = fetch_structured.fetch_structured("301313", ["2026-06-30"], run_dir,
+                                            client=make_client(missing_income_handler, counter))
+    assert set(doc["fetch_failures"]) == {"2026-06-30/income"}
+    assert doc["fetch_failures"]["2026-06-30/income"]["reason"] == "no_data"
+    assert sorted(doc["reports"]["2026-06-30"]) == ["balance", "cashflow"]
+    assert len(counter) == 3, "all three reports are requested; the empty one becomes no_data"
+
+    calls_first = len(counter)
+    doc = fetch_structured.fetch_structured("301313", ["2026-06-30"], run_dir,
+                                            client=make_client(ok_handler, counter))
+    assert len(counter) - calls_first == 1, "rerun retries only the missing report"
+    assert not doc["fetch_failures"]
+    assert doc["reused"] is False
+    assert sorted(doc["reports"]["2026-06-30"]) == ["balance", "cashflow", "income"]
+    stored = json.loads((run_dir / "structured_financials.json").read_text(encoding="utf-8"))
+    assert stored["fetch_failures"] == {}
 
 
 def test_invalid_code_rejected(run_dir):
@@ -153,3 +198,20 @@ def test_cli_exit_codes(run_dir, capsys, monkeypatch):
         fetch_structured.main(["--code", "301313", "--dates", DATES,
                                "--run-dir", str(run_dir), "--refresh"])
     assert exc.value.code == 1
+
+
+def test_cli_partial_when_a_report_is_missing(run_dir, capsys, monkeypatch):
+    """部分缺数：退出 0、status=partial、issues 携带缺项明细；重跑缺项仍在仍报 partial。"""
+    monkeypatch.setattr(fetch_structured, "_cli_client", make_client(missing_income_handler))
+    assert fetch_structured.main(["--code", "301313", "--dates", "2026-06-30",
+                                  "--run-dir", str(run_dir)]) == 0
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert len(lines) == 1
+    out = json.loads(lines[0])
+    assert out["status"] == "partial"
+    assert any("2026-06-30/income" in issue for issue in out["issues"])
+
+    assert fetch_structured.main(["--code", "301313", "--dates", "2026-06-30",
+                                  "--run-dir", str(run_dir)]) == 0
+    out = json.loads([line for line in capsys.readouterr().out.splitlines() if line.strip()][0])
+    assert out["status"] == "partial", "still-missing parts must not be masked as reused"
