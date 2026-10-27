@@ -50,6 +50,27 @@ class BriefReportTests(unittest.TestCase):
         data["fetched_at"] = "2026-10-23T12:00:00+08:00"
         self.assertIn("旧数据", self.render(data))
 
+    def test_brief_shows_24h_mean_with_who_reference(self):
+        text = self.render(snapshot())
+        self.assertIn("近24小时", text)
+        self.assertIn("WHO", text)
+        self.assertIn("高于", text)
+
+    def test_brief_below_who_is_not_called_safe(self):
+        data = snapshot()
+        for row in data["observations"]:
+            row["PM2_5_24h"] = "10"
+        text = self.render(data)
+        self.assertIn("近24小时", text)
+        self.assertIn("低于", text)
+        self.assertIn("不是安全线", text)
+
+    def test_no_24h_data_drops_who_line(self):
+        data = snapshot()
+        for row in data["observations"]:
+            row.pop("PM2_5_24h")
+        self.assertNotIn("WHO", self.render(data))
+
 
 if __name__ == "__main__":
     unittest.main()

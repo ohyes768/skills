@@ -12,8 +12,10 @@ TZ = timezone(timedelta(hours=8))
 NOW = datetime(2026, 10, 24, 12, 30, tzinfo=TZ)
 
 
-def station(code="a", value="10", hour=12, lat="30.2741", lon="120.1551"):
-    return {
+def station(
+    code="a", value="10", hour=12, lat="30.2741", lon="120.1551", pm25_24h="44"
+):
+    row = {
         "Area": "杭州市",
         "CityCode": 330100,
         "StationCode": code,
@@ -23,6 +25,9 @@ def station(code="a", value="10", hour=12, lat="30.2741", lon="120.1551"):
         "Longitude": lon,
         "TimePointStr": f"2026年10月24日 {hour}时",
     }
+    if pm25_24h is not None:
+        row["PM2_5_24h"] = pm25_24h
+    return row
 
 
 def snapshot(values=None):
@@ -110,6 +115,31 @@ class PM25Tests(unittest.TestCase):
         self.assertEqual(
             self.provider().select_observations(rows, NOW)["mean_pm25"], 15
         )
+
+    def test_24h_sliding_mean_uses_latest_hour_stations_only(self):
+        rows = [
+            station("old", "100", 11, pm25_24h="999"),
+            station("new", "10", pm25_24h="44"),
+            station("new2", "20", pm25_24h="46"),
+        ]
+        result = self.provider().select_observations(rows, NOW)
+        self.assertEqual(result["mean_pm25_24h"], 45)
+        self.assertEqual(result["mean_pm25"], 15)
+
+    def test_24h_missing_or_invalid_is_null(self):
+        rows = [
+            station("a", "10", pm25_24h=None),
+            station("b", "20", pm25_24h="NA"),
+        ]
+        result = self.provider().select_observations(rows, NOW)
+        self.assertIsNone(result["mean_pm25_24h"])
+        self.assertTrue(all(s["pm25_24h"] is None for s in result["stations"]))
+
+    def test_24h_zero_is_valid_and_negative_rejected(self):
+        result = self.provider().select_observations(
+            [station("a", "5", pm25_24h="0"), station("b", "5", pm25_24h="-3")], NOW
+        )
+        self.assertEqual(result["mean_pm25_24h"], 0)
 
     def test_stale_observations_are_not_current(self):
         data = snapshot()
@@ -209,6 +239,20 @@ class PM25Tests(unittest.TestCase):
         self.assertIsNone(result["current"])
         self.assertEqual(len(result["daily"]), 5)
         json.dumps(result, allow_nan=False)
+
+    def test_report_includes_health_reference_and_24h_observation(self):
+        result = self.report()
+        self.assertEqual(result["health_reference"]["who_24h_pm25"], 15)
+        self.assertIn("安全线", result["health_reference"]["note"])
+        self.assertEqual(result["observations"]["mean_pm25_24h"], 44)
+
+    def test_missing_24h_keeps_current_observation_usable(self):
+        data = snapshot()
+        for row in data["observations"]:
+            row.pop("PM2_5_24h")
+        result = self.report(data)
+        self.assertIsNone(result["observations"]["mean_pm25_24h"])
+        self.assertEqual(result["current"]["kind"], "observation")
 
     def test_replay_at_next_day_does_not_show_old_day_as_forecast(self):
         self.assertTrue(

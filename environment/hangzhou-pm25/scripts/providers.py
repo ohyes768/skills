@@ -72,6 +72,7 @@ def select_observations(rows, now):
         "source_url": CNEMC_URL,
         "observed_at": None,
         "mean_pm25": None,
+        "mean_pm25_24h": None,
         "stations": [],
         "radius_km": RADIUS_KM,
         "aggregation": "参考点周边25km同一最新有效小时站点算术均值（自算，非官方全市均值）",
@@ -113,6 +114,7 @@ def select_observations(rows, now):
                         "code": str(row["StationCode"]),
                         "name": str(row.get("PositionName", row["StationCode"])),
                         "pm25": pm25,
+                        "pm25_24h": number(row.get("PM2_5_24h")),
                         "latitude": lat,
                         "longitude": lon,
                         "distance_km": round(distance, 2),
@@ -123,11 +125,13 @@ def select_observations(rows, now):
         return result
     latest = max(t for t, _ in candidates)
     stations = {s["code"]: s for t, s in candidates if t == latest}
+    with_24h = [s["pm25_24h"] for s in stations.values() if s["pm25_24h"] is not None]
     result.update(
         status="available" if now - latest <= timedelta(hours=3) else "stale",
         observed_at=latest.isoformat(),
         stations=sorted(stations.values(), key=lambda s: s["distance_km"]),
         mean_pm25=round(sum(s["pm25"] for s in stations.values()) / len(stations), 2),
+        mean_pm25_24h=round(sum(with_24h) / len(with_24h), 2) if with_24h else None,
     )
     return result
 

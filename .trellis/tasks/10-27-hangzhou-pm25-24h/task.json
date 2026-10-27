@@ -1,0 +1,31 @@
+{
+  "id": "hangzhou-pm25-24h",
+  "name": "hangzhou-pm25-24h",
+  "title": "杭州 PM2.5 近24小时实测与 WHO 健康参考",
+  "description": "规划新增近24小时实测均值、自然日日均口径和WHO参考，保持普通人短报告；本阶段仅规划，不实施。",
+  "status": "in_progress",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "codex",
+  "assignee": "codex",
+  "createdAt": "2026-10-27",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "environment/hangzhou-pm25/scripts/providers.py",
+    "environment/hangzhou-pm25/scripts/report.py",
+    "environment/hangzhou-pm25/SKILL.md",
+    "environment/hangzhou-pm25/references/data-sources.md"
+  ],
+  "notes": "",
+  "meta": {}
+}

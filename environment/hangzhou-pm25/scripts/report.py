@@ -212,7 +212,7 @@ def build_report(snapshot, now=None, days=5):
         )
     usable = current is not None or any(d["valid_hours"] for d in daily)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": now.isoformat(timespec="seconds"),
         "input_fetched_at": fetched_at,
         "timezone": "Asia/Shanghai",
@@ -225,6 +225,10 @@ def build_report(snapshot, now=None, days=5):
         "unit": "μg/m³",
         "current": current,
         "observations": observations,
+        "health_reference": {
+            "who_24h_pm25": 15,
+            "note": "WHO 2021《全球空气质量指南》PM2.5 24小时指导值为 15 μg/m³；它是参考线，不是安全线，低于该值也不代表零风险。",
+        },
         "daily": daily,
         "trend": trend,
         "warnings": warnings,
@@ -262,6 +266,18 @@ def render_markdown(report):
             )
     else:
         lines.append("**现在：暂无可用数据，请稍后再查。**")
+    mean_24h = report["observations"].get("mean_pm25_24h")
+    if mean_24h is not None:
+        who = report["health_reference"]["who_24h_pm25"]
+        if mean_24h > who:
+            comparison = f"高于 WHO 24小时参考值 {who}。"
+        elif mean_24h == who:
+            comparison = f"等于 WHO 24小时参考值 {who}，这不是安全线。"
+        else:
+            comparison = f"低于 WHO 24小时参考值 {who}，这不是安全线。"
+        lines.append(
+            f"**近24小时均值：{mean_24h:g} μg/m³（实测滑动平均），{comparison}**"
+        )
     candidates = [d for d in report["daily"][1:] if d["valid_hours"] >= 18]
     if len(candidates) >= 2:
         low = min(candidates, key=lambda d: d["mean_pm25"])
