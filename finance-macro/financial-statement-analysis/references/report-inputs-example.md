@@ -97,6 +97,22 @@
 - **阻塞式输出**：任何渲染问题都不写 `analysis.md` / `report_claims.json`，只写
   `render_issues.json` 并以退出码 2 返回修复清单。
 
+## 常见阻塞点（实跑教训）
+
+- **从骨架起步**：[report-spec-skeleton.json](report-spec-skeleton.json) 是一份通过独立复核的
+  九章 spec，fact_id 写成 `FACT_*_CUR` / `FACT_*_PREV` 占位。按 compute 返回的事实替换占位，
+  本次没有的科目连同整行删除，不必从零写。
+- **没有占位符的句子不能写成 statement**：无绑定时没有合法的 `fact` / `calculation`，
+  这类开场说明放进 `paragraphs`。
+- **亏损或基期为负时不绑同比**：`*_yoy`、`cfo_to_net_profit_group` 此时为 `not_applicable`，
+  改用双事实句式"由上年同期 {prior} 转为本期 {cur}"。
+- **表格 `cells` 不含行标签**：`len(cells)` 必须等于 `len(columns) - 1`，行标签占第一列。
+- **行尾 `""` 需要原文页码**：该行至少有一个绑定，且绑定事实（或指标依赖的事实）有 evidence 页码，
+  否则报 `cannot generate source citation without evidence pages`。只有结构化事实支撑的指标行，
+  行尾改写静态文字 `本次计算`；无绑定的纯定性行，行尾不能留 `""`。
+- **核心结论 3–5 句含段落**：statement 条数加 paragraphs 按句号切出的句数，
+  "4 个 statement + 1 段定性"已到上限，定性判断压成一段。
+
 ## 定性分析
 
 `paragraphs` 支持自由文字（因果解释、风险讨论、不确定性说明），**禁止出现任何数字**——

@@ -146,6 +146,59 @@ PDF 抽取的关键数字（带 evidence 定位），程序与东财结构化数
 ```
 
 注意：text 证据只校验 `raw_label` 出现，**不校验数值**；数值正确性由你对照原文负责。
+同一标签行可被本期与比较期两条事实共用（`period_ref` 不同、`locator.line` 都指向标签行），
+不要让其中一条指向数值行。
+
+## 标签、空值与期末现金（实跑常见失败）
+
+**标签按整行逐字照抄。** spec 生成器按"整行相等"匹配标签，不做包含匹配、不补括号。
+长标签在 PDF 里折行时，**只抄折行前的第一行**，补齐后半截一定 `LABEL NOT FOUND`；
+数值取标签行之后的连续金额行，跨行标签的数值落在 +2/+3 行属正常。
+先在 excerpt 文件里找到确切字符串再写，不凭印象。常见写法：
+
+| 科目 | 照抄的整行（示例，以本次原文为准） |
+|---|---|
+| 营业收入 | 利润表页首常是 `一、营业总收入`，`其中：营业收入` 可能在下一页，按所在页写 |
+| 营业成本 | `其中：营业成本` |
+| 营业利润 / 利润总额 / 净利润 | `三、营业利润（亏损以“-”号填列）` 等，折行则只抄第一行 |
+| 归母净利润 | 三表中常折行；首页"主要会计数据"的 `归属于上市公司股东的净利润` 为单行，数值相同，优先取这里 |
+| 归母净资产 | 同上，取 `归属于上市公司股东的净资产` |
+| 资本开支 | `购建固定资产、无形资产和其他长期`（折行，只抄第一行） |
+| 资产总计 | 注意与 `负债和所有者权益总计` 区分，按需要的那一行抄 |
+
+负号按原文抄写（多为 ASCII `-`），不要换成全角破折号。
+
+**期末现金只写本期。** 现金流量表"期末现金及现金等价物余额"的第二列是**上年同期期末**，
+不是本期期初。把它写成 `prior` 会和 `ref: "opening"` 的真期初落在同一日期，
+`cash_reconciliation` 直接 conflict。期末现金只写 `cur`；期初另起一条，
+用"加：期初现金及现金等价物余额"并标 `ref: "opening"`。
+
+**空值不填 0，也不填"—"。** 期初为空白的科目（如长期借款）只写 `cur` 并加 `note`
+（如"期初未列示金额"）；spec 里写 `prior: "—"` 会报 `VALUE NOT FOUND`。
+整行都没有金额的科目（如无商誉）直接不提交该事实，红旗相应项落为"资料不足"。
+
+**切换计算模式会重排 fact_id。** 先跑过默认结构化模式、再改用 `--pdf-only` 重算后，
+`fact_id` 会整体重新编号；report spec 里的绑定必须按 compute 新返回的事实重新对应，
+沿用旧编号会静默绑到别的科目。
+
+## 8 项红旗需要的科目
+
+只提交三表主体时，部分红旗会因缺科目落为 `insufficient_data`。需要完整红旗基线时一并提交
+（期末与期初两条）：
+
+| 红旗 | 需要的科目 |
+|---|---|
+| 存贷双高 | `monetary_funds`、`short_term_borrowings`、`long_term_borrowings`、`revenue` |
+| 应收暴增 | `accounts_receivable`、`revenue`（两期） |
+| 存货突升 | `inventory`、`revenue`（两期） |
+| CFO 为负而净利为正 | `cfo`、`net_profit_group` |
+| 少数股东损益异常 | `net_profit_group`、`net_profit_owners`（两期） |
+| 商誉占比高 | `goodwill`、`total_equity_owners` |
+| 预付突升 | `prepayments`、`revenue`（两期） |
+| 在建不转固 | `construction_in_progress`、`fixed_assets` |
+
+借款行为空白时不要填 0，让存贷双高落为"资料不足"。两期集团净利润都为负时，
+少数股东损益异常必然是 `insufficient_data`，这是正确结论，不要凑数。
 
 ## 指标与期间类型
 
@@ -157,7 +210,10 @@ duration（利润表/现金流量表）：`revenue`、`cost_of_sales`、`gross_p
 instant（资产负债表）：`total_assets`、`total_liabilities`、`total_equity`、`total_equity_owners`、
 `monetary_funds`、`cash_equivalents`、`accounts_receivable`、`notes_receivable`、`inventory`、
 `fixed_assets`、`goodwill`、`total_current_assets`、`total_current_liabilities`、
-`short_term_borrowings`、`long_term_borrowings`、`contract_liabilities`。
+`short_term_borrowings`、`long_term_borrowings`、`contract_liabilities`、`prepayments`、
+`construction_in_progress`。
+
+以上即 `financial_schema.METRIC_CONTRACTS` 的全部科目（测试锁定两者一致），无需读源码确认。
 
 指标集需要扩展时属于维护变更：修改 `financial_schema.METRIC_CONTRACTS` 并补测试，
 不在分析运行中临时注册。

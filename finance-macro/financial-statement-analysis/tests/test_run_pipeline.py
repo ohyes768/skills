@@ -162,7 +162,7 @@ def test_prepare_invokes_fetch_and_inspect(run_dir, monkeypatch):
             "sections": [{"section_id": "s-1", "title": "合并资产负债表", "start_page": 3,
                           "end_page": 4, "priority": 30, "verified": True}],
         })
-        return real_meta
+        return {"document": {"schema_version": 1, **real_meta}, "sections": [], "pages": []}
 
     monkeypatch.setattr("fetch_pdf.fetch_pdf", fake_fetch)
     monkeypatch.setattr("inspect_pdf.inspect_pdf", fake_inspect)
@@ -171,6 +171,7 @@ def test_prepare_invokes_fetch_and_inspect(run_dir, monkeypatch):
     assert code == 0
     assert result["status"] == "ok"
     assert result["document"]["company_name"] == "测试公司"
+    assert result["document"]["period"] == {"start": "2026-01-01", "end": "2026-06-30"}
     assert result["sections"][0]["section_id"] == "s-1"
     assert result["artifacts"]["source_reused"] is False
     state = json.loads((run_dir / "run_state.json").read_text(encoding="utf-8"))

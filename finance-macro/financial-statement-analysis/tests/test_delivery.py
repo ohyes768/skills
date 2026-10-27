@@ -72,6 +72,25 @@ def test_evidence_extracts_and_returns_first_packet_then_only_reads_cursor(run_d
     assert "context" in result
 
 
+def test_evidence_sections_plus_pages_returns_both(run_dir):
+    import inspect_pdf
+
+    pdf, pages = build_synthetic_pdfs.build_annual_report()
+    (run_dir / "source.pdf").write_bytes(pdf)
+    inspect_pdf.inspect_pdf(run_dir)
+    extra = pages["合并利润表"]
+    import pack_context
+
+    result, _code = run_pipeline.cmd_evidence(
+        run_dir, section_ids=["s-consolidated-balance-sheet"], pages=[extra],
+        request_id="map-mixed")
+    assert result["context"]["packet"]["items"]
+    selected = pack_context._sorted_evidences(
+        run_dir, ["s-consolidated-balance-sheet"], [extra])
+    selected_pages = {p for e in selected for p in e["pdf_pages"]}
+    assert {extra, pages["合并资产负债表"]} <= selected_pages
+
+
 def test_compute_returns_bounded_analysis_without_raw_evidence(run_dir):
     prepare_build_run(run_dir)
     write_json_file(run_dir / "fact_inputs.json", {"schema_version": 1, "facts": [fact_input()]})

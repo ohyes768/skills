@@ -41,6 +41,14 @@ def evidence_sections(evidence: dict) -> set[str]:
     return sections
 
 
+def evidence_selected(evidence: dict, section_ids, pages) -> bool:
+    """与提取一致取并集：命中任一请求章节或任一请求页即选中；都未给时全选。"""
+    if not section_ids and not pages:
+        return True
+    return bool(evidence_sections(evidence) & set(section_ids or [])
+                or set(pages or []) & set(evidence.get("pdf_pages", [])))
+
+
 def emit_status(status: str, artifacts: dict, issues: list) -> None:
     """向 stdout 输出单条 JSON 状态；正文与详细日志一律不进 stdout。"""
     print(

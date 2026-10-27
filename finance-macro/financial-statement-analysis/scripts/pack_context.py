@@ -9,7 +9,7 @@ import json
 import sys
 from pathlib import Path
 
-from artifacts import evidence_sections, read_json
+from artifacts import evidence_selected, read_json
 
 DEFAULT_MAX_CHARS = 12000
 STAGES = ("locate", "map", "analyze", "review")
@@ -67,13 +67,8 @@ def _document_page_count(run_dir: Path) -> int:
 
 def _sorted_evidences(run_dir: Path, section_ids: list[str] | None, pages: list[int] | None):
     manifest = read_json(run_dir / "extraction_manifest.json")
-    evidences = manifest.get("evidences", [])
-    if section_ids:
-        allowed = set(section_ids)
-        evidences = [e for e in evidences if evidence_sections(e) & allowed]
-    if pages:
-        allowed_pages = set(pages)
-        evidences = [e for e in evidences if allowed_pages & set(e.get("pdf_pages", []))]
+    evidences = [e for e in manifest.get("evidences", [])
+                 if evidence_selected(e, section_ids, pages)]
     return sorted(evidences, key=lambda e: e["evidence_id"])
 
 

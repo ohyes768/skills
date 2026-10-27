@@ -41,7 +41,7 @@ description: A 股财报 PDF 深度分析。输入一份财报 PDF 链接（年�
 5. `run_pipeline.py compute --run-dir <运行目录>` — 默认以东财 F10 结构化三表打底（自动从 `document.json` 的 stock_code 与 period 推导拉取日期，失败自动回退纯 PDF 模式并在 warnings 标注明细——`no data` 多为报告未披露或银行/保险不在通用三表，`request failed` 为接口故障；已留档部分重跑只补缺失项，无需 `--refresh`）：程序生成结构化 facts，与抽查单双源比对，结果落 `structured_check.json`，缺失建议科目在 warnings 提示补充；另做全量数值存在性检查——每个结构化值都应在 PDF 证据文本中出现（`presence` 统计）。结构化事实（`source: structured`，无 evidence 链）由抽样核对背书——存在任何双源冲突时报告不得 verified。修复预算为初检 + 2 次，持久化在 `run_state.json`：相同输入重跑不消耗、重启不重置，换新运行目录不算重置手段，耗尽后按维护规则处理。
 5a. 回退与逃生门 `compute --run-dir <运行目录> --pdf-only`（结构化自动回退、无法提供 stock_code，或双源冲突需以 PDF 口径修复时）— 纯 PDF 全量抽取：**第一次 compute 前定齐事实范围**：合并三表、首页主要数据交叉核对、必要的母公司对照及风险附注。text 证据优先写紧凑 `spec.json`（期初现金显式 `ref=opening`），字段与示例见[可复用工具](references/reusable-tools.md)，不要手写 locator；表格、缺失值或重复标签等复杂映射按[fact-inputs-example](references/fact-inputs-example.md)构造 fact_inputs。`compute --spec <运行目录>/spec.json` 同次生成 fact_inputs、逐值核对、构造 `financials.json`；生成器失败先修 spec，不提交 compute；映射失败按 `mapping_validation.json` 修输入。
 6. 分析与回查 — `compute` 已返回 facts/metrics/checks 的 `context.packet`，不要重读原文或整个 JSON。分页用 `pack_context.py --stage analyze --request-id analyze-N --cursor <游标>`；原文定向回查用 `run_pipeline.py evidence --run-dir <运行目录> --pages N-M`，最多两轮，仍未解决就保留不确定性。语义复核在交付前完成，不在交付后追加新一轮研究。
-7. 把声明式 report spec 写进运行目录（结构与 report_inputs.json 相同，表格行尾空串自动生成来源页码，示例见[可复用工具](references/reusable-tools.md)），`report --spec <spec>` 一次完成构造、预检与正式 report；构造失败不写文件、不消耗预算。输入合同见[report-inputs-example](references/report-inputs-example.md)。**在最终 report 命令之前完成一次语义复核**：检查口径、期间、单位、风险与结论，缺基期的比率不编同比故事。
+7. 从[报告骨架](references/report-spec-skeleton.json)起步，把声明式 report spec 写进运行目录（结构与 report_inputs.json 相同，表格行尾空串自动生成来源页码，示例见[可复用工具](references/reusable-tools.md)），`report --spec <spec>` 一次完成构造、预检与正式 report；构造失败不写文件、不消耗预算。输入合同见[report-inputs-example](references/report-inputs-example.md)。**在最终 report 命令之前完成一次语义复核**：检查口径、期间、单位、风险与结论，缺基期的比率不编同比故事。
 8. `run_pipeline.py report --run-dir <运行目录> --independent-review` — 同次预检、同源渲染、固定 `validate_report` 校验、独立复算与展示检查，全部通过才返回终态。诊断在 `report_preflight.json` / `render_issues.json` / `report_validation.json` / `independent_review.json`，与 compute 一样受初检+2 次修复预算约束；预检不消耗正式预算、也没有程序化轮次上限，应集中在少数几轮内修完。变异测试属于维护验收，不在每份报告里跑。调用方要求完整 Markdown 时同次加 `--include-report`，成功直接提供 `report_markdown`，不再读取报告；旧无标志入口仅保留兼容，不作为新分析的默认交付路径。
 9. **report 返回 `quality_status: verified`、`terminal: true` 后立即停止调用工具并输出最终回复**：默认只报完成状态和报告位置；调用方要求全文时交付上一步的 `report_markdown` 一次。之后不再追加 review、重算或回查。`terminal` 是 Skill 给 agent 的停止提示，不改变宿主运行状态；Hermes 按原有流程处理最终回复。
 
@@ -49,6 +49,7 @@ description: A 股财报 PDF 深度分析。输入一份财报 PDF 链接（年�
 
 - 分析运行不得修改 `scripts/`、`references/`、校验规则、`extraction_manifest.json` 或任何校验结果；事实修复只能改 `fact_inputs.json` / `report_inputs.json`，且必须有原文依据。
 - **`run_state.json` 是修复预算的唯一账本，禁止删除、清空或改写来重置预算。** 预算耗尽时的合法出路：基于已产出的 `metrics.json` 与证据撰写分析，并在报告开头明确声明"未通过机器校验，quality_status=maintenance_required"，交由调用方决定是否采用；绕过校验输出未验收报告等同于任务失败。
+- 不另建配套 skill、手册或笔记来补本 skill 的规则；发现 reference 缺口、疑似程序问题或反复踩到的坑，在最终回复中列为"维护问题"（现象、命令、报错原文），由维护者合入本 skill。
 - 受保护模式（agent 凭据不可写 Skill 目录与运行状态）由宿主实施，仅靠提示词不算完成。
 - `quality_status`：`verified`（报告通过机器校验，发布方视为正式完成）/ `partial`（预算内可修复或数据不足）/ `maintenance_required`（预算耗尽或源码/依赖/校验器故障，属于维护问题，不在分析任务内修程序）。
 - Skill 不直接发钉钉/RSS；发布归调用端，且只把 `verified` 当作完整结果发送，`partial` 不得包装为高质量结论。

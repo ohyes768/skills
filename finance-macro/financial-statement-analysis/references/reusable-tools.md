@@ -57,6 +57,7 @@ run_pipeline.py compute --run-dir <run-dir> --spec <run-dir>/spec.json
 
 ## 报告输入构造（report --spec）
 
+优先从[报告骨架](report-spec-skeleton.json)起步：替换 `FACT_*` 占位、删除本次没有的行即可。
 把声明式 spec 写进 run-dir，结构与 report_inputs.json 相同，另支持表格行尾空串自动
 来源页码；`report --spec` 一次完成构造、预检与正式 report，spec 写入与执行合并在
 同一次工具调用，不读回刚写的 JSON。示例（按报告模板补齐主要报表、关键比率、盈利、
