@@ -189,3 +189,24 @@ def test_table_row_cells_length_matches_columns(run_dir):
             continue
         for row in table.get("rows", []):
             assert len(row["cells"]) == len(table["columns"]) - 1, row.get("label")
+
+
+def test_placeholder_paragraphs_are_flagged_for_agent(run_dir):
+    """骨架提示语必须被标记为待改写，否则报告里会留下「这里写……」这类占位。"""
+    skeleton = json.loads(SKELETON.read_text(encoding="utf-8"))
+    spec, _ = build_spec(run_dir, skeleton)
+    todo = spec.get("_paragraphs_todo")
+    assert todo, "待改写段落清单缺失"
+    anchors = {item["anchor"] for item in todo}
+    assert "## 核心结论" in anchors
+    for item in todo:
+        assert item["index"] >= 1
+        assert item["hint"]
+
+
+def test_todo_list_is_top_level_not_inside_sections(run_dir):
+    """待办清单放顶层——塞进 section 可能被渲染/校验契约拒绝。"""
+    skeleton = json.loads(SKELETON.read_text(encoding="utf-8"))
+    spec, _ = build_spec(run_dir, skeleton)
+    for section in spec["sections"]:
+        assert "_paragraphs_todo" not in section

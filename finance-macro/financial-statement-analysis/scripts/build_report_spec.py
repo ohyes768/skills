@@ -210,6 +210,18 @@ def _fix_decline_formats(node, metrics: dict) -> None:
             _fix_decline_formats(item, metrics)
 
 
+_PLACEHOLDER_PARAGRAPH_MARKERS = (
+    "这里写", "写清", "各写一句", "逐条写明", "写明", "各覆盖一层",
+)
+
+
+def _is_placeholder_paragraph(text: str) -> bool:
+    """骨架提示语特征：包含「写…」类祈使表述，不是真正的分析结论。"""
+    if not text:
+        return False
+    return any(marker in text for marker in _PLACEHOLDER_PARAGRAPH_MARKERS)
+
+
 def _report_title(run_dir: Path) -> str | None:
     """按 document.json 生成标题。
 
@@ -284,10 +296,9 @@ def build_spec(run_dir: Path, skeleton: dict) -> tuple[dict, list[str]]:
             table["rows"] = kept_rows
             out_section["table"] = table
 
-        # ---- paragraphs：保留原文，但标记为待 agent 填写 ----
+        # ---- paragraphs：保留骨架原文，语义内容由 agent 按本次实际情况改写 ----
         if section.get("paragraphs"):
             out_section["paragraphs"] = list(section["paragraphs"])
-            out_section["_paragraphs_todo"] = True
 
         out_sections.append(out_section)
 
@@ -300,6 +311,18 @@ def build_spec(run_dir: Path, skeleton: dict) -> tuple[dict, list[str]]:
     title = _report_title(run_dir)
     if title:
         spec["report_title"] = title
+
+    # 定性段落待办清单：骨架的提示语必须由 agent 改写成本次实际情况，
+    # 否则报告里会留下「这里写……」这类提示语。清单放顶层，不塞进 section
+    # （section 的额外键可能被渲染/校验契约拒绝）。
+    todo = [
+        {"anchor": s.get("anchor", ""), "index": i + 1, "hint": text[:60]}
+        for s in out_sections
+        for i, text in enumerate(s.get("paragraphs") or [])
+        if _is_placeholder_paragraph(text)
+    ]
+    if todo:
+        spec["_paragraphs_todo"] = todo
 
     return spec, notes
 
