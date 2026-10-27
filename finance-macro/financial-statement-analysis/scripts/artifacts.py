@@ -33,6 +33,14 @@ def read_json(path: Path) -> dict:
         return json.load(f)
 
 
+def evidence_sections(evidence: dict) -> set[str]:
+    """证据所属章节集合：同页文本证据可被多个章节复用，旧清单只有单值 section_id。"""
+    sections = set(evidence.get("section_ids") or [])
+    if evidence.get("section_id"):
+        sections.add(evidence["section_id"])
+    return sections
+
+
 def emit_status(status: str, artifacts: dict, issues: list) -> None:
     """向 stdout 输出单条 JSON 状态；正文与详细日志一律不进 stdout。"""
     print(

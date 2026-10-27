@@ -14,7 +14,7 @@ import json
 import sys
 from pathlib import Path
 
-from artifacts import read_json, write_json
+from artifacts import evidence_sections, read_json, write_json
 
 STATE_SCHEMA_VERSION = 1
 MAX_REPAIRS = 2
@@ -480,7 +480,7 @@ def cmd_evidence(run_dir: Path, *, section_ids: list[str] | None = None,
         extract_sections(run_dir, section_ids=section_ids, pages=pages)
     manifest = read_json(run_dir / "extraction_manifest.json")
     selected = [ev for ev in manifest["evidences"]
-                if (not section_ids or ev.get("section_id") in section_ids)
+                if (not section_ids or evidence_sections(ev) & set(section_ids))
                 and (not pages or set(ev["pdf_pages"]) & set(pages))]
     incomplete = [ev["evidence_id"] for ev in selected if not ev["complete"]]
     context = build_packet(run_dir, stage="map", request_id=request_id,

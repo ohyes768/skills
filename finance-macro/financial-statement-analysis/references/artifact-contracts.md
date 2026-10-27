@@ -69,7 +69,11 @@ are never verified=true).
 
 `document_sha256` binds the manifest to the exact source PDF. Extraction appends evidence;
 existing IDs and files are immutable. `source_key` identifies identical source/content selections
-so repeated requests reuse prior records. A changed PDF or a legacy nonempty manifest without
+so repeated requests reuse prior records. Text evidence is keyed by page and content only: a
+`--pages` re-extraction of a page already extracted through a section (or the reverse, or two
+overlapping sections) reuses the same `ev-XXXX` and appends the section to `section_ids`, so
+each page keeps one text evidence. Older manifests may still hold identical duplicates; the spec
+builder uses the lowest ID and errors only when duplicate texts actually differ. A changed PDF or a legacy nonempty manifest without
 this binding requires a new run directory; never rebind existing claims to a new document.
 
 | Field | Type | Notes |
@@ -78,6 +82,7 @@ this binding requires a new run directory; never rebind existing claims to a new
 | evidences | list[object] | each: see below |
 
 Evidence object fields: `evidence_id` (stable, e.g. `ev-0001`), `section_id` \| null,
+`section_ids` (text only: every section that requested this page),
 `pdf_pages` (list[int]), `kind` (text / table / image_crop), `file` (path under `excerpts/`),
 `method` (pymupdf_text / pdfplumber_table / ocr / image_crop), `complete` (bool),
 `issues` (list[string], e.g. cross-page header mismatch, OCR unavailable).

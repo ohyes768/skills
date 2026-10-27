@@ -42,10 +42,14 @@ class Run:
             page = record["pdf_pages"][0]
             if not record.get("complete", False):
                 continue
-            if page in self.text_ev:
-                raise ValueError(f"ambiguous text evidence on p.{page}; select evidence explicitly")
-            self.text_ev[page] = record["evidence_id"]
             raw = (run_dir / record["file"]).read_text(encoding="utf-8").splitlines()
+            if page in self.text_ev:
+                if raw == self.excerpt_lines[page]:
+                    continue
+                raise ValueError(
+                    f"ambiguous text evidence on p.{page}: {self.text_ev[page]} and "
+                    f"{record['evidence_id']} differ; use fact_inputs.json with explicit evidence_id")
+            self.text_ev[page] = record["evidence_id"]
             self.excerpt_lines[page] = raw
             self.excerpt_body[page] = [PAGE_PREFIX_RE.sub("", line).strip() for line in raw]
 

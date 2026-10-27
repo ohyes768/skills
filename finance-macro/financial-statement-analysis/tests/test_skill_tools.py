@@ -83,6 +83,32 @@ def test_repeated_label_requires_explicit_evidence_selection(run_dir):
         module.Run(run_dir).fact(spec["facts"][0])
 
 
+def _duplicate_page_text(run_dir, text):
+    manifest_path = run_dir / "extraction_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    original = next(e for e in manifest["evidences"] if e["evidence_id"] == "ev-0002")
+    (run_dir / "excerpts/ev-0099.txt").write_text(text, encoding="utf-8")
+    manifest["evidences"].append({**original, "evidence_id": "ev-0099",
+                                  "file": "excerpts/ev-0099.txt", "section_id": None})
+    write_json_file(manifest_path, manifest)
+
+
+def test_identical_duplicate_page_text_uses_first_evidence(run_dir):
+    module = importlib.import_module("build_fact_inputs_verified")
+    spec = text_run(run_dir)
+    _duplicate_page_text(run_dir, (run_dir / "excerpts/ev-0002.txt").read_text(encoding="utf-8"))
+    facts = module.Run(run_dir).fact(spec["facts"][0])
+    assert {f["evidence"]["evidence_id"] for f in facts} == {"ev-0002"}
+
+
+def test_differing_duplicate_page_text_is_rejected(run_dir):
+    module = importlib.import_module("build_fact_inputs_verified")
+    text_run(run_dir)
+    _duplicate_page_text(run_dir, "[p.6] 营业收入\n[p.6] 1.00\n")
+    with pytest.raises(ValueError, match="ev-0002 and ev-0099 differ"):
+        module.Run(run_dir)
+
+
 def test_builder_rejects_numbers_in_qualitative_paragraphs(run_dir):
     computed(run_dir)
     builder = importlib.import_module("report_inputs_builder")

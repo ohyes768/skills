@@ -14,9 +14,13 @@ from pathlib import Path
 
 import pdfplumber
 import pymupdf
-from artifacts import emit_status, read_json, write_json
+from artifacts import emit_status, evidence_sections, read_json, write_json
 
 SEPARATOR_RE = re.compile(r"\s{2,}")
+
+
+def _text_key(evidence: dict, payload: bytes) -> tuple:
+    return (tuple(evidence["pdf_pages"]), evidence["method"], hashlib.sha256(payload).hexdigest())
 
 
 def _read_pages_index(run_dir: Path) -> list[dict]:
@@ -291,7 +295,15 @@ def extract_sections(
 
     # New files never replace an existing ID. Repeated identical extractions
     # reuse the original evidence; additions preserve all earlier references.
+    # Page text does not depend on which section requested it, so a page whose
+    # text is already extracted keeps one evidence ID and only gains a section.
     known = {e["source_key"]: e for e in existing}
+    known_text = {}
+    for record in existing:
+        record_path = run_dir / record["file"]
+        if record["kind"] == "text" and record_path.exists():
+            key = _text_key(record, record_path.read_bytes())
+            known_text.setdefault(key, record)
     merged = list(existing)
     for evidence in evidences:
         payload = (run_dir / evidence["file"]).read_bytes()
@@ -301,11 +313,22 @@ def extract_sections(
             ensure_ascii=False,
         )
         evidence["source_key"] = hashlib.sha256(identity.encode("utf-8")).hexdigest()
-        if evidence["source_key"] in known:
-            (run_dir / evidence["file"]).unlink()
+        if evidence["kind"] == "text":
+            evidence["section_ids"] = [evidence["section_id"]] if evidence["section_id"] else []
+            reused = known_text.get(_text_key(evidence, payload))
         else:
-            known[evidence["source_key"]] = evidence
-            merged.append(evidence)
+            reused = known.get(evidence["source_key"])
+        if reused is not None:
+            (run_dir / evidence["file"]).unlink()
+            sid = evidence["section_id"]
+            if evidence["kind"] == "text" and sid and sid not in evidence_sections(reused):
+                reused["section_ids"] = sorted(evidence_sections(reused) | {sid})
+                reused["section_id"] = reused.get("section_id") or sid
+            continue
+        known[evidence["source_key"]] = evidence
+        if evidence["kind"] == "text":
+            known_text[_text_key(evidence, payload)] = evidence
+        merged.append(evidence)
     manifest = {
         "schema_version": 1,
         "document_sha256": source_sha,

@@ -136,6 +136,37 @@ def test_evidence_ids_stable_across_runs(run_dir):
     assert ids1[0] == "ev-0001"
 
 
+def test_pages_rerun_reuses_section_text_evidence(run_dir):
+    pm = prepare(run_dir)
+    start = pm["合并资产负债表"]
+    first = extract_sections.extract_sections(
+        run_dir, section_ids=["s-consolidated-balance-sheet"])
+    section_text = {e["pdf_pages"][0]: e["evidence_id"] for e in by_kind(first, "text")}
+    second = extract_sections.extract_sections(run_dir, pages=[start, start + 1, start + 2])
+    texts = by_kind(second, "text")
+    pages = [e["pdf_pages"][0] for e in texts]
+    assert len(pages) == len(set(pages)), "one text evidence per page"
+    for evidence in texts:
+        page = evidence["pdf_pages"][0]
+        if page in section_text:
+            assert evidence["evidence_id"] == section_text[page]
+            assert "s-consolidated-balance-sheet" in evidence["section_ids"]
+    files = {p.name for p in (run_dir / "excerpts").glob("*.txt")}
+    assert files == {Path(e["file"]).name for e in texts}
+
+
+def test_pages_first_then_section_attaches_section(run_dir):
+    pm = prepare(run_dir)
+    start = pm["合并资产负债表"]
+    first = extract_sections.extract_sections(run_dir, pages=[start])
+    page_id = by_kind(first, "text")[0]["evidence_id"]
+    second = extract_sections.extract_sections(
+        run_dir, section_ids=["s-consolidated-balance-sheet"])
+    reused = [e for e in by_kind(second, "text") if e["pdf_pages"] == [start]]
+    assert [e["evidence_id"] for e in reused] == [page_id]
+    assert reused[0]["section_id"] == "s-consolidated-balance-sheet"
+
+
 def test_cli_exit_2_when_ocr_unavailable(run_dir, capsys, monkeypatch):
     prepare(run_dir, income_as_image=True)
     monkeypatch.setattr(extract_sections, "default_ocr_runner", lambda image_path: None)
