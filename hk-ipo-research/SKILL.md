@@ -164,10 +164,10 @@ python3 scripts/hkipo.py tradesmart tracker 02261
 
 10a. **⚠️ 微信/iLink 通道限流（2026-08-19，新坑）**：agent final response 被 cron framework 当成 deliver content 全文推给微信，**完整研究报告 ≈37000 字符**会被切分 18 次发 iLink，瞬间撞限流（`iLink sendmessage rate limited`）。**应对**：
    - **agent 的 final response 必须是 ≤500 字的极简摘要**，**不要复述报告全文**（完整报告已写本地文件 + 已 push_rss.py 推 RSS）
-   - 摘要格式：标的代码+招股期+评分+核心风险（1-2 条）+1 句结论 + RSS ID
+   - 摘要格式：标的代码+招股期+评分+核心风险（1-2 条）+1 句结论 + 详情页链接
    - **绝对禁止**把 Markdown 全文（含表格、链接、免责声明）原样复制到 final response
-   - 完整报告路径写在摘要末尾一句话：`完整报告已存 ~/.hermes/cron/output/hk-ipo-daily-YYYY-MM-DD-CODE.md，RSS 已推 ID XXXXX`
-   - 用户从微信读摘要即可，要看详细报告去飞书云文档 / RSS
+   - 详情页链接取 push_rss.py 输出里的 `response.detail_url`（`https://web.duomi77.cn:9443/rss/view/{id}`，保留 15 天），摘要末尾写一句：`完整报告：<detail_url>`。本地路径和 RSS ID 只留在 stdout/日志供排查，不进微信摘要。
+   - 用户从微信点链接看全文即可，也可去飞书云文档 / RSS 阅读器
 
 10b. **⚠️ iLink 服务端 chat_id 限流（2026-08-20，新坑）**：PITFALL 10a 修了之后 agent final response 已压到 600 字（远低于 2000 字符 MAX_MESSAGE_LENGTH），**但 iLink 服务端仍然返回 `sendmessage rate limited`**。**真凶是 iLink 服务端对具体 chat_id（如 `o9cq80y4`）标记的"send too often"，不是 Hermes 本地 circuit breaker 问题**。**应对**：
    - **不要**继续调 `.env` 里的 `WEIXIN_RATE_LIMIT_CIRCUIT_THRESHOLD` / `OPEN_SECONDS` / `CHUNK_RETRY_DELAY` —— 这些只改 Hermes 本地 circuit breaker，**iLink 服务端限流不受其影响**
