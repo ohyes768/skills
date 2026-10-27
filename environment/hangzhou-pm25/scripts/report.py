@@ -245,91 +245,87 @@ def build_report(snapshot, now=None, days=5):
 
 
 def render_markdown(report):
-    fmt = lambda v: "缺失" if v is None else f"{v:g}"
-    lines = [
-        "# 杭州 PM2.5：现在与未来几天",
-        "",
-        f"生成时间：{report['generated_at']}（北京时间）",
-        "",
-    ]
+    """A public-facing brief; raw diagnostics and evidence stay in JSON."""
+    day_label = lambda date: datetime.fromisoformat(date).strftime("%m/%d")
+    generated = local_time(report["generated_at"])
+    lines = [f"# 杭州 PM2.5｜{generated:%m/%d}", ""]
     current = report["current"]
     if current:
-        label = "站点实测" if current["kind"] == "observation" else "模型估计，非实测"
-        lines += [
-            f"现在参考：**{fmt(current['pm25'])} μg/m³**（{label}，数据时间 {current['time']}）。",
-            current["description"] + "。",
-            "",
-        ]
-    else:
-        lines += ["当前 PM2.5 暂无可用数据。", ""]
-    obs = report["observations"]
-    if obs["stations"]:
-        values = [s["pm25"] for s in obs["stations"]]
-        lines += [
-            f"同一小时共 {len(values)} 个站点，范围 {fmt(min(values))}–{fmt(max(values))} μg/m³；"
-            + (
-                "这批实测已过期。"
-                if obs["status"] == "stale"
-                else "各站点有差异，不能代表家门口。"
-            ),
-            "",
-        ]
-    lines += [
-        report["trend"]["description"],
-        "比较仅使用至少18小时有效的日期；不完整日期仍可能影响排序。",
-        "",
-        "| 日期 | 模型均值 μg/m³ | 小时峰值 μg/m³ | 有效小时 |",
-        "|---|---:|---:|---:|",
-    ]
-    for d in report["daily"]:
+        time = local_time(current["time"])
+        label = "实测" if current["kind"] == "observation" else "模型估计，非实测"
         lines.append(
-            f"| {d['date']} | {fmt(d['mean_pm25'])} | {fmt(d['peak_pm25'])} | {d['valid_hours']}/24 |"
+            f"**现在：{current['pm25']:g} μg/m³**（{time:%m/%d %H:%M}，{label}）。"
         )
-    first = report["daily"][0]
-    lines += [
-        "",
-        "表中均为模型值；不满24小时的是有效时段均值。今天全天值包含已经过去的时段。",
-        f"今天从生成时间之后还剩 {first['remaining_hours']} 个有效整点，模型均值 {fmt(first['remaining_mean_pm25'])} μg/m³。",
-        "",
-        "天气怎么影响它（以下为条件性线索，不是确定成因；按当天各天气要素的有效小时统计，覆盖可能与PM2.5不同）：",
-        "",
-    ]
-    directions = ["北", "东北", "东", "东南", "南", "西南", "西", "西北"]
-    for d in report["daily"]:
-        w = d["weather"]
-        direction = (
-            directions[int((w["wind_direction_deg"] + 22.5) // 45) % 8]
-            if w["wind_direction_deg"] is not None
-            else "缺失/多变/静风"
-        )
-        lines += [
-            f"- **{d['date']}**：平均风速 {fmt(w['wind_speed_mean_ms'])} m/s，风向 {direction}；"
-            f"降水累计 {fmt(w['precipitation_sum_mm'])} mm；平均湿度 {fmt(w['humidity_mean_pct'])}%；"
-            f"温度 {fmt(w['temperature_min_c'])}–{fmt(w['temperature_max_c'])}℃。"
-            + (
-                " ".join(d["factors"])
-                or "现有数据未触发明显气象提示，不代表一定好或差。"
+        if current["kind"] == "observation":
+            lines.append(
+                f"周边{len(report['observations']['stations'])}站均值，非官方全市均值。"
             )
-        ]
+    else:
+        lines.append("**现在：暂无可用数据，请稍后再查。**")
+    candidates = [d for d in report["daily"][1:] if d["valid_hours"] >= 18]
+    if len(candidates) >= 2:
+        low = min(candidates, key=lambda d: d["mean_pm25"])
+        high = max(candidates, key=lambda d: d["mean_pm25"])
+        trend = (
+            "未来几天模型均值接近。"
+            if high["mean_pm25"] - low["mean_pm25"] < 5
+            else f"预计{day_label(low['date'])}较低，{day_label(high['date'])}较高。"
+        )
+    else:
+        trend = "后续趋势数据不足。"
+    lines += ["", f"**{trend}**", "", "| 时段 | 预计PM2.5（μg/m³） |", "|---|---:|"]
+    partial = False
+    for index, d in enumerate(report["daily"]):
+        if index == 0:
+            label = "今天剩余时段"
+            value = (
+                f"约{d['remaining_mean_pm25']:.0f}"
+                if d["remaining_hours"]
+                else "暂无后续数据"
+            )
+        else:
+            label = day_label(d["date"])
+            value = (
+                "暂无"
+                if not d["valid_hours"]
+                else "数据不足"
+                if d["valid_hours"] < 18
+                else f"约{d['mean_pm25']:.0f}"
+            )
+        if not d["complete"] and d["valid_hours"]:
+            value += "*"
+            partial = True
+        lines.append(f"| {label} | {value} |")
+    if candidates:
+        high = max(candidates, key=lambda d: d["mean_pm25"])
+        w = high["weather"]
+        date = day_label(high["date"])
+        if w["calm_hours"] >= 6 or w["low_mixing_calm_hours"] >= 4:
+            explanation = f"{date}风小或扩散空间小，污染物可能更容易积住。"
+        elif w["rain_hours"] >= 3 and w["precipitation_sum_mm"] >= 2:
+            explanation = f"{date}有降雨，可能帮助清除颗粒物。"
+        elif w["wind_speed_mean_ms"] is not None and w["wind_speed_mean_ms"] >= 3:
+            explanation = f"{date}风较大，通常利于吹散污染，但也可能带来外地污染。"
+        else:
+            explanation = "现有天气信息不足以解释变化原因。"
+        lines += ["", explanation]
+    notes = []
+    if partial:
+        notes.append("*当天数据不完整")
+    if report["observations"]["status"] == "stale":
+        notes.append("实测已过期")
+    if report.get("input_fetched_at"):
+        fetched = local_time(report["input_fetched_at"])
+        if generated - fetched > timedelta(hours=3) or fetched > generated + timedelta(
+            minutes=5
+        ):
+            notes.append("旧数据或时间异常，请更新")
+    notes.append("后续为模型估计，可能有偏差；数值越低，颗粒物越少")
     lines += [
         "",
-        "温度本身不能直接判断PM2.5高低；风向要结合上风向污染，不能认定某个方向的风一定干净。",
+        "；".join(notes) + "。",
         "",
-    ]
-    if obs["stations"]:
-        lines += ["站点明细（" + str(obs["observed_at"]) + "）：", ""]
-        lines += [
-            f"- {s['name']}（{s['code']}）：{fmt(s['pm25'])} μg/m³，距参考点 {s['distance_km']:g} km。"
-            for s in obs["stations"]
-        ]
-        lines.append("")
-    if report["warnings"]:
-        lines += ["数据提示：", ""] + [f"- {w}" for w in report["warnings"]] + [""]
-    lines += ["使用边界：", ""] + [f"- {s}" for s in report["limitations"]]
-    lines += [
-        "",
-        report["attribution"],
-        "来源：[中国环境监测总站](https://www.cnemc.cn/)、[Open-Meteo 空气质量](https://open-meteo.com/en/docs/air-quality-api)、[Open-Meteo 天气](https://open-meteo.com/en/docs)。",
+        "来源：[中国环境监测总站](https://www.cnemc.cn/)；CAMS/ECMWF、[Open-Meteo](https://open-meteo.com/en/docs/air-quality-api)。",
         "",
     ]
     return "\n".join(lines)

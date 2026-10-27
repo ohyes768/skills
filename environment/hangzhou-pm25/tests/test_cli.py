@@ -47,7 +47,8 @@ class CLITests(unittest.TestCase):
             markdown = (output / "report.md").read_text(encoding="utf-8")
             self.assertIn("非官方全市均值", markdown)
             self.assertIn("μg/m³", markdown)
-            self.assertIn("包含已经过去", markdown)
+            self.assertIn("今天剩余时段", markdown)
+            self.assertIn("peak_pm25", data["daily"][0])
 
     def test_all_network_data_absent_emits_unavailable_json_and_nonzero(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as temp:

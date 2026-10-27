@@ -22,6 +22,7 @@ python environment/hangzhou-pm25/scripts/hangzhou_pm25.py
 - `daily` always includes every requested Shanghai calendar date including today. Zero concentration is valid; invalid/missing values are null. `valid_hours` counts valid hourly values, `complete` requires 24, `mean_pm25` averages only valid hours. Today's whole-day model aggregate includes elapsed hours; `remaining_mean_pm25` uses future hourly labels only.
 - Weather has per-variable counts independent of pollutant coverage. Use speed-weighted circular wind direction, and overlapping hours for joint humidity/calm or low-boundary-layer/calm signals. Weather rules explain possible conditions and never alter CAMS concentrations.
 - Do not calculate composite AQI or grades in this version. Do not silently reuse stale cache. Keep TLS certificate verification and provider attribution. Open-Meteo free service is for noncommercial use.
+- Default Markdown is a public-facing brief of at most 300 visible non-whitespace characters (excluding Markdown syntax and link URLs): current value/time, two-column forecast, one plain-language weather explanation and compact missing/stale notes. Today uses remaining-hour model mean, later dates use daily model means, and dates with fewer than 18 valid hours show insufficient data. No station dump, raw exception, PBL terminology or technical disclaimer list. Detailed station, peak, coverage and weather evidence stays in unchanged JSON. Skill chat replies target 120–200 characters; today-only requests target at most 100.
 
 ## 4. Validation & Error Matrix
 
