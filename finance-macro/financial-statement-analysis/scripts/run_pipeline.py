@@ -316,11 +316,27 @@ def cmd_compute(run_dir: Path, *, spec_path: Path | None = None,
 
 def cmd_report(run_dir: Path, *, include_report: bool = False,
                independent_review: bool = False,
-               spec_path: Path | None = None) -> tuple[dict, int]:
+               spec_path: Path | None = None,
+               build_spec: bool = False) -> tuple[dict, int]:
     import render_report
     import validate_report
 
     run_dir = Path(run_dir)
+    if build_spec and spec_path is None:
+        from build_report_spec import build_spec as _build_spec
+        from artifacts import read_json as _read_json
+
+        try:
+            skeleton = _read_json(
+                Path(__file__).resolve().parent.parent / "references" / "report-spec-skeleton.json")
+            generated, notes = _build_spec(run_dir, skeleton)
+            write_json(run_dir / "spec.json", generated)
+            spec_path = run_dir / "spec.json"
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            return ({"status": "repair_needed", "stage": "report", "terminal": False,
+                     "quality_status": "partial",
+                     "issues": [f"report spec generation failed: {exc}"],
+                     "next_action": "fix financials/metrics facts then rerun report"}, 2)
     if spec_path is not None:
         from report_inputs_builder import build_report_inputs
 
@@ -516,6 +532,8 @@ def main(argv: list[str] | None = None) -> int:
     report = subparsers.add_parser("report", help="report_inputs.json → analysis + claims + 校验")
     report.add_argument("--run-dir", required=True)
     report.add_argument("--spec", help="声明式 report spec → report_inputs.json → 同次执行 report")
+    report.add_argument("--build-spec", action="store_true",
+                        help="无 --spec 时用 references/report-spec-skeleton.json 自动生成 spec")
     report.add_argument("--independent-review", action="store_true",
                         help="预检、渲染、机器校验、独立复核全部通过后才交付")
     report.add_argument("--include-report", action="store_true",
@@ -541,7 +559,8 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "report":
         result, code = cmd_report(run_dir, include_report=args.include_report,
                                   independent_review=args.independent_review,
-                                  spec_path=Path(args.spec) if args.spec else None)
+                                  spec_path=Path(args.spec) if args.spec else None,
+                                  build_spec=args.build_spec)
     elif args.command == "evidence":
         from pack_context import parse_pages
         result, code = cmd_evidence(
