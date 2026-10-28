@@ -38,20 +38,20 @@ def test_atomic_write_failure_keeps_existing_file(run_dir, monkeypatch):
 
 
 def test_emit_status_prints_single_json_line(capsys):
-    emit_status("ok", {"source_pdf": "run/source.pdf"}, [])
+    emit_status("ok", {"structured_financials": "run/structured_financials.json"}, [])
     captured = capsys.readouterr()
     lines = [line for line in captured.out.splitlines() if line.strip()]
     assert len(lines) == 1
     payload = json.loads(lines[0])
     assert payload == {
         "status": "ok",
-        "artifacts": {"source_pdf": "run/source.pdf"},
+        "artifacts": {"structured_financials": "run/structured_financials.json"},
         "issues": [],
     }
 
 
 def test_emit_status_includes_issues(capsys):
-    emit_status("partial", {}, ["section:12 not extracted"])
+    emit_status("partial", {}, ["2024-06-30/income: no_data"])
     payload = json.loads(capsys.readouterr().out.strip())
     assert payload["status"] == "partial"
-    assert payload["issues"] == ["section:12 not extracted"]
+    assert payload["issues"] == ["2024-06-30/income: no_data"]

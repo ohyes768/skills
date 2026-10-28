@@ -8,7 +8,7 @@
     `run_pipeline.py report` 返回 `quality_status=verified` 只证明**渲染与绑定层**自洽。
     上游 `validate_report` 不查:核心结论首节与句数、Markdown 表格列数、单位标注、
     母公司口径混入、**缺基期的比率被编出同比故事**。
-    本脚本从 financials.json / metrics.json / excerpts/ 重新推导,并逐字重渲染比对。
+    本脚本从 financials.json / metrics.json / saved F10 fields 重新推导,并逐字重渲染比对。
 
 fail-closed 原则:
     无法独立复算的项一律记 FAIL,不静默跳过——避免"复核脚本其实没在跑"。
@@ -26,6 +26,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 from artifacts import read_json
+from source_provenance import citation_text, source_refs
 
 DIV = {"amount_yuan": (Decimal(1), "元"),
        "amount_wan": (Decimal("1e4"), "万元"),
@@ -34,7 +35,7 @@ PDIG = {"percent0": 0, "percent1": 1, "percent2": 2}
 TOKEN_RE = re.compile(
     r"average\s+[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|[()+\-*/]")
 PH = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)(?::([a-z0-9_]+))?\}")
-STMT_CITE = "（PDF第"
+STMT_CITE = "（来源："
 
 
 def verify_run(run: Path) -> dict:
@@ -67,25 +68,26 @@ def verify_run(run: Path) -> dict:
     fin = load("financials.json")
     met = load("metrics.json")
     rin = load("report_inputs.json")
-    man = load("extraction_manifest.json")
-    clm = load("report_claims.json")
+    archive = load("structured_financials.json")
+    load("report_claims.json")
     md_path = run / "analysis.md"
-    if fin is None or met is None or rin is None or man is None or not md_path.exists():
+    if fin is None or met is None or rin is None or archive is None or not md_path.exists():
         raise ValueError("required report artifacts missing")
 
     body = md_path.read_text(encoding="utf-8")
     lines = body.splitlines()
     facts = {f["fact_id"]: f for f in fin.get("facts", [])}
     metrics = {m["metric_id"]: m for m in met.get("metrics", [])}
-    ev_pages = {e["evidence_id"]: e.get("pdf_pages", []) for e in man.get("evidences", [])}
-    ev_file = {e["evidence_id"]: e.get("file") for e in man.get("evidences", [])
-               if e.get("kind") in ("text", "table")}
+    from validate_report import calculation_errors
 
+    contract_errors = calculation_errors(run)
+    check(not contract_errors, "B0 指标公式和风险状态绑定到源事实", "; ".join(contract_errors))
     # ---------------------------------------------------------------- 事实取值
     by_metric: dict[str, dict[str, list]] = {}
     active_ids = None
     for f in facts.values():
-        if f.get("scope") != "consolidated" or f.get("review_status") != "verified":
+        if (f.get("scope") != "consolidated" or f.get("review_status") != "verified"
+                or f.get("value") is None):
             continue
         by_metric.setdefault(f.get("metric"), {}).setdefault(
             (f.get("period") or {}).get("end"), []).append(f)
@@ -171,12 +173,8 @@ def verify_run(run: Path) -> dict:
             return list(metrics[binding["metric_id"]].get("input_fact_ids", []))
         return [binding["fact_id"]]
 
-    def binding_pages(binding: dict) -> list:
-        out: set = set()
-        for fid in binding_facts(binding):
-            for ev in facts.get(fid, {}).get("evidence_ids", []):
-                out.update(ev_pages.get(ev, []))
-        return sorted(out)
+    def binding_sources(binding: dict) -> list:
+        return source_refs(facts, binding_facts(binding))
 
     # ================================================================== A 结构
     heads = [l for l in lines if l.startswith("## ")]
@@ -218,9 +216,9 @@ def verify_run(run: Path) -> dict:
 
     def render_statement(st: dict) -> str:
         binds = st.get("bindings") or {}
-        pgs: set = set()
+        refs = []
         for b in binds.values():
-            pgs.update(binding_pages(b))
+            refs.extend(binding_sources(b))
             used_facts.update(binding_facts(b))
 
         def sub(m):
@@ -233,8 +231,8 @@ def verify_run(run: Path) -> dict:
             return format_value(binding_value(b), kind_of(b), fmt)
 
         text = PH.sub(sub, st.get("template", ""))
-        if st.get("cite_pages", True) and pgs:
-            text += STMT_CITE + "、".join(str(p) for p in sorted(pgs)) + "页）"
+        if st.get("cite_sources", True) and refs:
+            text += STMT_CITE + citation_text(refs) + "）"
         return text
 
     for sec in rin.get("sections", []):
@@ -322,61 +320,60 @@ def verify_run(run: Path) -> dict:
     active_ids = None
 
     # ================================================================== C 来源
-    excerpt_cache: dict = {}
-    for ev, rel in ev_file.items():
-        if not rel:
-            continue
-        p = run / rel
-        if p.exists():
-            excerpt_cache[ev] = "\n".join(
-                re.sub(r"^\[p\.\d+\]\s*", "", l) for l in p.read_text(encoding="utf-8").splitlines())
+    verified_sources = set()
 
-    def norm(s: str) -> str:
-        return s.replace(",", "").replace(" ", "").replace("　", "").replace(" ", "")
+    def independent_fact(fid):
+        if fid in verified_sources:
+            return
+        verified_sources.add(fid)
+        fact = facts.get(fid, {})
+        check(fact.get("review_status") == "verified" and fact.get("value") is not None,
+              f"C0 事实可用 {fid}")
+        if fact.get("source") == "derived":
+            operands = fact.get("input_fact_ids", [])
+            if not check(len(operands) == 2 and fact.get("metric") == "gross_profit",
+                         f"C1 派生事实合同 {fid}"):
+                return
+            for operand in operands:
+                independent_fact(operand)
+            left, right = (facts[i] for i in operands)
+            check(left.get("metric") == "revenue" and right.get("metric") == "cost_of_sales"
+                  and left.get("period") == right.get("period") == fact.get("period")
+                  and Decimal(fact["value"]) == Decimal(left["value"]) - Decimal(right["value"]),
+                  f"C1 独立复算毛利润 {fid}")
+            return
+        ref = fact.get("source_ref") or {}
+        rows = archive.get("reports", {}).get(ref.get("report_date"), {}).get(ref.get("report_kind"), [])
+        if not check(len(rows) == 1, f"C1 原始接口记录唯一 {fid}"):
+            return
+        row = rows[0]
+        raw = row.get(ref.get("field"))
+        try:
+            same = raw is not None and Decimal(str(raw)) == Decimal(fact["value"])
+        except (ValueError, TypeError, ArithmeticError):
+            same = False
+        check(same, f"C1 原值与接口字段一致 {fid}")
+        check(str(row.get("REPORT_DATE", ""))[:10] == ref.get("report_date")
+              and ref.get("security_code") == document.get("stock_code")
+              and (row.get("SECURITY_CODE") == document.get("stock_code")
+                   or str(row.get("SECUCODE", "")).split(".")[0] == document.get("stock_code")),
+              f"C3 来源证券与报告期一致 {fid}")
 
     for fid in sorted(used_facts):
-        f = facts.get(fid, {})
-        check(f.get("review_status") == "verified", f"C0 事实已核验 {fid}", str(f.get("review_status")))
-        raw = norm(str(f.get("raw_value", "")))
-        hit = any(raw and raw in norm(excerpt_cache.get(ev, ""))
-                  for ev in f.get("evidence_ids", []))
-        check(hit, f"C1 事实原值落页 {fid} {f.get('metric')}", str(f.get("raw_value")))
-
-    groups: dict = {}
-    for f in facts.values():
-        groups.setdefault((f.get("metric"), f.get("scope"), f.get("attribution"),
-                           json.dumps(f.get("period"), sort_keys=True), f.get("basis"),
-                           f.get("currency"), f.get("unit")), []).append(f)
-    for group_key, group in groups.items():
-        metric, end = group_key[0], group_key[3]
-        evs = {ev for g in group for ev in g.get("evidence_ids", [])}
-        if len(evs) > 1 and len(group) > 1:
-            vals = {g.get("value") for g in group}
-            check(len(vals) == 1, f"C2 跨证据源事实一致 {metric}@{end}", str(vals))
-
-    all_pages = {p for pages in ev_pages.values() for p in pages}
-    for c in (clm or {}).get("claims", []):
-        for p in c.get("source_pages", []):
-            check(p in all_pages, f"C3 引用页码真实 {c.get('claim_id')} p{p}")
-
-    for fid in sorted(used_facts):
+        independent_fact(fid)
         fact = facts.get(fid, {})
         disclosed = fid in disclosed_parent_facts and fact.get("scope") == "parent"
         check(fact.get("scope") == "consolidated" or disclosed,
               f"C4 合并报告未混入未标明的母公司事实 {fid}")
-        for ev in fact.get("evidence_ids", []):
-            # A page can contain a consolidated tail and the next parent heading.
-            # Only a heading preceding the matched label can establish that risk.
-            current_scope = None
-            scopes = []
-            for line in excerpt_cache.get(ev, "").splitlines():
-                heading = re.search(r"(合并|母公司)(资产负债表|利润表|现金流量表)", line)
-                if heading:
-                    current_scope = heading.group(1)
-                if line.strip() == fact.get("raw_label"):
-                    scopes.append(current_scope)
-            check(disclosed or not scopes or any(scope != "母公司" for scope in scopes),
-                  f"C4 来源标签未落入母公司表 {fid}", ev)
+
+    groups = {}
+    for f in facts.values():
+        key = (f.get("metric"), f.get("scope"), json.dumps(f.get("period"), sort_keys=True))
+        groups.setdefault(key, []).append(f)
+    for key, group in groups.items():
+        if len(group) > 1:
+            check(len({f.get("value") for f in group}) == 1,
+                  f"C2 同期间重复事实一致 {key[0]}")
 
     # ================================================================== D 恒等式
     period = document["period"]

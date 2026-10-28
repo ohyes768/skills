@@ -1,13 +1,10 @@
 [project]
 name = "financial-statement-analysis"
 version = "0.1.0"
-description = "A 股财报 PDF 分析 skill：下载、索引、事实合同、指标计算与报告校验"
+description = "A 股 F10 财务分析：结构化三表、可追溯指标与报告校验"
 requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.27",
-    "pymupdf>=1.24",
-    "pdfplumber>=0.11",
-    "jsonschema>=4.23",
 ]
 
 [dependency-groups]

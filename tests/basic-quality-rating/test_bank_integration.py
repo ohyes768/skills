@@ -34,8 +34,8 @@ def packet_for(stock):
     def metric(value, basis="point_in_time"):
         return {
             "value": value,
-            "source_url": "https://example.com/bank-report.pdf",
-            "locator": "PDF p. 10, group table, current period column",
+            "source_url": "https://example.com/bank-results",
+            "locator": "Financial indicators section, group table, current period column",
             "basis": basis,
         }
 

@@ -1,7 +1,7 @@
 """Declarative report-input constructor: spec JSON → report_inputs.json.
 
 Spec sections mirror the report_inputs.json contract, with one construction-time
-expansion: a trailing "" cell in a table row is replaced by the united source-page
+expansion: a trailing "" cell in a table row is replaced by the united F10 field
 citation of that row's bound cells. Every statement, row and paragraph is validated
 against the ledger while building, and the full input preflight runs before writing;
 a failed spec writes nothing and spends no report budget.
@@ -21,6 +21,7 @@ from render_report import (
     _Ledger,
     _render_statement,
     _render_table_row,
+    _source_text,
 )
 
 ReportInputError = RenderIssue
@@ -28,15 +29,15 @@ ReportInputError = RenderIssue
 
 def _expand_row_cells(ledger: _Ledger, anchor: str, row: dict) -> dict:
     cells = list(row.get("cells", []))
-    pages: set[int] = set()
+    pages: set[str] = set()
     for cell in cells:
         if isinstance(cell, dict):
             pages.update(ledger.resolve(cell)[-1])
     if cells and cells[-1] == "":
         if not pages:
-            raise ReportInputError("cannot generate source citation without evidence pages",
+            raise ReportInputError("cannot generate source citation without archived F10 fields",
                                    anchor=anchor, row_label=row.get("label"))
-        cells[-1] = "、".join(f"PDF 第 {p} 页" for p in sorted(pages))
+        cells[-1] = _source_text(pages)
     item = {"label": row.get("label"), "cells": cells}
     if row.get("claim_type"):
         item["claim_type"] = row["claim_type"]

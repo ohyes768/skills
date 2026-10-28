@@ -38,7 +38,7 @@ def build(make_fact, overrides: dict | None = None) -> dict:
         for fact in facts:
             if fact["fact_id"] in overrides:
                 fact["value"] = overrides[fact["fact_id"]]
-    return {"schema_version": 1, "document_sha256": "x", "facts": facts}
+    return {"schema_version": 1, "source_sha256": "x", "facts": facts}
 
 
 EXPECTED_FLAGS = {

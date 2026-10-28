@@ -21,7 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from artifacts import read_json, write_json
@@ -75,35 +75,35 @@ class _FactIndex:
     """按 (metric, scope, period 角色) 索引 financials.json 的事实。"""
 
     def __init__(self, financials: dict):
-        self.facts = [f for f in financials.get("facts", []) if f.get("review_status") == "verified"]
+        self.facts = [f for f in financials.get("facts", []) if f.get("review_status") == "verified" and f.get("value") is not None]
         self._by_metric: dict[str, list[dict]] = {}
         for f in self.facts:
             self._by_metric.setdefault(f["metric"], []).append(f)
 
-    def _period_role(self, fact: dict, target_end: str) -> str | None:
-        """返回 'cur' / 'prev' / None。"""
-        period = fact.get("period") or {}
-        end = period.get("end")
-        if not end:
-            return None
-        if end == target_end:
-            return "cur"
-        return "prev"
-
     def find(self, metric: str, role: str, target_end: str,
              scope_preference: tuple[str, ...] = ("consolidated",)) -> dict | None:
+        from fact_selection import prior_year
+        from financial_schema import METRIC_CONTRACTS
+        instant = METRIC_CONTRACTS[metric]["period_kind"] == "instant"
+        expected_end = (target_end if role == "cur" else
+                        f"{int(target_end[:4])-1}-12-31" if instant else prior_year(target_end))
         candidates = self._by_metric.get(metric) or []
         for scope in scope_preference:
-            for fact in candidates:
-                if fact.get("scope") != scope:
-                    continue
-                if self._period_role(fact, target_end) == role:
-                    return fact
+            matched = [f for f in candidates if f.get("scope") == scope
+                       and f.get("period", {}).get("end") == expected_end
+                       and f.get("period", {}).get("kind") == ("instant" if instant else "duration")]
+            if matched:
+                if len({f["value"] for f in matched}) > 1:
+                    raise SpecBuildError(f"conflicting report facts for {metric}@{expected_end}")
+                return matched[0]
         return None
 
 
 def _target_end(run_dir: Path, facts: list[dict]) -> str:
     """本次报告期的期末日：取 duration 类事实里最晚的 end。"""
+    period = read_json(run_dir / "document.json").get("period", {})
+    if period.get("end"):
+        return period["end"]
     ends = set()
     for f in facts:
         period = f.get("period") or {}
@@ -185,7 +185,7 @@ def _metric_value(metrics: dict, metric_id: str) -> Decimal | None:
         return None
     try:
         return Decimal(str(metric["value"]))
-    except Exception:
+    except (ValueError, TypeError, InvalidOperation):
         return None
 
 
@@ -245,12 +245,21 @@ def build_spec(run_dir: Path, skeleton: dict) -> tuple[dict, list[str]]:
     metrics_doc = read_json(run_dir / "metrics.json")
     metrics = {m["metric_id"]: m for m in metrics_doc.get("metrics", [])}
 
-    facts = [f for f in financials.get("facts", []) if f.get("review_status") == "verified"]
+    facts = [f for f in financials.get("facts", []) if f.get("review_status") == "verified" and f.get("value") is not None]
     if not facts:
         raise SpecBuildError("financials.json has no verified facts")
     target_end = _target_end(run_dir, facts)
     index = _FactIndex(financials)
 
+    risk_flags = {f["flag_id"]: f for f in metrics_doc.get("red_flags", [])}
+    risk_ids = dict(zip(
+        ["存贷双高", "应收账款增速超过营业收入", "存货突升", "经营现金流为负而净利润为正",
+         "少数股东损益异常", "商誉占比过高", "预付款项突升", "在建工程长期不转固"],
+        ["dual_high_cash_debt", "receivable_outpacing_revenue", "inventory_sudden_rise",
+         "negative_cfo_positive_profit", "minority_interest_anomaly", "goodwill_heavy",
+         "prepayment_surge", "construction_not_converting"], strict=True))
+    status_text = {"flagged": "触发", "clear": "已检查未发现", "insufficient_data": "资料不足",
+                   "not_applicable": "行业不适用"}
     notes: list[str] = []
     out_sections: list[dict] = []
 
@@ -284,6 +293,14 @@ def build_spec(run_dir: Path, skeleton: dict) -> tuple[dict, list[str]]:
             table = json.loads(json.dumps(table))
             kept_rows = []
             for row in table.get("rows", []):
+                if anchor == "## 风险信号":
+                    status = risk_flags.get(risk_ids.get(row.get("label")), {}).get("status", "insufficient_data")
+                    row["cells"][0] = status_text.get(status, "资料不足")
+                    row["cells"][-1] = ("结构化筛查发现异常信号，具体原因仍需进一步披露支持。" if status == "flagged"
+                                        else "当前数据未触发本项筛查阈值。" if status == "clear"
+                                        else "接口信息不足，不能据此排除本项风险。")
+                    if status not in {"flagged", "clear"}:
+                        row["cells"][1] = "不可用"
                 cells = row.get("cells", [])
                 metric_cells = [c for c in cells if isinstance(c, dict) and "metric_id" in c]
                 if metric_cells and not all(_metric_ok(metrics, c["metric_id"]) for c in metric_cells):
@@ -302,7 +319,15 @@ def build_spec(run_dir: Path, skeleton: dict) -> tuple[dict, list[str]]:
 
         out_sections.append(out_section)
 
-    spec = {"schema_version": 1, "sections": out_sections}
+    limitations = [f"{f['metric']}（{f['period']['end']}）：{f.get('missing_reason') or '不可用'}"
+                   for f in financials.get("facts", []) if f.get("value") is None]
+    quality = next((sec for sec in out_sections if sec.get("anchor") == "## 数据质量评估"), None)
+    if quality is not None:
+        unavailable = sorted({f["metric"] for f in financials.get("facts", []) if f.get("value") is None})
+        # Human prose avoids raw field names containing numeric tokens; detailed items remain in spec metadata.
+        if unavailable:
+            quality.setdefault("paragraphs", []).append("接口部分科目或期间不可用，相关比率及风险判断已保留为资料不足。")
+    spec = {"schema_version": 1, "sections": out_sections, "_data_limitations": limitations}
 
     # decline_* 格式符按指标实际方向自适应
     _fix_decline_formats(spec["sections"], metrics)
@@ -315,12 +340,33 @@ def build_spec(run_dir: Path, skeleton: dict) -> tuple[dict, list[str]]:
     # 定性段落待办清单：骨架的提示语必须由 agent 改写成本次实际情况，
     # 否则报告里会留下「这里写……」这类提示语。清单放顶层，不塞进 section
     # （section 的额外键可能被渲染/校验契约拒绝）。
-    todo = [
-        {"anchor": s.get("anchor", ""), "index": i + 1, "hint": text[:60]}
-        for s in out_sections
-        for i, text in enumerate(s.get("paragraphs") or [])
-        if _is_placeholder_paragraph(text)
-    ]
+    from analysis_pack import build_analysis_pack, sentence_budget
+    pack = build_analysis_pack(run_dir)
+    core_statements = len(next(
+        (section.get("statements") or [] for section in out_sections
+         if section.get("anchor") == "## 核心结论"),
+        [],
+    ))
+    budget = sentence_budget(core_statements)
+    limits = [row["text"] for row in pack["narrative_limits"]]
+    evidence = ["coverage", "profit_bridge", "margins", "balance_changes", "qualitative_support"]
+    todo = []
+    for section in out_sections:
+        for index, text in enumerate(section.get("paragraphs") or []):
+            if not _is_placeholder_paragraph(text):
+                continue
+            todo.append({
+                "anchor": section.get("anchor", ""),
+                "section": section.get("anchor", ""),
+                "index": index + 1,
+                "position": index + 1,
+                "hint": text[:60],
+                "editable": True,
+                "digits": "forbidden",
+                "evidence": evidence,
+                "missing_limits": limits,
+                "sentence_budget": budget,
+            })
     if todo:
         spec["_paragraphs_todo"] = todo
 
@@ -331,7 +377,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="report spec 构造器（骨架 + compute 产物 → spec）")
     parser.add_argument("--run-dir", required=True)
     parser.add_argument("--skeleton", default="", help="骨架 JSON（默认取 references/report-spec-skeleton.json）")
-    parser.add_argument("--out", default="spec.json")
+    parser.add_argument("--out", default="report_spec.json")
     parser.add_argument("--dry-run", action="store_true", help="只打印解析说明，不写文件")
     args = parser.parse_args(argv)
 

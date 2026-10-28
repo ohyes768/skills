@@ -28,6 +28,7 @@ compute 的 analyze 包为准：仅 `status == "computed"` 且 `value != null` �
 | `accrual_ratio` | 应计比率 | `(net_profit_group - cfo) / average total_assets` | 百分比 |
 
 没有 `net_margin`、`gross_margin`、`debt_ratio` 这些计算指标 ID，不要猜别名。
+analysis_pack.json 里的 `gross_margin` 等名称只用于分析包，不能当作 `metric_id` 绑定。
 其他披露比率若已入事实台账，可绑定对应 fact_id；不临时发明 metric_id 或改 metrics.json。
 `validation` 的 cash_reconciliation 和 `red_flags` 的 flag_id 不是 metric_id。
 

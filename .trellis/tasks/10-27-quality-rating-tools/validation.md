@@ -90,3 +90,79 @@
   locator evidence from synthetic complete-group score.
 - No complete current Ping An rating, empirical calibration, live-model factual
   accuracy, consumer deployment, commit/push or NAS synchronization is claimed.
+
+## v3.5 PDF route removal (2026-10-28)
+
+- Removed four PDF/cache/candidate scripts and three dedicated suites. No active
+  references to their commands/imports remain. Kept historical sourced numeric
+  fixtures; they require no PDF parsing and still exercise missing-data safety.
+- Regenerated uv.lock offline using the existing Python and workspace-local cache;
+  only the project remains, with empty dependencies. Default uv cache was not
+  writable, so no package installation or environment repair was attempted.
+- python -S -X utf8 -m unittest discover -s tests/basic-quality-rating -q:
+  124 tests passed without site-packages. Synthetic bank and insurance fixtures
+  use webpage URLs/table locators through checked scoring/finalization.
+- Ruff lint and format, skill metadata validation, git diff --check passed.
+- No measured live speedup or current live insurer rating is claimed. Missing
+  readable official facts can still yield null. No commit/push, installed-copy
+  update, sibling financial-statement-analysis edit or NAS deployment performed.
+
+## v3.5.1 whole-skill/source review (2026-10-28)
+
+- Independent read-only review found date ambiguity, missing claim/source mapping,
+  an overbroad financial-conflict exception, redundant sector validate calls and
+  inconsistent A-D source fallback wording. All five were corrected.
+- Entrypoint reduced from 258 to 227 lines relative to HEAD, retaining the scoring
+  standards and nullable contract. Enterprise mechanical explanation moved once
+  into references/tools.md; output example boilerplate and repeated setup removed.
+- Independent forward scenario: undated official product page + dated interim
+  report + unread governance-remediation snippet + caller financial inputs.
+  Correctly kept management null and all derived values null, distinguished
+  publication/access/period dates, cited only read sources, kept caller input
+  separate, and reused closed evidence without additional searches/validators.
+  This was a synthetic instruction-following check, not a live stock rating or
+  source-authenticity test; unavailable full evidence was not invented.
+- 124 tests passed with python -S; Ruff lint/format, skill metadata, local Markdown
+  reference resolution, offline lock consistency and git diff --check passed.
+  The citation reminder remains advisory; no source-truth validator was added.
+- No commit/push, deployed-skill synchronization or application changes performed.
+
+## v3.6 API candidate acquisition (2026-10-28)
+
+- Researched Eastmoney free main-finance JSON, Lixinger insurer financial API,
+  DataCube bank_id/insu_id and Tushare fina_indicator; references/financial-data-api.md
+  records source links, supported fields, credentials and uncovered requirements.
+  Only the free endpoint was actually called; no paid-account access is claimed.
+- Tests-first: initial missing module failed, then 14 acquisition tests passed.
+  Independent review reproduced outsize-integer, malformed timestamp suffix and
+  HTTPError cleanup issues. Added regression cases before correcting them; also
+  prevent output overwriting stock before network access. All 17 new tests pass.
+- Full suite: python -S -X utf8 -m unittest discover -s tests/basic-quality-rating -q:
+  141 tests passed. Ruff lint/format, skill metadata, local reference resolution,
+  offline dependency-free lock regeneration and scoped diff check passed.
+- Real network smoke: 600036/000001/601318/601628 yielded 18/19/18/18 historical
+  rows, with no row issues in this sample; each second fetch used verified cache.
+  Initial fetch seconds: 0.661/0.457/0.243/0.237 in this environment only.
+  Full CLI cached output/compact stdout checked with 600036. Receipts and raw
+  response hashes are under .tmp/financial-api-smoke/; no credentials involved.
+- All candidates remain third_party/unconfirmed and ready_for_scoring=false.
+  No full current insurer or bank E grade was issued, no legal-entity scope or
+  solvency type inferred, no official source certification or speed SLA claimed.
+- Other active financial-statement-analysis edits were preserved. No commit,
+  push, personal-web mutation or runtime installation was performed.
+
+## v3.6.1 explicit target report period (2026-10-28)
+
+- Nine tests added first and observed missing-argument/field failures, then passed:
+  exact Q3, H1-only missing Q3, rejected Q3 dates without older fallback, duplicate
+  Q3 removal, newer returned period, no requested target, bad-target preflight,
+  same raw cache/different targets, CLI missing-target receipt.
+- 150 full-suite tests passed without site-packages; Ruff lint/format, skill
+  metadata, offline lock generation and scoped diff check passed.
+- Saved real raw API responses reused without network: 000001 matched Q3
+  2026-09-30; 601318 was missing_target with latest usable 2026-06-30. Both retain
+  ready_for_scoring=false. These reflect saved samples, not fresh official filing
+  discovery or a claim that Ping An has not published a quarterly report.
+- Matching is report-period alignment only, not numeric reconciliation with
+  announcement text. No quarterly-to-annual conversion or single-quarter inference,
+  no personal-web wiring, source-policy relaxation, commit or remote deployment.

@@ -8,11 +8,10 @@ import json
 from pathlib import Path
 
 import pytest
-
 from build_report_spec import (
     PLACEHOLDER_TO_METRIC,
-    build_spec,
     _fix_decline_formats,
+    build_spec,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,10 +34,10 @@ def _fact(fact_id, metric, period, scope="consolidated", attribution="not_applic
         "period": {"kind": kind, "start": start, "end": end, "frequency": "half_year",
                    "aggregation": "cumulative"},
         "basis": "as_reported",
-        "evidence_ids": ["ev-0001"],
+        "source_ref": {},
         "review_status": "verified",
         "missing_reason": None,
-        "source": "extracted",
+        "source": "structured",
     }
 
 
@@ -60,7 +59,7 @@ def run_dir(tmp_path):
     (tmp_path / "metrics.json").write_text(
         json.dumps({"schema_version": 1, "metrics": [
             {"metric_id": "revenue_yoy", "value": "0.1", "status": "computed",
-             "formula": "", "input_fact_ids": ["f-cur-rev"], "source_pages": [], "reason": None},
+             "formula": "", "input_fact_ids": ["f-cur-rev"], "reason": None},
         ]}), encoding="utf-8")
     (tmp_path / "document.json").write_text(
         json.dumps({"company_name": "测试公司", "stock_code": "600000",

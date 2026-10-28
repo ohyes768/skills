@@ -166,6 +166,9 @@ own authorized scope. Source metadata version 3.0.0 marks this breaking change.
 
 ## v3.1.0 execution tools (2026-10-27)
 
+Historical: PDF tools described here and in v3.3/v3.4 were removed in v3.5.
+The current evidence boundary is v3.6.2 below; deleted PDF helpers remain retired.
+
 - `financial_score.score_financial(stock)` is the sole executable E scorer.
   `rating_math financial` exposes score/status/checks/issues/risks/sector.
   Return null for incomplete inputs; financial firms are not_applicable under
@@ -325,3 +328,121 @@ CLI sidecar rejection and successful assembly, mode-preserving research, shared
 candidate regression, and an official historical Ping An snapshot fixture that
 does not fill missing core solvency from group ratios. No calibration, deployed
 consumer compatibility or live-model research correctness is established.
+
+## v3.5.0 dependency-free web evidence (2026-10-28)
+
+Historical policy: the absolute PDF prohibition below was superseded by v3.6.2.
+The removal of bundled PDF tools/dependencies remains in effect.
+
+- Input remains stock JSON; PDF input is neither required nor supported by this
+  skill. Remove pdf_evidence.py, bank_evidence.py, insurance_evidence.py and
+  metric_candidates.py plus their dedicated PDF tests. No caller remains in
+  active scripts or instructions. Do not change financial-statement-analysis.
+- All runtime scripts use Python standard library only. pyproject dependencies
+  are empty and uv.lock contains only this project; no sibling skill layout is
+  needed. There is no download/parser/OCR/cache fallback through another skill.
+- Reuse existing structured data and host-readable official issuer/exchange
+  pages or announcement bodies. Bind each financial metric to its URL, section/
+  table/row/column locator, period, scope and units. Source validation checks
+  shape and chronology, not factual accuracy. Historical PDF citations in
+  already verified numeric sidecars remain valid; do not invalidate old evidence
+  solely because its locator mentions a PDF page.
+- An unread PDF link or search snippet is a lead, not confirmed evidence. Seek
+  readable official alternatives within existing budgets; if core gaps remain,
+  use null and disclose them. Removing the parser does not justify guessing
+  values, loosening sector evidence requirements, or claiming faster live runs.
+- Bank/insurance schemas, rubrics, CLI sidecars, research budgets and nullable
+  ten-field output are unchanged. Installers should remove obsolete files when
+  syncing an installed copy; repository edits do not deploy the running service.
+- Verify the remaining suite without site-packages using python -S, including
+  webpage-sourced bank/insurance scoring/finalization and legacy migration.
+
+## v3.5.1 source reporting and skill review (2026-10-28)
+
+- Source IDs and citations live only in report_md: inline [S1] for important
+  claims, a final source table with ID/title+URL/date+period/locator+support.
+  [I1] denotes unverified caller-supplied financial fields/periods, no fake URL.
+  Do not add sources to the ten-field output or require source-count quotas.
+- Unknown web publication dates are marked unlisted with a real access date;
+  fact period and publication date are distinct. Missing web date alone is not
+  a score penalty. Sector sidecar published_at still cannot use access dates.
+  Unread snippets/links are leads, not verified citations. Inferences must be
+  distinguished from source facts. Reuse references across dimensions.
+- A-D retain their original issuer/exchange -> research/data -> media hierarchy;
+  bank/insurance financial facts still require official evidence. PDF removal
+  does not impose a new all-official rule on A-D.
+- Enterprise mechanical E explanation lives once in references/tools.md. The
+  executable scorer and research policy are unchanged. Sector financial commands
+  already validate evidence, so standalone validate is only a diagnostic tool.
+- The no-check-financial material-conflict exception is ordinary-company-only;
+  sector sidecars keep their checked path with disputed required facts missing
+  (or supported unknown assessments), yielding null rather than bypassing checks.
+
+## v3.6 bank/insurance API candidates (2026-10-28)
+
+- fetch_financial_candidates.py is a standard-library-only, read-only network
+  helper for explicit bank/insurance payloads. Query fixed Eastmoney main finance
+  report with stock identity, current plus four prior calendar years, max100 rows/4MiB.
+  One transient retry, no auth/quota retry, no package or PDF dependencies.
+- Output is financial_metric_candidates, not bank/insurance sidecar: third_party,
+  ready_for_scoring=false, every metric needs_confirmation. Preserve raw value,
+  source field/label, units, source URL/JSON locator, dates and unconfirmed scope.
+  SOLVENCY_AR never automatically becomes core/solo/group solvency. Verify ROA
+  definition, CNY monetary conversion and NBV comparability before scoring use.
+- Validate code/name/sector, supported quarter dates and chronological availability.
+  Exclude future or revised-after-asof rows and duplicate periods; preserve known
+  zero/negative numbers, reject nonfinite/bool/string or outsize values per field.
+  This endpoint cannot reconstruct historical vintages or certify completeness.
+- Cache raw JSON, URL, hash and UTC fetch time atomically by URL for one hour;
+  revalidate identity on every use. Explicit refresh skips cache; failed refresh
+  leaves old file but does not return stale success. Corrupt cache is a clear
+  failure. Cache has no dependency on caller runtime or sibling financial skill.
+- Caller output cannot overwrite original stock or raw API cache. CLI --output
+  saves full packet and emits compact receipt; errors exit2 on stderr. Sector
+  scripts/scoring contracts and exact nullable ten-field final output unchanged.
+- API calls count in existing financial research budgets. Actual official source,
+  capital requirements, LCR/NSFR, entity-level insurer metrics/rating and qualitative
+  assessments remain analyst tasks. Do not mark all candidates confirmed or
+  require every normal stock run to invoke this helper.
+
+## v3.6.1 reporting-period alignment (2026-10-28)
+
+- Optional report_date / --report-date is a quarter-end <= as_of within the
+  acquisition window, validated before network access. It is separate from
+  immutable stock input; no 30-field input/final-output consumer change.
+- report_alignment distinguishes not_requested/matched/missing_target/
+  target_rejected, latest returned vs latest usable dates, exact target index
+  (null when unavailable) and newer_report_returned. Matched validates period
+  alignment only; it never certifies values, scope, latest official completeness
+  or scoring readiness. Do not fall back to H1 when requested Q3 is missing.
+- Determine requested report period from known actual filing metadata or explicit
+  request, never current calendar or data-fetch date. Discovery of company latest
+  official filing and personal-web argument integration are not implemented here.
+- A target's date-rejected/duplicate rows remain visible through latest-returned
+  metadata; older usable records cannot replace them for current-period claims.
+  Reuse the same raw cache when changing target; no automatic refresh loop.
+- Keep YTD/interim/annual semantics: a Q3 cumulative ROE is not single-quarter
+  performance or an annual-history replacement. Exact-period available metrics
+  still require official provenance and scope confirmation before sector scoring.
+
+## v3.6.2 bounded optional PDF evidence (2026-10-28)
+
+- Evidence order is reusable structured/API candidates, readable official filing
+  content, then PDF only for a material missing/malformed table or footnote.
+  Sufficient HTML ends acquisition; third-party candidates still need confirmation.
+- references/pdf-fallback.md owns the optional reading procedure. Use existing
+  host capabilities or an installed PDF skill, never runtime installs, ad hoc
+  parsers or the retired PDF helpers. Standard-library scripts/dependencies stay
+  unchanged; PDF is not a caller input requirement or guaranteed host capability.
+- At most two documents, eight distinct pages each, sixteen total per run,
+  including contents pages. Reuse source-bound files/excerpts; do not reset
+  dimension rounds or failed routes when switching format. These are agent-side
+  instructions, not enforced host limits. No reliable reader means a disclosed
+  gap, not environment repair. Do not assume OCR availability.
+- Validate entity, period, units, table columns, footnotes and restatements.
+  Preserve official-vs-mirror provenance. PDF sources use one-based file pages
+  plus table/row/column locators in the existing report_md citation table.
+- Ordinary E remains input-only. Bank/insurance requirements, nullable ten-field
+  output, sidecar checks and scoring bands are unchanged. Retire deployed legacy
+  PDF-first runbooks separately during authorized deployment; local edits do not
+  synchronize installed copies or establish live speed/reliability.

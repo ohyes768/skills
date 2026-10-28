@@ -64,3 +64,52 @@ material bank/asset-management segments; no averaged solvency or bank proxies.
 Separate missing evidence from real weakness, research bands from legal minima,
 and NBV/CSM business value from regulatory capital. Reuse PDF cache and budgets.
 Plan and execute locally; no commit/push/deployment or published company rating.
+
+## Follow-up v3.5 (2026-10-28): fast, simple execution
+
+User requested removal of the PDF route to reduce runtime complexity. Keep stock
+JSON, sector scoring and nullable output; source additional facts from existing
+structured data or readable official web content. Remove PDF tools/dependencies,
+not sector evidence requirements. No automatic commit/push or remote deployment.
+Acceptance: no PDF tool calls/imports remain; dependency metadata is empty;
+remaining scoring, research and finalization tests work without site-packages.
+
+## Follow-up v3.5.1: whole-skill review and source presentation
+
+User invoked skill-creator to review/optimize the entire skill and clarify final
+sources. Preserve PDF removal, scoring and exact nullable ten-field output. Make
+sources traceable within report_md without extra searches, forced counts or dates.
+Remove duplicated execution instructions and isolate mechanical E explanation.
+
+## Follow-up v3.6: bank/insurance API acquisition (2026-10-28)
+
+Research and implement an API helper inside this skill. Keep stock immutable,
+standard-library runtime and ten-field output. Free data may be incomplete or
+third-party; do not fabricate official provenance, legal-entity scope, capital
+requirements or insurer qualitative assessments. No account purchase, token
+collection, deployed-copy changes or modifications to other active work.
+Acceptance: bounded real requests for bank/insurer, reusable source-bound cache,
+traceable numeric candidates and explicit remaining gaps; tests for identity,
+chronology, units, nulls, malformed/failed requests and cache corruption.
+
+## Follow-up v3.6.1: explicit reporting-period alignment
+
+User asked to align candidate acquisition to the latest financial report, such as
+Q3. Accept an explicit target quarter-end outside immutable stock input; distinguish
+API latest returned period from latest usable period and target availability.
+Never treat H1 as Q3, older valid rows as a replacement for rejected target rows,
+or nine-month cumulative financial metrics as single-quarter observations.
+No personal-web or official announcement discovery integration is in this change.
+
+## Follow-up v3.6.2: optional PDF evidence (2026-10-28)
+
+User approved structured/API candidates -> official readable announcement ->
+bounded PDF fallback for material table/footnote gaps. Supersedes the v3.5/v3.5.1
+absolute PDF ban, retaining the removal of bundled parsers and dependencies.
+Use only existing host reading capabilities; reuse source-bound files/excerpts,
+share dimension budgets, disclose unresolved gaps with null. Do not restore the
+legacy PDF-first/reverse-calculation workflow or change sector scoring contracts.
+Acceptance: aligned main/bank/insurance/research/tool/migration guidance; bounded
+page rules and traceable PDF citations; no new runtime dependencies; metadata,
+existing score/sidecar regressions and diff checks pass. Local source edits only,
+no automatic commit/push, NAS deployment or personal-web changes.

@@ -4,27 +4,19 @@
 
 ## 环境准备
 
-算分和校验只依赖 Python 3 标准库；PDF 工具需要 Python ≥3.12、httpx 与 PyMuPDF。
-在部署阶段运行：
-
-```text
-uv sync --project <basic-quality-rating目录>
-```
-
-之后 PDF 命令使用已准备的环境：
-
-```text
-uv run --no-sync --project <basic-quality-rating目录> python <basic-quality-rating目录>/scripts/pdf_evidence.py prepare --url <PDF链接> --cache-dir <缓存目录>
-```
-
-PDF 工具复用兄弟目录 `financial-statement-analysis/scripts/` 的 `fetch_pdf.py`、`inspect_pdf.py`、`artifacts.py`。
-保留两个 skill 的仓库目录布局；若安装路径不同，在 prepare 时用 `--tools-dir <实际财报scripts目录>` 指定。
-它只复用下载和页码索引函数，不运行完整财报分析，不要求加载另一个 SKILL.md。
-运行时依赖缺失应返回具体错误，安装由维护流程修复，不在分析内临时 pip install 或重写工具。
+全部脚本只依赖 Python 3 标准库，使用现有 Python ≥3.12 直接运行即可。
+不需要 uv sync、pip install、PDF 解析库或兄弟 skill 的目录布局。
+v3.5 已移除 PDF 下载、解析、缓存和银行/保险候选定位命令；旧调用应改用
+已有结构化数据或宿主读取的官方网页/公告正文，按来源与口径填入行业证据包。
+v3.6.2 允许必要时用已具备的宿主能力做 [有限 PDF 补证](pdf-fallback.md)，不恢复已删除的命令或依赖；
+部署环境没有 PDF 能力仍可运行，核心证据无法补齐时明确未评级。
+评分合同、模板、财务评分与统一校验命令保持兼容。升级安装副本时应清理旧版本残留工具，
+不能将新旧目录叠加后继续执行旧 PDF 命令。
 
 ## 废止远程旧执行手册
 
-已知旧 `quality-rating-pipeline-runbook` 含过时的整数占位、逐项反算和第二套校验规则。
+已知旧 `quality-rating-pipeline-runbook` 含过时的 PDF 优先、整数占位、逐项反算和第二套校验规则。
+主 skill 的按需 PDF 补证不恢复旧手册流程；升级部署时一并迁移旧手册，避免两套规则并存。
 新主 skill 不再加载它。为保留旧命令调用兼容，可在获得同步/部署授权后执行一次迁移：
 
 ```text

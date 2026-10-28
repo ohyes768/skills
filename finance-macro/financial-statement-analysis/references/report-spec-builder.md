@@ -1,59 +1,11 @@
-# report spec 自动生成（build_report_spec）
-
-`report --build-spec` 从[报告骨架](report-spec-skeleton.json)生成 report spec，
-省掉手工绑定 `fact_id` 的环节。生成结果是纯结构与绑定，**不含语义内容**——
-`paragraphs` 仍是骨架里的占位说明，需 agent 按实际情况改写。
-
-## 用法
+# report spec 自动生成
 
 ```bash
-# 一条命令走完 spec 生成 → 构造 → 预检 → 渲染 → 校验 → 独立复核
-uv run --project . python scripts/run_pipeline.py report \
-  --run-dir <运行目录> --build-spec --independent-review
-
-# 只生成 spec（dry-run 看解析说明，不写文件）
-uv run --project . python scripts/build_report_spec.py --run-dir <运行目录> --dry-run
-
-# 只生成 spec 并落盘
-uv run --project . python scripts/build_report_spec.py --run-dir <运行目录> --out spec.json
+uv run --project finance-macro/financial-statement-analysis python finance-macro/financial-statement-analysis/scripts/build_report_spec.py --run-dir <目录> --out report_spec.json
 ```
 
-## 映射规则
+构造器把骨架 FACT_* 换成真实 fact_id，按精确期间选择事实；指标必须 computed。缺少事实的普通行会删除，风险项保留资料不足状态，数据限制会汇总。零是有效披露值，不等于字段缺失。
 
-| 骨架占位 | 解析规则 |
-|---|---|
-| `FACT_<科目>_CUR` | `financials.json` 里该科目的**本期/期末**事实 |
-| `FACT_<科目>_PREV` | 比较期事实——**duration 科目取上年同期，instant 科目取上年末** |
-| `metric_id` 绑定 | `metrics.json` 里 `status == computed` 且 `value` 非空 |
+输出的 `_paragraphs_todo` 列出需要 agent 改写的定性段落。每条待办包含章节、段落位置、是否可编辑、数字限制、可用证据、缺失限制，以及核心结论的句数余量。四条核心 statement 都保留时，定性段落最多一句，使全节保持三到五句。按本次覆盖、利润桥、比率和 red_flags 写判断。不要把已留档的报表写成未取得，不要把缺失差额写成主要归因。不要修改数据源、计算结果或校验文件来适配草稿。
 
-科目名映射表在 `scripts/build_report_spec.py` 的 `PLACEHOLDER_TO_METRIC`，
-新增骨架科目时同步补这张表（有测试锁定覆盖率）。
-
-**scope**：只取 `consolidated`。母公司（`parent`）事实不进正文——
-骨架的「母公司口径」要求由 agent 在 anchor 或行 label 里明示「母公司」，
-且独立复核 C4 会检查这一点，机器不自动替换。
-
-## 裁剪规则
-
-- 本次没有的科目（无商誉、无借款、无研发费用等）：**整行删除**，不填零
-- `metric` 不可用（`not_applicable`、未计算）：整行删除，statement 整条删除
-- `decline_*` 格式符遇到正值指标：自动改用 `percent*`（`decline_*` 只接受非正值，
-  否则渲染阻塞）
-
-## 输出
-
-- `spec.json` — 生成的 spec（`report --build-spec` 时写入运行目录）
-- `spec._paragraphs_todo` — **待 agent 改写的定性段落清单**（anchor + 序号 + 提示语片段）。
-  骨架里「这里写…」「写清…」「逐条写明…」这类祈使句是写作提示，不是分析结论；
-  报告阶段前必须按本次实际情况改写成真正的判断，否则成品里会留下提示语。
-- stderr 上的 `[note]` 行 — 每个被丢弃的行/语句及原因，便于审计
-
-## 不做什么
-
-- **不写定性段落**。骨架里 `## 经营与三表分析`、`## 盈利质量与杜邦分解` 等章节的
-  `paragraphs` 是「写清驱动方向」这类提示语，必须由 agent 按本次实际情况改写。
-  `paragraphs` 是严格模式，任何数字都会被拒绝。待办位置由 `_paragraphs_todo` 标出。
-- **不推断口径**。同一科目可能同时有合并与母公司两份事实，脚本只取合并口径；
-  口径归属的判断由 agent 与独立复核 C4 负责。
-- **不改上游标题约定**。标题固定为 `{公司}（{代码}）{结束年份}分析`，
-  由 `validate_report` 按 `document.json` 强制匹配。
+本期收入缺比较期时只陈述本期，不构造同比结论。定性段落不含数字；引用由正式 report 渲染器自动插入。最后执行 `report --spec <目录>/report_spec.json --independent-review`，不要在最终调用重新生成骨架覆盖写好的段落。

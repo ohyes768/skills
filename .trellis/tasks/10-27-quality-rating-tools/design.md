@@ -57,3 +57,49 @@ checks stock identity, terminal state, and null for gap dimensions without addin
 final output fields or changing legacy unflagged signatures. State CLI rejects
 corrupt files and cannot clear budgets with init. Note the boundary: an agent or
 host bypassing the CLI is not physically intercepted by these local tools.
+
+## Current follow-up: v3.5 / v3.5.1 supersedes PDF design above
+
+No PDF input/downloader/parser/cache/candidate path remains. Reuse host-readable
+web evidence and existing sourced structured data. All runtime scripts use the
+standard library. Sector evidence requirements remain unchanged.
+
+Source display: report_md inline [S1] markers and one final table mapping actual
+read pages to dates/periods, locators and supported facts. Caller input is [I1]
+without invented URL; no extra JSON fields. Unknown page dates are explicitly
+unknown, not replaced by access dates; sector published_at still mandatory.
+Move the explanatory enterprise rubric next to financial command documentation;
+keep executable scoring unchanged. Standalone sector validate is diagnostic,
+not a normal extra step. Ordinary-company external-conflict compatibility mode
+cannot be used with a sector sidecar. Keep semantic source checks advisory.
+
+## v3.6 acquisition design
+
+Use Eastmoney's publicly accessible RPT_F10_FINANCE_MAINFINADATA JSON endpoint,
+verified on 600036.SH and 601318.SH. Fetch one bounded recent-history page
+(current plus four prior calendar years, max100 rows) via urllib; validate identity, sector, dates and
+response shape, preserving raw payload and query/hash/fetch time in a short-lived
+atomic cache. One retry only for transient network/5xx; no retry on auth/quota.
+
+Output a distinct candidate packet, not bank-data/insurance-data. Numeric field
+mappings preserve raw field/value, scale, label and unspecified source scope.
+Never automatically fill official-only sidecars. Insurer SOLVENCY_AR is explicitly
+unspecified, not assumed group/core/solo. Currency must be CNY for amount conversion.
+Reject future/revised-after-asof rows for historical safety but do not claim a
+point-in-time dataset. Report duplicates/conflicts and incomplete pagination.
+
+Keep statutory requirements, bank liquidity, entity-level insurance solvency/risk
+rating and ALM/reserve/coverage assessment as outstanding analyst tasks. Research
+commercial interfaces in one reference; do not add unverified token adapters.
+
+## v3.6.1 reporting-period alignment
+
+Add optional report_date / CLI --report-date as YYYY-MM-DD quarter-end <= as_of.
+Recompute alignment from cached raw data without changing acquisition query/cache
+key, preserving history for annual scoring. Return requested date, latest raw
+supported report date, latest usable date, exact target index and explicit status:
+not_requested / matched / missing_target / target_rejected. Matched means dates
+only, never official disclosure/numeric/scope verification or scoring readiness.
+If newer periods exist, disclose them instead of implying selected older target
+is latest. Invalid target metadata or duplicate-period removal cannot fall back.
+CLI compact receipt includes alignment so missing Q3 is visible immediately.

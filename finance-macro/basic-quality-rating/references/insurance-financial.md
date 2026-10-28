@@ -4,19 +4,19 @@
 先确认研究对象是寿险、产险还是综合保险集团，再生成独立 insurance-data.json。
 原 stock.json 保留；最终仍为五维、固定十字段、任一维 null 则无总星级。
 
+需要结构化补数时先读 [接口取数与缺口](financial-data-api.md)：免费脚本返回候选及原始出处，官方核对后才入下述评分包。
+
 ## 取数和预算
 
 ```text
 python3 <skill目录>/scripts/insurance_financial.py template --stock stock.json --as-of 2026-10-27 --type group
-python3 <skill目录>/scripts/pdf_evidence.py prepare --url <官方披露PDF> --cache-dir <缓存目录>
-python3 <skill目录>/scripts/insurance_evidence.py --document-dir <document_dir> --max-chars 6000
 ```
 
 --type 为 life / property / group。将模板 stdout 存入 insurance-data.json 后填入确认值。
-来源优先上市公司/保险法人官网、交易所财报、偿付能力季度报告摘要；不要只从新闻摘数。
-候选包返回标签、原始数字字符串、PDF 页码、源文件哈希与有限上下文，不能自动选择列、
-确认主体或换算单位。用 pdf_evidence read 看表头、脚注和相邻解释；next_cursor 续读，
-不重复下载。标签无命中不代表没有指标；不能假装 OCR 或把目录里的数字拿去评分。
+优先复用已有结构化数据，再读取上市公司/保险法人官网、交易所公告正文及偿付能力摘要的
+可读网页。保留来源链接、栏目/表格/行列位置，核对主体、年份、单位、表头、脚注与精算假设。
+不从新闻或搜索摘要猜值。正文缺关键表格、表头或脚注时，按 [有限 PDF 补证](pdf-fallback.md)
+用现成工具读官方原件相关页，不默认通读 PDF。无工具或原预算内仍缺核心证据则 E=null。
 
 ```text
 python3 <skill目录>/scripts/research_state.py init --state research.json --stock stock.json --providers <已有渠道ID列表> --insurance-research
@@ -46,7 +46,7 @@ coverage 必须基于集团分部披露解释为什么这些主体足以覆盖�
 每个数字对象形如：
 
 ```json
-{"value":150,"unit":"pct","basis":"point_in_time","source_url":"https://example.com/solvency.pdf","locator":"PDF第3页，寿险法人，当期期末列"}
+{"value":150,"unit":"pct","basis":"point_in_time","source_url":"https://example.com/solvency","locator":"偿付能力指标表，寿险法人，当期期末列"}
 ```
 
 这只是格式示例，不是真实公司数据。pct 的150表示150%；金额统一 cny_million（人民币百万元）。
@@ -96,7 +96,7 @@ total_investment_yield、comprehensive_investment_yield（pct/period）、net_pr
 各主体 assessments 必须含 asset_liability 和 reserves，均用下述格式：
 
 ```json
-{"status":"unknown","statement":"说明已核对的事实及剩余缺口","period_end":"2026-06-30","published_at":"2026-08-25","source_url":"https://example.com/report.pdf","locator":"PDF页码、表格和主体"}
+{"status":"unknown","statement":"说明已核对的事实及剩余缺口","period_end":"2026-06-30","published_at":"2026-08-25","source_url":"https://example.com/results","locator":"网页栏目、表格和主体"}
 ```
 
 status=supported 表示有具体证据支持本次研究判断且未发现未解决的重大问题；adverse 表示已确认弱项，
@@ -135,11 +135,11 @@ coverage 也使用该格式，另含 entity_ids（与 entities 的ID恰好相同
 ## 校验与交付
 
 ```text
-python3 <skill目录>/scripts/insurance_financial.py validate --stock stock.json --input insurance-data.json
 python3 <skill目录>/scripts/rating_math.py financial --input stock.json --insurance-data insurance-data.json
 python3 <skill目录>/scripts/rating_math.py finalize --input draft.json --stock stock.json --check-financial --insurance-data insurance-data.json --research-state research.json
 ```
 
+正常运行直接 financial → finalize，financial 内已校验证据包；独立 validate 仅用于修包诊断。
 显式保险包不能和银行包同时提供，也不能给其他行业用。finalize 要求E与该保险包计算一致，
 正常流程提供取证账本，必须是保险模式且已结案；不把证据包加进最终十字段。
 兼容API不传 --research-state 时仅校验数值/结构，不证明取证流程已完成，不能据此宣称完整验收。

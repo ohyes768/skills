@@ -22,7 +22,7 @@ def build_core_document(make_fact) -> dict:
         make_fact("f-013", "total_equity", "750", kind="instant", start=None,
                   end="2023-12-31"),
     ]
-    return {"schema_version": 1, "document_sha256": "x", "facts": facts}
+    return {"schema_version": 1, "source_sha256": "x", "facts": facts}
 
 
 def metrics_by_id(result: dict) -> dict:

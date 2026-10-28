@@ -2,16 +2,14 @@
 
 import argparse
 import json
-import re
 from pathlib import Path
 
 from artifacts import read_json
-from render_report import RenderIssue, _Ledger, render_report
+from render_report import render_report
 
 
 def verify_inputs(run_dir: Path, inputs: dict) -> list[dict]:
     _markdown, _claims, issues = render_report(run_dir, inputs)
-    ledger = _Ledger(run_dir)
     for section in inputs.get("sections", []):
         table = section.get("table") or {}
         for row in table.get("rows", []):
@@ -19,20 +17,6 @@ def verify_inputs(run_dir: Path, inputs: dict) -> list[dict]:
             if len(cells) + 1 != len(table.get("columns", [])):
                 issues.append({"anchor": section.get("anchor"), "row_label": row.get("label"),
                                "error": "A5 table row column count differs from header"})
-            pages = set()
-            try:
-                for cell in cells:
-                    if isinstance(cell, dict):
-                        pages.update(ledger.resolve(cell)[-1])
-            except RenderIssue:
-                continue
-            for cell in cells:
-                if isinstance(cell, str):
-                    cited = {int(p) for p in re.findall(r"PDF\s*第\s*(\d+)\s*页", cell)}
-                    if not cited <= pages:
-                        issues.append({"anchor": section.get("anchor"),
-                                       "row_label": row.get("label"),
-                                       "error": "source citation outside bound evidence pages"})
     return issues
 
 

@@ -1,5 +1,5 @@
 {
-  "_note": "report spec 骨架。骨架结构来自已通过独立复核的 run（000592-2026h1，骨架不变型）。使用前把 FACT_* 占位替换为本次 compute 返回的真实 fact_id（*_CUR 为本期/期末，*_PREV 为上年同期/期初）；本次没有的事实（如无借款、无商誉、无在建工程）连同整行删除，不填零。亏损或基期为负时同比指标为 not_applicable，改写为“由上年同期转为本期”的双事实句式。约束：核心结论固定 4 句 statement + 1 段无数字定性（合计 5 句，A3 限 3–5）；表格 len(cells) = len(columns) - 1，行尾空串自动生成来源页码列；paragraphs 严格零数字；decline_* 只接受非正值，增长场景一律 percent*；母公司事实进正文必须让 anchor+模板 或 anchor+行label 出现「母公司」二字。",
+  "_note": "F10 报告骨架：程序映射事实与指标，缺失不填零；风险状态从本次筛查生成。数字只用绑定，定性提示语由 agent 改写，来源由渲染器生成。",
   "sections": [
     {
       "anchor": "## 核心结论",
@@ -7,33 +7,51 @@
         {
           "template": "本期营业收入 {rev:amount_yi}，同比变化 {rev_yoy:percent2}。",
           "bindings": {
-            "rev": {"fact_id": "FACT_REVENUE_CUR"},
-            "rev_yoy": {"metric_id": "revenue_yoy"}
+            "rev": {
+              "fact_id": "FACT_REVENUE_CUR"
+            },
+            "rev_yoy": {
+              "metric_id": "revenue_yoy"
+            }
           },
           "claim_type": "calculation"
         },
         {
           "template": "合并净利润 {np:amount_wan}，其中归属于母公司股东的净利润 {npo:amount_wan}。",
           "bindings": {
-            "np": {"fact_id": "FACT_NET_PROFIT_GROUP_CUR"},
-            "npo": {"fact_id": "FACT_NET_PROFIT_OWNERS_CUR"}
+            "np": {
+              "fact_id": "FACT_NET_PROFIT_GROUP_CUR"
+            },
+            "npo": {
+              "fact_id": "FACT_NET_PROFIT_OWNERS_CUR"
+            }
           },
           "claim_type": "fact"
         },
         {
           "template": "经营活动产生的现金流量净额 {cfo:amount_wan}，简化自由现金流 {fcf:amount_wan}。",
           "bindings": {
-            "cfo": {"fact_id": "FACT_CFO_CUR"},
-            "fcf": {"metric_id": "simplified_fcf"}
+            "cfo": {
+              "fact_id": "FACT_CFO_CUR"
+            },
+            "fcf": {
+              "metric_id": "simplified_fcf"
+            }
           },
           "claim_type": "calculation"
         },
         {
           "template": "期末资产总计 {ta:amount_yi}，负债合计 {tl:amount_yi}，所有者权益合计 {te:amount_yi}。",
           "bindings": {
-            "ta": {"fact_id": "FACT_TOTAL_ASSETS_CUR"},
-            "tl": {"fact_id": "FACT_TOTAL_LIABILITIES_CUR"},
-            "te": {"fact_id": "FACT_TOTAL_EQUITY_CUR"}
+            "ta": {
+              "fact_id": "FACT_TOTAL_ASSETS_CUR"
+            },
+            "tl": {
+              "fact_id": "FACT_TOTAL_LIABILITIES_CUR"
+            },
+            "te": {
+              "fact_id": "FACT_TOTAL_EQUITY_CUR"
+            }
           },
           "claim_type": "fact"
         }
@@ -45,120 +63,209 @@
     {
       "anchor": "## 主要报表数据",
       "paragraphs": [
-        "利润表与现金流量表项目均为合并口径，比较期为上年同期累计数，金额单位为元。"
+        "利润表与现金流量表均为合并累计口径，比较期为上年同期，各数值明确标注展示单位。"
       ],
       "table": {
-        "columns": ["指标", "本期", "上年同期", "来源"],
+        "columns": [
+          "指标",
+          "本期",
+          "上年同期",
+          "来源"
+        ],
         "rows": [
           {
             "label": "营业收入",
             "cells": [
-              {"fact_id": "FACT_REVENUE_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_REVENUE_PREV", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_REVENUE_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_REVENUE_PREV",
+                "format": "amount_wan"
+              },
               ""
             ]
           },
           {
             "label": "营业成本",
             "cells": [
-              {"fact_id": "FACT_COST_OF_SALES_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_COST_OF_SALES_PREV", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_COST_OF_SALES_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_COST_OF_SALES_PREV",
+                "format": "amount_wan"
+              },
               ""
             ]
           },
           {
             "label": "销售费用",
             "cells": [
-              {"fact_id": "FACT_SELLING_EXPENSES_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_SELLING_EXPENSES_PREV", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_SELLING_EXPENSES_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_SELLING_EXPENSES_PREV",
+                "format": "amount_wan"
+              },
               ""
             ]
           },
           {
             "label": "管理费用",
             "cells": [
-              {"fact_id": "FACT_ADMIN_EXPENSES_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_ADMIN_EXPENSES_PREV", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_ADMIN_EXPENSES_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_ADMIN_EXPENSES_PREV",
+                "format": "amount_wan"
+              },
               ""
             ]
           },
           {
             "label": "研发费用",
             "cells": [
-              {"fact_id": "FACT_RD_EXPENSE_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_RD_EXPENSE_PREV", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_RD_EXPENSE_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_RD_EXPENSE_PREV",
+                "format": "amount_wan"
+              },
               ""
             ]
           },
           {
             "label": "财务费用",
             "cells": [
-              {"fact_id": "FACT_FINANCE_COSTS_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_FINANCE_COSTS_PREV", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_FINANCE_COSTS_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_FINANCE_COSTS_PREV",
+                "format": "amount_wan"
+              },
               ""
             ]
           },
           {
             "label": "营业利润",
             "cells": [
-              {"fact_id": "FACT_OPERATING_PROFIT_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_OPERATING_PROFIT_PREV", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_OPERATING_PROFIT_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_OPERATING_PROFIT_PREV",
+                "format": "amount_wan"
+              },
               ""
             ]
           },
           {
             "label": "利润总额",
             "cells": [
-              {"fact_id": "FACT_PROFIT_BEFORE_TAX_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_PROFIT_BEFORE_TAX_PREV", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_PROFIT_BEFORE_TAX_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_PROFIT_BEFORE_TAX_PREV",
+                "format": "amount_wan"
+              },
               ""
             ]
           },
           {
             "label": "净利润",
             "cells": [
-              {"fact_id": "FACT_NET_PROFIT_GROUP_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_NET_PROFIT_GROUP_PREV", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_NET_PROFIT_GROUP_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_NET_PROFIT_GROUP_PREV",
+                "format": "amount_wan"
+              },
               ""
             ]
           },
           {
             "label": "归属于母公司股东的净利润",
             "cells": [
-              {"fact_id": "FACT_NET_PROFIT_OWNERS_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_NET_PROFIT_OWNERS_PREV", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_NET_PROFIT_OWNERS_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_NET_PROFIT_OWNERS_PREV",
+                "format": "amount_wan"
+              },
               ""
             ]
           },
           {
             "label": "经营活动现金流量净额",
             "cells": [
-              {"fact_id": "FACT_CFO_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_CFO_PREV", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_CFO_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_CFO_PREV",
+                "format": "amount_wan"
+              },
               ""
             ]
           },
           {
             "label": "投资活动现金流量净额",
             "cells": [
-              {"fact_id": "FACT_CFI_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_CFI_PREV", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_CFI_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_CFI_PREV",
+                "format": "amount_wan"
+              },
               ""
             ]
           },
           {
             "label": "筹资活动现金流量净额",
             "cells": [
-              {"fact_id": "FACT_CFF_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_CFF_PREV", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_CFF_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_CFF_PREV",
+                "format": "amount_wan"
+              },
               ""
             ]
           },
           {
             "label": "购建长期资产支付的现金",
             "cells": [
-              {"fact_id": "FACT_CAPEX_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_CAPEX_PREV", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_CAPEX_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_CAPEX_PREV",
+                "format": "amount_wan"
+              },
               ""
             ]
           }
@@ -171,81 +278,147 @@
         {
           "template": "合并净利率为 {nm:percent2}，集团简单 ROE 为 {roe:percent2}。",
           "bindings": {
-            "nm": {"metric_id": "net_margin_group"},
-            "roe": {"metric_id": "roe_group_simple"}
+            "nm": {
+              "metric_id": "net_margin_group"
+            },
+            "roe": {
+              "metric_id": "roe_group_simple"
+            }
           },
           "claim_type": "calculation"
         },
         {
           "template": "简化自由现金流为 {fcf:amount_wan}，应计比率为 {acc:percent2}。",
           "bindings": {
-            "fcf": {"metric_id": "simplified_fcf"},
-            "acc": {"metric_id": "accrual_ratio"}
+            "fcf": {
+              "metric_id": "simplified_fcf"
+            },
+            "acc": {
+              "metric_id": "accrual_ratio"
+            }
           },
           "claim_type": "calculation"
         }
       ],
       "paragraphs": [
-        "表中周转率、ROE 与杜邦三因子均按半年度累计数计算且未年化，只能与其他同口径半年度数据比较，不能与全年指标直接对照。",
-        "杜邦使用的净利润为集团口径、总资产与总权益均为期初期末平均值，与公司披露的加权归母 ROE 不是同一指标，故两者不作比较。",
-        "基期为负或分母为零的比率指标为不适用，不列入表中，以免把负值比率读成经营改善。"
+        "各比率按目标报告期间累计数计算，未经年化，只能与相同期间和口径比较。",
+        "集团净利润、平均总资产与平均总权益用于杜邦分析，与加权归母收益率口径不同。",
+        "不可用指标不作数值引用，负基期和零分母不编造同比故事。"
       ],
       "table": {
-        "columns": ["指标", "数值"],
+        "columns": [
+          "指标",
+          "数值"
+        ],
         "rows": [
           {
             "label": "营业收入同比",
-            "cells": [{"metric_id": "revenue_yoy", "format": "percent2"}],
+            "cells": [
+              {
+                "metric_id": "revenue_yoy",
+                "format": "percent2"
+              }
+            ],
             "claim_type": "calculation"
           },
           {
             "label": "合并净利率",
-            "cells": [{"metric_id": "net_margin_group", "format": "percent2"}],
+            "cells": [
+              {
+                "metric_id": "net_margin_group",
+                "format": "percent2"
+              }
+            ],
             "claim_type": "calculation"
           },
           {
             "label": "集团简单 ROE",
-            "cells": [{"metric_id": "roe_group_simple", "format": "percent2"}],
+            "cells": [
+              {
+                "metric_id": "roe_group_simple",
+                "format": "percent2"
+              }
+            ],
             "claim_type": "calculation"
           },
           {
             "label": "杜邦净利率",
-            "cells": [{"metric_id": "dupont_net_margin", "format": "percent2"}],
+            "cells": [
+              {
+                "metric_id": "dupont_net_margin",
+                "format": "percent2"
+              }
+            ],
             "claim_type": "calculation"
           },
           {
             "label": "杜邦总资产周转率",
-            "cells": [{"metric_id": "dupont_asset_turnover", "format": "percent2"}],
+            "cells": [
+              {
+                "metric_id": "dupont_asset_turnover",
+                "format": "percent2"
+              }
+            ],
             "claim_type": "calculation"
           },
           {
             "label": "杜邦权益乘数",
-            "cells": [{"metric_id": "dupont_equity_multiplier", "format": "percent2"}],
+            "cells": [
+              {
+                "metric_id": "dupont_equity_multiplier",
+                "format": "percent2"
+              }
+            ],
             "claim_type": "calculation"
           },
           {
             "label": "杜邦 ROE",
-            "cells": [{"metric_id": "roe_dupont", "format": "percent2"}],
+            "cells": [
+              {
+                "metric_id": "roe_dupont",
+                "format": "percent2"
+              }
+            ],
             "claim_type": "calculation"
           },
           {
             "label": "应收账款周转率",
-            "cells": [{"metric_id": "receivable_turnover", "format": "percent2"}],
+            "cells": [
+              {
+                "metric_id": "receivable_turnover",
+                "format": "percent2"
+              }
+            ],
             "claim_type": "calculation"
           },
           {
             "label": "存货周转率",
-            "cells": [{"metric_id": "inventory_turnover", "format": "percent2"}],
+            "cells": [
+              {
+                "metric_id": "inventory_turnover",
+                "format": "percent2"
+              }
+            ],
             "claim_type": "calculation"
           },
           {
             "label": "应计比率",
-            "cells": [{"metric_id": "accrual_ratio", "format": "percent2"}],
+            "cells": [
+              {
+                "metric_id": "accrual_ratio",
+                "format": "percent2"
+              }
+            ],
             "claim_type": "calculation"
           },
           {
             "label": "简化自由现金流",
-            "cells": [{"metric_id": "simplified_fcf", "format": "amount_wan"}],
+            "cells": [
+              {
+                "metric_id": "simplified_fcf",
+                "format": "amount_wan"
+              }
+            ],
             "claim_type": "calculation"
           }
         ]
@@ -257,129 +430,223 @@
         {
           "template": "期末存货 {inv:amount_yi}，应收账款 {ar:amount_wan}，货币资金 {mf:amount_yi}。",
           "bindings": {
-            "inv": {"fact_id": "FACT_INVENTORY_CUR"},
-            "ar": {"fact_id": "FACT_AR_CUR"},
-            "mf": {"fact_id": "FACT_MONETARY_FUNDS_CUR"}
+            "inv": {
+              "fact_id": "FACT_INVENTORY_CUR"
+            },
+            "ar": {
+              "fact_id": "FACT_AR_CUR"
+            },
+            "mf": {
+              "fact_id": "FACT_MONETARY_FUNDS_CUR"
+            }
           },
           "claim_type": "fact"
         }
       ],
       "paragraphs": [
-        "业务驱动 → 收入与利润 → 资产负债结构 → 现金流，四个环节各写一句定性判断，均无数字。",
-        "公司自己给出的归因与本次分析判断分开陈述，不替公司补充原文未披露的原因。"
+        "这里写本次收入、利润、资产负债与现金流的关系，只表达数据支持的判断。",
+        "东财合并三表没有提供具体业务原因时，保留解释的不确定性。"
       ],
       "table": {
-        "columns": ["项目", "期末", "期初"],
+        "columns": [
+          "项目",
+          "期末",
+          "期初"
+        ],
         "rows": [
           {
             "label": "货币资金",
             "cells": [
-              {"fact_id": "FACT_MONETARY_FUNDS_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_MONETARY_FUNDS_PREV", "format": "amount_wan"}
+              {
+                "fact_id": "FACT_MONETARY_FUNDS_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_MONETARY_FUNDS_PREV",
+                "format": "amount_wan"
+              }
             ],
             "claim_type": "fact"
           },
           {
             "label": "应收账款",
             "cells": [
-              {"fact_id": "FACT_AR_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_AR_PREV", "format": "amount_wan"}
+              {
+                "fact_id": "FACT_AR_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_AR_PREV",
+                "format": "amount_wan"
+              }
             ],
             "claim_type": "fact"
           },
           {
             "label": "预付款项",
             "cells": [
-              {"fact_id": "FACT_PREPAYMENTS_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_PREPAYMENTS_PREV", "format": "amount_wan"}
+              {
+                "fact_id": "FACT_PREPAYMENTS_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_PREPAYMENTS_PREV",
+                "format": "amount_wan"
+              }
             ],
             "claim_type": "fact"
           },
           {
             "label": "存货",
             "cells": [
-              {"fact_id": "FACT_INVENTORY_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_INVENTORY_PREV", "format": "amount_wan"}
+              {
+                "fact_id": "FACT_INVENTORY_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_INVENTORY_PREV",
+                "format": "amount_wan"
+              }
             ],
             "claim_type": "fact"
           },
           {
             "label": "固定资产",
             "cells": [
-              {"fact_id": "FACT_FIXED_ASSETS_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_FIXED_ASSETS_PREV", "format": "amount_wan"}
+              {
+                "fact_id": "FACT_FIXED_ASSETS_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_FIXED_ASSETS_PREV",
+                "format": "amount_wan"
+              }
             ],
             "claim_type": "fact"
           },
           {
             "label": "在建工程",
             "cells": [
-              {"fact_id": "FACT_CIP_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_CIP_PREV", "format": "amount_wan"}
+              {
+                "fact_id": "FACT_CIP_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_CIP_PREV",
+                "format": "amount_wan"
+              }
             ],
             "claim_type": "fact"
           },
           {
             "label": "商誉",
             "cells": [
-              {"fact_id": "FACT_GOODWILL_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_GOODWILL_PREV", "format": "amount_wan"}
+              {
+                "fact_id": "FACT_GOODWILL_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_GOODWILL_PREV",
+                "format": "amount_wan"
+              }
             ],
             "claim_type": "fact"
           },
           {
             "label": "短期借款",
             "cells": [
-              {"fact_id": "FACT_ST_BORROWINGS_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_ST_BORROWINGS_PREV", "format": "amount_wan"}
+              {
+                "fact_id": "FACT_ST_BORROWINGS_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_ST_BORROWINGS_PREV",
+                "format": "amount_wan"
+              }
             ],
             "claim_type": "fact"
           },
           {
             "label": "长期借款",
             "cells": [
-              {"fact_id": "FACT_LT_BORROWINGS_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_LT_BORROWINGS_PREV", "format": "amount_wan"}
+              {
+                "fact_id": "FACT_LT_BORROWINGS_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_LT_BORROWINGS_PREV",
+                "format": "amount_wan"
+              }
             ],
             "claim_type": "fact"
           },
           {
             "label": "合同负债",
             "cells": [
-              {"fact_id": "FACT_CONTRACT_LIABILITIES_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_CONTRACT_LIABILITIES_PREV", "format": "amount_wan"}
+              {
+                "fact_id": "FACT_CONTRACT_LIABILITIES_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_CONTRACT_LIABILITIES_PREV",
+                "format": "amount_wan"
+              }
             ],
             "claim_type": "fact"
           },
           {
             "label": "负债合计",
             "cells": [
-              {"fact_id": "FACT_TOTAL_LIABILITIES_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_TOTAL_LIABILITIES_PREV", "format": "amount_wan"}
+              {
+                "fact_id": "FACT_TOTAL_LIABILITIES_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_TOTAL_LIABILITIES_PREV",
+                "format": "amount_wan"
+              }
             ],
             "claim_type": "fact"
           },
           {
             "label": "归属于母公司所有者权益合计",
             "cells": [
-              {"fact_id": "FACT_EQUITY_OWNERS_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_EQUITY_OWNERS_PREV", "format": "amount_wan"}
+              {
+                "fact_id": "FACT_EQUITY_OWNERS_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_EQUITY_OWNERS_PREV",
+                "format": "amount_wan"
+              }
             ],
             "claim_type": "fact"
           },
           {
             "label": "所有者权益合计",
             "cells": [
-              {"fact_id": "FACT_TOTAL_EQUITY_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_TOTAL_EQUITY_PREV", "format": "amount_wan"}
+              {
+                "fact_id": "FACT_TOTAL_EQUITY_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_TOTAL_EQUITY_PREV",
+                "format": "amount_wan"
+              }
             ],
             "claim_type": "fact"
           },
           {
             "label": "资产总计",
             "cells": [
-              {"fact_id": "FACT_TOTAL_ASSETS_CUR", "format": "amount_wan"},
-              {"fact_id": "FACT_TOTAL_ASSETS_PREV", "format": "amount_wan"}
+              {
+                "fact_id": "FACT_TOTAL_ASSETS_CUR",
+                "format": "amount_wan"
+              },
+              {
+                "fact_id": "FACT_TOTAL_ASSETS_PREV",
+                "format": "amount_wan"
+              }
             ],
             "claim_type": "fact"
           }
@@ -392,16 +659,28 @@
         {
           "template": "杜邦 ROE 为 {roe:percent2}，由净利率 {nm:percent2}、总资产周转率 {at:percent2} 与权益乘数 {em:percent2} 三者相乘得到。",
           "bindings": {
-            "roe": {"metric_id": "roe_dupont"},
-            "nm": {"metric_id": "dupont_net_margin"},
-            "at": {"metric_id": "dupont_asset_turnover"},
-            "em": {"metric_id": "dupont_equity_multiplier"}
+            "roe": {
+              "metric_id": "roe_dupont"
+            },
+            "nm": {
+              "metric_id": "dupont_net_margin"
+            },
+            "at": {
+              "metric_id": "dupont_asset_turnover"
+            },
+            "em": {
+              "metric_id": "dupont_equity_multiplier"
+            }
           },
           "claim_type": "calculation"
         },
         {
           "template": "经营现金流与合并净利润之比为 {cfo_np:percent2}。",
-          "bindings": {"cfo_np": {"metric_id": "cfo_to_net_profit_group"}},
+          "bindings": {
+            "cfo_np": {
+              "metric_id": "cfo_to_net_profit_group"
+            }
+          },
           "claim_type": "calculation"
         }
       ],
@@ -410,41 +689,79 @@
         "CFO 与净利润的关系说明盈利质量，并注明比值含义与适用限制。"
       ],
       "table": {
-        "columns": ["因子", "数值"],
+        "columns": [
+          "因子",
+          "数值"
+        ],
         "rows": [
           {
             "label": "杜邦净利率",
-            "cells": [{"metric_id": "dupont_net_margin", "format": "percent2"}],
+            "cells": [
+              {
+                "metric_id": "dupont_net_margin",
+                "format": "percent2"
+              }
+            ],
             "claim_type": "calculation"
           },
           {
             "label": "杜邦总资产周转率",
-            "cells": [{"metric_id": "dupont_asset_turnover", "format": "percent2"}],
+            "cells": [
+              {
+                "metric_id": "dupont_asset_turnover",
+                "format": "percent2"
+              }
+            ],
             "claim_type": "calculation"
           },
           {
             "label": "杜邦权益乘数",
-            "cells": [{"metric_id": "dupont_equity_multiplier", "format": "percent2"}],
+            "cells": [
+              {
+                "metric_id": "dupont_equity_multiplier",
+                "format": "percent2"
+              }
+            ],
             "claim_type": "calculation"
           },
           {
             "label": "杜邦 ROE",
-            "cells": [{"metric_id": "roe_dupont", "format": "percent2"}],
+            "cells": [
+              {
+                "metric_id": "roe_dupont",
+                "format": "percent2"
+              }
+            ],
             "claim_type": "calculation"
           },
           {
             "label": "经营现金流与合并净利润之比",
-            "cells": [{"metric_id": "cfo_to_net_profit_group", "format": "percent2"}],
+            "cells": [
+              {
+                "metric_id": "cfo_to_net_profit_group",
+                "format": "percent2"
+              }
+            ],
             "claim_type": "calculation"
           },
           {
             "label": "应计比率",
-            "cells": [{"metric_id": "accrual_ratio", "format": "percent2"}],
+            "cells": [
+              {
+                "metric_id": "accrual_ratio",
+                "format": "percent2"
+              }
+            ],
             "claim_type": "calculation"
           },
           {
             "label": "简化自由现金流",
-            "cells": [{"metric_id": "simplified_fcf", "format": "amount_wan"}],
+            "cells": [
+              {
+                "metric_id": "simplified_fcf",
+                "format": "amount_wan"
+              }
+            ],
             "claim_type": "calculation"
           }
         ]
@@ -456,13 +773,21 @@
         "风险状态中的已检查未发现仅表示当前证据未支持该项异常，不构成公司不存在该风险的结论；筛查线索不等于造假认定。"
       ],
       "table": {
-        "columns": ["信号", "状态", "量化证据", "解释与关注点"],
+        "columns": [
+          "信号",
+          "状态",
+          "量化证据",
+          "解释与关注点"
+        ],
         "rows": [
           {
             "label": "存贷双高",
             "cells": [
               "已检查未发现",
-              {"fact_id": "FACT_MONETARY_FUNDS_CUR", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_MONETARY_FUNDS_CUR",
+                "format": "amount_wan"
+              },
               "货币资金与有息负债未同时超过营业收入警戒线，说明这不是本期的风险来源"
             ]
           },
@@ -470,7 +795,10 @@
             "label": "应收账款增速超过营业收入",
             "cells": [
               "触发",
-              {"fact_id": "FACT_AR_CUR", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_AR_CUR",
+                "format": "amount_wan"
+              },
               "应收账款增速远超收入增速，需核对账龄、坏账准备与信用政策，区分结算节奏与回收风险"
             ]
           },
@@ -478,7 +806,10 @@
             "label": "存货突升",
             "cells": [
               "已检查未发现",
-              {"fact_id": "FACT_INVENTORY_CUR", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_INVENTORY_CUR",
+                "format": "amount_wan"
+              },
               "存货占收入比例相对上期未出现倍数级抬升，未见积压式增长"
             ]
           },
@@ -486,7 +817,10 @@
             "label": "经营现金流为负而净利润为正",
             "cells": [
               "已检查未发现",
-              {"fact_id": "FACT_CFO_CUR", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_CFO_CUR",
+                "format": "amount_wan"
+              },
               "经营活动现金流为正而净利润为正，不存在纸面盈利与经营失血并存的组合"
             ]
           },
@@ -494,7 +828,10 @@
             "label": "少数股东损益异常",
             "cells": [
               "触发",
-              {"fact_id": "FACT_NET_PROFIT_GROUP_CUR", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_NET_PROFIT_GROUP_CUR",
+                "format": "amount_wan"
+              },
               "少数股东损益占净利润比例较上期明显变动，需核对子公司盈利结构与股权变动"
             ]
           },
@@ -502,7 +839,10 @@
             "label": "商誉占比过高",
             "cells": [
               "触发",
-              {"fact_id": "FACT_GOODWILL_CUR", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_GOODWILL_CUR",
+                "format": "amount_wan"
+              },
               "商誉占归属于母公司所有者权益的比例超过警戒线，需关注被并购主体的业绩承诺与减值测试"
             ]
           },
@@ -510,7 +850,10 @@
             "label": "预付款项突升",
             "cells": [
               "触发",
-              {"fact_id": "FACT_PREPAYMENTS_CUR", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_PREPAYMENTS_CUR",
+                "format": "amount_wan"
+              },
               "预付款项余额较上期大幅上升，需核对供应商集中度与是否存在资金占用"
             ]
           },
@@ -518,7 +861,10 @@
             "label": "在建工程长期不转固",
             "cells": [
               "已检查未发现",
-              {"fact_id": "FACT_CIP_CUR", "format": "amount_wan"},
+              {
+                "fact_id": "FACT_CIP_CUR",
+                "format": "amount_wan"
+              },
               "在建工程规模小且相对固定资产占比很低，没有长期挂账迹象"
             ]
           }
@@ -527,47 +873,27 @@
     },
     {
       "anchor": "## 数据质量评估",
-      "statements": [
-        {
-          "template": "期末资产总计 {ta:amount_wan} 与负债合计 {tl:amount_wan}、所有者权益合计 {te:amount_wan} 满足会计恒等式。",
-          "bindings": {
-            "ta": {"fact_id": "FACT_TOTAL_ASSETS_CUR"},
-            "tl": {"fact_id": "FACT_TOTAL_LIABILITIES_CUR"},
-            "te": {"fact_id": "FACT_TOTAL_EQUITY_CUR"}
-          },
-          "claim_type": "fact"
-        },
-        {
-          "template": "期初资产总计 {ta0:amount_wan} 与负债合计 {tl0:amount_wan}、所有者权益合计 {te0:amount_wan} 同样满足会计恒等式。",
-          "bindings": {
-            "ta0": {"fact_id": "FACT_TOTAL_ASSETS_PREV"},
-            "tl0": {"fact_id": "FACT_TOTAL_LIABILITIES_PREV"},
-            "te0": {"fact_id": "FACT_TOTAL_EQUITY_PREV"}
-          },
-          "claim_type": "fact"
-        }
-      ],
+      "statements": [],
       "paragraphs": [
-        "现金勾稽按现金及现金等价物口径完成，期初余额、三项活动净额与汇率变动影响可以完整桥接到期末余额，残差为零。",
-        "本报告全部指标采用合并口径，母公司报表仅作制度性核对，未与合并数据混用；资产负债表比较期为本报告披露的上年末余额，利润表与现金流量表比较期为上年同期，两类期间不互相标同比。",
-        "原文金额单位为元，报告内按指标性质折算为万元或亿元并保留两位小数，未作任何估算或补零处理。"
+        "这里写本次报表覆盖、字段缺失与勾稽状态；无法完成的核对明确保留。",
+        "本报告仅使用东财合并三表，来源可追溯与计算校验通过不能证明单一数据源绝无差错。",
+        "金额以元存储，展示按绑定转换单位，不估算或补零。"
       ]
     },
     {
       "anchor": "## 未验证事项与后续观察",
       "paragraphs": [
-        "数据缺失、冲突、两轮回查未解决项，以及需要历史报告才能判断的问题，逐条写明，不得写成确定结论。",
-        "本报告为半年度报告且未经审计，减值与计提存在后续调整可能。"
+        "这里写本次缺失科目和不适用指标对结论的具体限制。",
+        "接口不覆盖完整附注、审计意见、关联交易和业务变化原因，这些事项保留为资料不足。"
       ]
     },
     {
       "anchor": "## 来源与计算说明",
       "paragraphs": [
-        "全部金额来自合并资产负债表、合并利润表与合并现金流量表原文，逐项标注来源页码；表格末列页码为该行所绑定事实的原文页并集。",
-        "营业收入同比等于本期营业收入与上年同期营业收入之差除以上年同期营业收入；简化自由现金流等于经营活动现金流量净额减去购建固定资产、无形资产和其他长期资产支付的现金。",
-        "杜邦 ROE 等于净利率、总资产周转率与权益乘数之积，其中净利率为集团净利润除以营业收入，总资产周转率为营业收入除以平均总资产，权益乘数为平均总资产除以平均总权益。",
-        "周转率与应计比率中的平均余额取目标期间期初与期末的算术平均值，应计比率等于集团净利润减经营活动现金流量净额再除以平均总资产。",
-        "公司解释性文字与本次判断分开陈述，凡属推断的判断均在正文中标明为分析结论，未替公司补充原文未披露的原因。"
+        "财务金额来自东财合并资产负债表、合并利润表与合并现金流量表接口；引用标明字段和报告期。",
+        "毛利润等于营业收入减营业成本；简化自由现金流等于经营现金流净额减购建长期资产支付的现金。",
+        "杜邦收益率等于净利率、总资产周转率与权益乘数之积，平均余额取目标期间期初与期末算术平均。",
+        "原因推断属于本次分析判断，不能表述为接口未提供的公司解释。"
       ]
     }
   ]

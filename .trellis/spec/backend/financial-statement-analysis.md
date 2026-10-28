@@ -1,108 +1,38 @@
-# Financial Statement Evidence and Calculation Contract
+# F10 Financial Analysis Contract
 
-## 1. Scope / Trigger
+## Scope
 
-Applies to `finance-macro/financial-statement-analysis/` when changing PDF evidence,
-fact selection, metric calculation, context delivery or report validation.
+Applies to finance-macro/financial-statement-analysis when changing source ingestion, facts, metrics, bounded context or report verification. The sole source is Eastmoney F10 consolidated statements. Older source-specific task documents are historical, not active contracts.
 
-## 2. Signatures
+## Entrypoints
 
-- `extract_sections.extract_sections(run_dir, section_ids=None, pages=None, ocr_runner=None) -> dict`
-- `pack_context.build_packet(run_dir, stage, request_id, ...) -> dict`
-- `fact_selection.FactSelection(document)` exposes target-period `flows` and `balance`.
-- `calculate_metrics.calculate_metrics(document) -> dict`
-- `validate_report.validate_report(run_dir) -> dict`
-- CLI scripts accept `--run-dir`; fetch accepts `--url` and `--output-dir`.
+- run_pipeline.cmd_prepare(code, period_end, run_dir, refresh=False): stock code plus quarter-end date, one source/security/period per run directory.
+- build_financials.build_financials_structured(run_dir, archive): exact-decimal normalized facts, nulls and source references.
+- source_provenance.source_errors(run_dir, financials=None): archive hash, field identity, values, periods, dimensions and derived operands.
+- calculate_metrics.calculate_metrics(financials): deterministic metrics, accounting checks and risk flags.
+- pack_context.build_packet: analyze/review only, bounded packets with a version-bound cursor. compute and pack_context both expose packet.next_cursor at the top level. A null cursor ends the walk. An invalid cursor is an error with ended=false, not an end marker. compute.context remains a compatibility alias and is not present on pack_context.
+- run_pipeline.cmd_report: source validation, canonical calculation validation, bound rendering and independent review, always enabled.
 
-## 3. Contracts
+## Source and Fact Invariants
 
-See the skill's `references/artifact-contracts.md` for artifact fields. Manifest evidence
-is append-only, bound to `document_sha256`, with content/selection `source_key` deduplication.
-Never delete or reassign prior evidence IDs during supplementation. Initial locate does not
-require a manifest. Image packets carry paths and a visual-review flag, never binary text.
+Use existing F10 report kinds balance/income/cashflow and strict security/report-date matching. Empty data is no_data; malformed shape, business errors and HTTP failures are fetch_failed. Archive successful entries and only retry missing entries, with finite retries. Keep exact Decimal parsing; reject boolean, float, malformed and nonfinite monetary values.
 
-Select the target period once. All operands must share scope, currency, unit and basis.
-YoY uses the same interval one year earlier; average balances use exact opening/closing dates.
-Use Decimal for values and explicit display-unit scaling for report comparisons.
+financials.source_sha256 binds the serialized archive. Structured facts carry source_ref with security, report name/kind, report date, field and response hash. Derived gross profit declares revenue and cost operands. Null does not mean zero. Opening cash can use prior-year END_CCE or target-period BEGIN_CCE with its actual source reference. PREPAYMENT, CIP and RATE_CHANGE_EFFECT mappings were verified against saved F10 responses; null FX remains unavailable and cannot complete cash reconciliation.
 
-Validate actual `analysis.md` and its claim ledger together. Claims resolve via metrics/facts
-to evidence; pages equal that evidence closure. Numeric explanations and headings also need
-coverage. Machine validation cannot establish metric-name semantics or causality.
+No analyst-entered facts or alternate source fallback. Optional comparison statements missing means nullable ratios and partial delivery. Coverage distinguishes archive presence, no_data, fetch_failed, field null, unmapped, not calculated and withheld from the model input. An archived comparison balance sheet must not be described as not retrieved. Null deltas stay null. F10 cannot substantiate audit opinions, restrictions, related-party details or business-cause narratives.
 
-## 4. Validation & Error Matrix
+analysis_pack.json is recomputed from source-bound facts. It carries the profit bridge, expense ratios, balance changes and qualitative support flags. Those ratio names are not metric_id values. Primary profit attribution, confirmed transfer from construction in progress, and a DuPont year-over-year driver are blocked unless their deterministic support flag is true. Other qualitative wording still needs human review. Report todos state the section, paragraph position, remaining core-sentence budget, evidence and these limits.
 
-| Condition | Result |
-|---|---|
-| Source changed or nonempty unbound legacy manifest | ValueError; use a new directory |
-| No manifest at locate | Section index still delivered |
-| Image-only evidence not visually verified | Incomplete image reference |
-| Missing/null/unverified fact | insufficient_data, no numeric value |
-| Conflict or incompatible measurement dimensions | conflict, no numeric value |
-| Empty ledger, wrong body/anchor, unbound number or wrong pages | report passed=false |
-| CLI missing artifacts/invalid fact schema | exit 1 |
-| CLI report validation failure | exit 2 with issue arrays |
+## Calculation and Report Invariants
 
-## 5. Good / Base / Bad Cases
+Operands share scope, unit, currency and basis. Select explicit current cumulative interval; prior flows use the same interval last year, average balances use exact opening/closing dates. Preserve group/owners distinction. Use Decimal throughout.
 
-- Good: a 2024 consolidated revenue and 2023 comparable revenue produce YoY; a later
-  MD&A extraction preserves the report's evidence IDs and validation still passes.
-- Base: missing net profit leaves net margin unavailable while revenue YoY can be computed.
-- Bad: combine 2024 revenue with 2023 profit, use parent equity in consolidated ROE,
-  or write 2% for a computed 0.2 ratio. Reject rather than silently compute/pass.
+Stored metrics, formulas, operand IDs, statuses, checks and risk flags must equal canonical recalculation from source-bound facts before delivery. Independent review then recomputes available metrics with its own formula evaluator; it must not accept an arbitrary persisted formula as authority.
 
-## 6. Tests Required
+Report body and claims are generated together. Claims contain the complete source_refs closure, not unbound metadata strings. Exact generated citations are excluded from numeric matching; arbitrary numeric text is rejected. Qualitative paragraphs have no digits; financial numbers are bound. Risk rows use this run's red_flags, never template defaults. Missing rows and disclosures are stated as limitations.
 
-- `test_p1_pipeline.py`: first locate, immutable supplement, idempotency, version binding, images.
-- `test_p1_metrics.py`: exact periods, group scope, dimensions, null/status propagation.
-- `test_p1_report.py`: actual body/anchor, empty ledger, scales, support/page closure and bypasses.
-- `test_p1_integration.py`: fresh offline download through report validation, then supplement
-  and validate the same report again. HTTP is mocked; PDF extraction and calculations are real.
-- Run the complete skill test suite and Ruff. Use a unique workspace `--basetemp` on Windows
-  when the system temporary directory is not writable.
+Formal report repair budget is initial attempt plus two repairs, persisted in run_state.json. Failed recompute/revalidation revokes any previous verified state; never leave an old success stamp after detecting source or metric changes. A final verified result has terminal=true, next_action=null. Full-body callers request include-report once. Partial is not a complete verified report.
 
-## 7. Wrong vs Correct
+## Verification
 
-Wrong: independently choose each metric's latest fact, reset `ev-0001` on every extraction,
-or validate only `report_claims.json` while ignoring `analysis.md`.
-
-Correct: select one document period, keep evidence identities immutable, and bind delivered
-Markdown text, display values and pages to the resolved source chain.
-
-## 8. Delivery and model round trips
-
-- Use `run_pipeline evidence` for extraction plus the first bounded evidence packet. Cursor
-  continuation must not extract again. `compute` returns an analysis packet; unfiltered analyze
-  reads the ledgers while explicit page/section selection reads source evidence.
-- Complete semantic review before the final report call. After machine validation succeeds,
-  return `terminal=true` and `next_action=null`; the agent stops tools and gives a final reply.
-  This is a Skill-only hint; it does not force or modify the host lifecycle.
-- Full-Markdown callers use `report --include-report`. Return the exact validated body once
-  in `report_markdown`, avoiding an extra read. Failed reports must not deliver that field.
-- Do not install custom Hermes patches, override iteration-limit summaries, or change the
-  financial client to consume an out-of-band artifact receipt. Hermes remains unmodified.
-- Machine validation does not prove semantic correctness. A stopped agent is distinct from
-  a host process that might still be cleaning up; diagnose actual host failures separately.
-
-## 9. Reusable analysis tools (Skill only)
-
-- Public references must expose the complete calculated metric ID catalog and independent
-  review check contract, including availability, display limits, tolerances and missing-data
-  behavior. Route report authors to these before source inspection. Maintain coverage with
-  `test_reference_contracts.py` against emitted metric IDs and verifier check labels.
-
-- Tools migrated from the profile-local `financial-pitfall-recovery` belong to this skill's
-  scripts/tests. Never require a hard-coded profile path or load the entire historical skill.
-- Normal text mapping uses `compute --spec`: validate excerpt line numbers and literal values
-  before replacing inputs, then run the existing construction/calculation stage. Require the
-  source unit explicitly; read period kinds from METRIC_CONTRACTS, never a copied constant.
-  Ambiguous labels require explicit analyst mapping, not the first match.
-- Report builders reuse the current renderer contract (including pp and decline table cells).
-  Normal delivery uses `report --independent-review`: input preflight, render, original
-  validator, independent numeric/structure checks, then a single terminal result. The old
-  no-flag API remains compatible. Independent failure cannot return report_markdown or leave
-  state verified. Formal report retries share the original persisted repair budget.
-- Independent checks must not assume a company, year, fact ID, zero minority interests or
-  complete data. Recompute computed metrics using their input facts; unavailable metrics and
-  accounting checks are explicitly not_applicable. Scope comparisons stay separate.
-- Maintenance mutation tests use synthetic fixtures and dynamically selected fields, never
-  literal numbers/IDs from a live company's report. They do not run per financial analysis.
+Run the complete skill pytest suite and Ruff. Keep arithmetic period/scope/unit tests plus HTTP failure/cache tests, source/fact/formula/risk/body/citation mutation tests, report-budget tests, bounded-cursor version tests and F10-to-report integration. Relevant sibling consumer tests run separately to avoid module-path collisions. Windows tests use a unique workspace basetemp. No runtime deployment, client edits, Git commit or push without the corresponding user request.

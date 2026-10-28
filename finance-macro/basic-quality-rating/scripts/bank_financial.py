@@ -99,7 +99,7 @@ def _metric(value, name, field, *, requirement=False):
         raise ValueError(f"{field}.source_url 必须为 http(s) 来源 URL")
     locator = value.get("locator")
     if not isinstance(locator, str) or not locator.strip() or len(locator) > 500:
-        raise ValueError(f"{field}.locator 必须为非空、有界的页码/表格定位")
+        raise ValueError(f"{field}.locator 必须为非空、有界的网页栏目/表格定位")
     expected = {"point_in_time"} if requirement or name not in PERIOD_METRICS else {"period"}
     if name == "lcr" and not requirement:
         expected.add("quarter_average")

@@ -65,3 +65,41 @@ owns common candidate engine plus insurance locator and bank candidate regressio
 Parent owns sidecar CLI, sector routing, research mode, docs and verification.
 Final gate: whole-suite unittest, Ruff lint/format, skill metadata, diff checks,
 official-source smoke and independent review. No Git or remote installation.
+
+## Follow-up v3.5: remove PDF route
+
+Design: delete the four PDF/cache/candidate modules and their three dedicated
+suites; keep verified historical numeric fixtures. Use the existing URL/locator
+sidecar shape for official HTML/structured facts, preserving sector scoring and
+budgets. Remove httpx/PyMuPDF and regenerate the lock offline. Update skill,
+sector/tool/migration references and generated legacy handoff text. If readable
+sources cannot establish a key fact, preserve null; no parser fallback.
+
+- [x] Remove PDF modules and dependencies; regenerate lock offline.
+- [x] Update all active instructions and migration/error text.
+- [x] Exercise bank/insurance integration with webpage sources.
+- [x] Run dependency-free suite, Ruff, skill validation and diff review.
+
+## Follow-up v3.5.1: skill-creator review
+
+- [x] Read whole entrypoint/references and obtain independent read-only review.
+- [x] Define inline source IDs and final source table inside report_md only.
+- [x] Handle caller input, unknown dates, summaries/unread sources and deduplication.
+- [x] Reduce duplicate entrypoint instructions; move enterprise E explanation to tools.
+- [x] Remove mandatory standalone validate calls; constrain conflict exception.
+- [x] Forward-test realistic reporting scenario independently; repair observed gaps.
+- [x] Run full suite, Ruff, skill/link/lock validation and diff review.
+
+## Follow-up v3.6 API research/fetcher
+
+- [x] Verify actual free endpoint and investigate commercial documented coverage.
+- [x] Tests first for candidate mappings, provenance, dates, identity and transport/cache.
+- [x] Implement fetch_financial_candidates.py with stdlib and bounded CLI output.
+- [x] Wire skill/reference, version and spec without changing scorer contracts.
+- [x] Run tests/lint/metadata, live bank+insurance+cache smoke, and independent review.
+
+## Follow-up v3.6.1 target reporting period
+
+- [x] Add regression tests for Q3/H1, target rejection, newer period, cache reuse and CLI.
+- [x] Add explicit report-date alignment without changing scorer or source contracts.
+- [x] Update skill/reference/spec, check cached real examples, full tests/lint/metadata.

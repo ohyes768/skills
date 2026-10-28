@@ -30,7 +30,9 @@ def _report_warnings(data):
         if not data["watch_points"]:
             warnings.append("存在未评分维度，请补充具体待验证问题")
     if not re.search(r"\[[^\]]+\]\(https?://[^\s)]+\)", text):
-        warnings.append("请人工确认关键论断有可访问的 Markdown 来源链接与日期")
+        warnings.append(
+            "如有外部事实论断，请人工确认 Markdown 原文链接、事实期间及披露日期（未标日期须注明）；调用方输入不需外链"
+        )
     advice = r"目标价|建议买|建议卖|加仓|减仓|重仓|建仓|清仓"
     for sentence in re.split(r"[\n。；]", text):
         if re.search(advice, sentence) and not re.search(

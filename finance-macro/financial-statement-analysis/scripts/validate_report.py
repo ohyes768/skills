@@ -1,43 +1,48 @@
-"""核验实际交付正文、财务显示值与 claim→metric→fact→evidence 来源链。"""
+"""核验实际交付正文、财务显示值与 claim→metric→fact→F10 字段 来源链。"""
 
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from artifacts import emit_status, read_json, write_json
+from artifacts import _json_default, emit_status, read_json, write_json
 from report_values import (
     NUMBER_RE,
     decline_context,
-    extract_cited_pages,
-    in_range_citation,
     matches_number,
     percentage_point_suffix,
     period_year_suffix,
     plain_text,
 )
+from source_provenance import citation_text, source_errors, source_refs
 
 _CLAIM_TYPES = {"fact", "calculation", "inference", "company_explanation"}
 _ISSUE_KEYS = (
-    "unknown_fact_ids", "unknown_metric_ids", "unknown_evidence_ids", "out_of_range_pages",
-    "value_mismatches", "missing_evidence_claims", "body_mismatches", "unclaimed_numeric_lines",
-    "invalid_support", "page_mismatches",
+    "unknown_fact_ids", "unknown_metric_ids",
+    "value_mismatches", "missing_source_claims", "body_mismatches", "unclaimed_numeric_lines",
+    "invalid_support", "source_mismatches",
 )
 
 
-def _structured_check_clean(run_dir: Path) -> bool:
-    """抽样核对存在且无冲突时，结构化事实才可作为报告支撑。"""
-    path = Path(run_dir) / "structured_check.json"
-    if not path.exists():
-        return False
+def calculation_errors(run_dir: Path) -> list[str]:
+    """Bind persisted formulas, operands, statuses and risk flags to the source facts."""
+    from calculate_metrics import calculate_metrics
+
     try:
-        check = read_json(path)
-    except (OSError, ValueError):
-        return False
-    return check.get("conflicts") == 0 and bool(check.get("samples"))
+        expected = json.loads(json.dumps(
+            calculate_metrics(read_json(Path(run_dir) / "financials.json")), default=_json_default))
+        actual = read_json(Path(run_dir) / "metrics.json")
+    except (OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
+        return [f"calculation validation unavailable: {exc}"]
+    errors = [] if actual == expected else [
+        "metrics, formulas or risk flags differ from source calculations"]
+    from analysis_pack import analysis_pack_errors
+    errors.extend(analysis_pack_errors(run_dir))
+    return errors
 
 
 def _number_explained(text: str, number, value: Decimal, display_unit: str | None,
@@ -74,44 +79,19 @@ def _decimal(record: dict) -> Decimal | None:
 
 
 def _body_coverage(body: str, claims: list[dict], document: dict) -> list[str]:
-    """Numeric statements require ledger coverage; document metadata is exempt."""
-    covered = [(plain_text(c["text"]), set(c.get("source_pages", [])))
-               for c in claims if c.get("text")]
+    covered = [plain_text(c["text"]) for c in claims if c.get("text")]
+    company, code = document.get("company_name"), document.get("stock_code")
+    end = (document.get("period") or {}).get("end", "")
+    title = f"# {company}（{code}）{end[:4]}分析"
     issues = []
     for line in body.splitlines():
-        # Only a whole, syntactically constrained source line is metadata.
-        if re.fullmatch(r"[-*]\s*来源[:：]\s*https?://[^\s<>（）]+"
-                        r"(?:（SHA-256 前 8 位：[0-9a-fA-F]{8}）)?", line):
+        if line == title:
             continue
-        if not NUMBER_RE.search(plain_text(line)):
-            continue
-        normalized = re.sub(r"^#{1,6}", "", plain_text(line))
-        normalized = re.sub(r"^\d+[.)、]", "", normalized)
-        if line.startswith("# "):
-            # The document title may contain its verified stock code and period.
-            company, code = document.get("company_name"), document.get("stock_code")
-            end = (document.get("period") or {}).get("end", "")
-            if company and code and end:
-                expected = f"{company}（{code}）{end[:4]}分析"
-                if normalized == plain_text(expected):
-                    continue
-        remaining = normalized
-        allowed_pages = set()
-        for text, pages in covered:
-            if text in normalized:
+        remaining = plain_text(line)
+        for text in covered:
+            if text in remaining:
                 remaining = remaining.replace(text, "")
-                allowed_pages.update(pages)
-            elif normalized in text:
-                remaining = ""
-                allowed_pages.update(pages)
-        def remove_citation(match, allowed=allowed_pages):
-            nums = [int(n) for n in re.findall(r"\d+", match.group(1))]
-            return "" if all(page in allowed for page in nums) else match.group(0)
-        remaining = re.sub(
-            r"(?:PDF\s*第\s*|p\.\s*)(\d+(?:\s*[-–—、,，]\s*\d+)*)\s*页?",
-            remove_citation, remaining, flags=re.IGNORECASE,
-        )
-        if remaining and NUMBER_RE.search(remaining):
+        if NUMBER_RE.search(remaining):
             issues.append(line[:200])
     return issues
 
@@ -121,28 +101,38 @@ def validate_report(run_dir: Path) -> dict:
     document = read_json(run_dir / "document.json")
     financials = read_json(run_dir / "financials.json")
     metrics_doc = read_json(run_dir / "metrics.json")
-    manifest = read_json(run_dir / "extraction_manifest.json")
     claims = read_json(run_dir / "report_claims.json").get("claims", [])
     body = (run_dir / "analysis.md").read_text(encoding="utf-8")
-    page_count = int(document.get("page_count", 0))
     facts = {f["fact_id"]: f for f in financials.get("facts", [])}
     metrics = {m["metric_id"]: m for m in metrics_doc.get("metrics", [])}
-    evidences = {e["evidence_id"]: e for e in manifest.get("evidences", [])}
     result = {"schema_version": 1, **{key: [] for key in _ISSUE_KEYS}, "passed": False}
     if not claims or not body.strip():
         result["body_mismatches"].append("nonempty report and claims are required")
-    source_path = run_dir / "source.json"
-    source_sha = read_json(source_path).get("sha256") if source_path.exists() else None
-    bound_sha = manifest.get("document_sha256")
-    if ((source_sha and financials.get("document_sha256") != source_sha)
-            or (bound_sha and financials.get("document_sha256") != bound_sha)):
-        result["invalid_support"].append("financials and source document versions differ")
+    result["invalid_support"].extend(source_errors(run_dir, financials))
+    result["invalid_support"].extend(calculation_errors(run_dir))
+    from analysis_pack import build_analysis_pack, qualitative_claim_errors
+    try:
+        inputs = read_json(run_dir / "report_inputs.json")
+        paragraphs = [
+            paragraph for section in inputs.get("sections") or []
+            for paragraph in section.get("paragraphs") or []
+        ]
+        result["invalid_support"].extend(dict.fromkeys(
+            qualitative_claim_errors(build_analysis_pack(run_dir), [*paragraphs, body])))
+    except (OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
+        result["invalid_support"].append(f"qualitative support unavailable: {exc}")
+    # Delivered body and claims must be exactly the deterministic rendering of inputs.
+    from render_report import render_report
+    expected_body, expected_claims, render_issues = render_report(
+        run_dir, read_json(run_dir / "report_inputs.json"))
+    if render_issues or expected_body != body or expected_claims != claims:
+        result["body_mismatches"].append("report body or claim ledger differs from bound inputs")
 
     seen = set()
     for claim in claims:
         cid = claim.get("claim_id", "<missing>")
         if cid in seen:
-            result["missing_evidence_claims"].append(cid)
+            result["missing_source_claims"].append(cid)
         seen.add(cid)
         text = claim.get("text", "")
         section = _section(body, claim.get("report_anchor", ""))
@@ -150,12 +140,11 @@ def validate_report(run_dir: Path) -> dict:
             result["body_mismatches"].append(cid)
         claim_type = claim.get("claim_type")
         if claim_type not in _CLAIM_TYPES:
-            result["missing_evidence_claims"].append(cid)
+            result["missing_source_claims"].append(cid)
             continue
 
         fids = set(claim.get("fact_ids", []))
         mids = set(claim.get("metric_ids", []))
-        eids = set(claim.get("evidence_ids", []))
         required_values = []
         all_values = []
         for mid in mids:
@@ -186,59 +175,37 @@ def validate_report(run_dir: Path) -> dict:
                 all_values.append((value, kind))
                 if claim_type == "fact":
                     required_values.append((value, kind))
-            if fact.get("source") == "structured":
-                # 结构化事实无 evidence 链，由抽样核对背书：有任何双源冲突即不可用。
-                if not _structured_check_clean(run_dir):
-                    result["invalid_support"].append(
-                        f"{cid}: structured fact {fid} lacks a clean sample check")
-            else:
-                source_ids = fact.get("evidence_ids", [])
-                if not source_ids:
-                    result["invalid_support"].append(f"{cid}: fact {fid} has no evidence")
-                eids.update(source_ids)
             for field in ("start", "end"):
                 day = fact.get("period", {}).get(field)
                 if day:
                     allowed_years.add(day[:4])
 
-        expected_pages = set()
-        for eid in eids:
-            if eid not in evidences:
-                result["unknown_evidence_ids"].append(eid)
-            else:
-                expected_pages.update(evidences[eid].get("pdf_pages", []))
-        for page in claim.get("source_pages", []):
-            if not isinstance(page, int) or isinstance(page, bool) or not 1 <= page <= page_count:
-                result["out_of_range_pages"].append({"claim_id": cid, "page": page})
-        if set(claim.get("source_pages", [])) != expected_pages:
-            result["page_mismatches"].append(cid)
-        cited_pages = extract_cited_pages(text)
-        if not cited_pages <= expected_pages:
-            result["page_mismatches"].append(cid)
-        has_structured_backing = any(
-            facts[fid].get("source") == "structured" for fid in fids if fid in facts)
-        if (not eids and not has_structured_backing) or (
-                claim_type == "calculation" and not mids):
-            result["missing_evidence_claims"].append(cid)
+        expected_refs = source_refs(facts, sorted(fids & facts.keys()))
+        if claim.get("source_refs") != expected_refs:
+            # Canonical ordering may differ, but content and complete closure must agree.
+            canonical = lambda refs: sorted(json.dumps(r, sort_keys=True) for r in refs)
+            if canonical(claim.get("source_refs", [])) != canonical(expected_refs):
+                result["source_mismatches"].append(cid)
+        if not expected_refs or (claim_type == "calculation" and not mids):
+            result["missing_source_claims"].append(cid)
         if claim_type == "fact" and NUMBER_RE.search(text) and not fids:
-            result["missing_evidence_claims"].append(cid)
+            result["missing_source_claims"].append(cid)
+        # Only exact generated source metadata is exempt from financial number matching.
+        numeric_text = text.replace(citation_text(expected_refs), "") if expected_refs else text
 
         display_unit = claim.get("display_unit")
-        if any(not any(_number_explained(text, number, value, display_unit, kind)
-                       for number in NUMBER_RE.finditer(text))
+        if any(not any(_number_explained(numeric_text, number, value, display_unit, kind)
+                       for number in NUMBER_RE.finditer(numeric_text))
                for value, kind in required_values):
             result["value_mismatches"].append({"claim_id": cid, "report_text_fragment": text[:100]})
         if claim_type in _CLAIM_TYPES:
-            for number in NUMBER_RE.finditer(text):
+            for number in NUMBER_RE.finditer(numeric_text):
                 literal = number.group("number").replace(",", "")
-                prefix = text[max(0, number.start() - 8):number.start()]
                 is_year = (literal in allowed_years and not number.group("unit")
-                           and period_year_suffix(text, number))
-                if is_year or re.search(r"(?:PDF\s*第|p\.)\s*$", prefix):
+                           and period_year_suffix(numeric_text, number))
+                if is_year:
                     continue
-                if in_range_citation(text, number):
-                    continue
-                if any(_number_explained(text, number, value, display_unit, kind)
+                if any(_number_explained(numeric_text, number, value, display_unit, kind)
                        for value, kind in all_values):
                     continue
                 result["value_mismatches"].append({"claim_id": cid, "unbound_number": literal})
@@ -255,7 +222,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     run_dir = Path(args.run_dir)
     required = ["document.json", "financials.json", "metrics.json",
-                "extraction_manifest.json", "report_claims.json", "analysis.md"]
+                "structured_financials.json", "report_inputs.json", "report_claims.json", "analysis.md"]
     missing = [name for name in required if not (run_dir / name).exists()]
     if missing:
         print(f"validate_report failed: missing artifacts: {missing}", file=sys.stderr)

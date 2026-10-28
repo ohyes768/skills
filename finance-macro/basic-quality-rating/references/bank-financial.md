@@ -3,6 +3,8 @@
 银行按本参考执行，不使用普通企业的负债率、季度扣非符号或 ROE 趋势重罚。
 五维权重、最终十字段及 null 传播不变。保险、证券等不使用本分支。
 
+需要结构化补数时先读 [接口取数与缺口](financial-data-api.md)：免费脚本返回候选及原始出处，官方核对后才入下述评分包。
+
 ## 1. 先收证据，再入分
 
 1. 保持调用方 stock.json 不变。用明确的研究截止日期生成独立模板：
@@ -15,19 +17,11 @@
    `as_of` 是本次研究截止日；历史分析只能使用当时已披露的数据，不能为了绕过缺口改日期。
    模板绑定原始股票身份和完整输入哈希；重新取数不修改原 stock.json。
 
-2. 用宿主现有搜索工具找银行官网、交易所年报/中报及第三支柱资本披露。先复用已取得的
-   资料，不从新闻摘要猜表格数字。准备 PDF 后运行候选定位：
-
-   ```text
-   python3 <skill目录>/scripts/pdf_evidence.py prepare --url <官方PDF链接> --cache-dir <缓存目录>
-   python3 <skill目录>/scripts/bank_evidence.py --document-dir <document_dir> --max-chars 6000
-   python3 <skill目录>/scripts/pdf_evidence.py read --document-dir <document_dir> --pages 10-12
-   ```
-
-   候选包只提供标签、原始数字字符串、上下文、PDF 页码和源文件哈希。
-   `needs_confirmation=true` 表示仍须确认公司、年份列、单位、集团口径、指标定义；
-   不能把第一个数字直接作为本期值。财务数据表可能与资本监管表使用不同口径，逐项核查。
-   需要继续时用原条件和 next_cursor；缓存搜索不联网、不重新解析，也不做 OCR。
+2. 优先复用已有结构化资料，再用宿主搜索/网页读取工具核对银行官网、交易所公告正文、
+   官方业绩指标表及第三支柱披露的可读网页。记录 source_url 与 locator（栏目、表格、行列），
+   核对公司、年份、单位、集团/母行口径和指标定义，不从新闻或搜索摘要猜数字。
+   正文缺关键表格、表头或脚注时，按 [有限 PDF 补证](pdf-fallback.md) 用现成工具读官方原件相关页；
+   不默认通读 PDF。无工具或同一预算内仍缺核心数据则 E=null。财务表与资本监管表可能口径不同，逐项确认。
 
 3. 银行 E 也使用现有取证账本。初始化时加 `--bank-research`：
 
@@ -61,8 +55,8 @@ reports 数组、requirements 对象、requirements_period_end、requirements_pu
   "metrics": {
     "roe": {
       "value": 12.5,
-      "source_url": "https://example.com/official-report.pdf",
-      "locator": "PDF第10页，主要指标表，2025年集团列",
+      "source_url": "https://example.com/official-results",
+      "locator": "主要指标栏目，2025年集团列",
       "basis": "period"
     }
   }
@@ -124,12 +118,11 @@ published_at、scope=group、metrics。必须同组同期间，排除自身与�
 ## 4. 计算与交付
 
 ```text
-python3 <skill目录>/scripts/bank_financial.py validate --stock stock.json --input bank-data.json
 python3 <skill目录>/scripts/rating_math.py financial --input stock.json --bank-data bank-data.json
 python3 <skill目录>/scripts/rating_math.py finalize --input draft.json --stock stock.json --check-financial --bank-data bank-data.json --research-state research.json
 ```
 
-正常运行先校验数据包再计算E；修正数据后重跑，不重复已通过的校验。finalize核对E与该证据包一致，
+正常运行直接 financial → finalize；financial 内已校验证据包，独立 validate 仅用于排查修包问题。finalize核对E与该证据包一致，
 同时要求银行E取证已结案。最终仍恰好十字段，bank-data本身不塞进输出合同。
 只读验证已有结果可加同一 --bank-data；提供证据包时必须配合 --stock --check-financial。
 报告写明 as_of、证据截止期、四类指标、资本余量、研究分档版本、限制与具体缺口。

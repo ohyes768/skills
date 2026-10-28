@@ -20,10 +20,10 @@ description: 旧版质量评级执行手册的兼容入口；当前评级请直�
 
 # 旧执行手册已合并
 
-方法论、财务评分、PDF 取证与输出校验均由 `basic-quality-rating` 维护。
+方法论、财务评分、网页取证与输出校验均由 `basic-quality-rating` 维护。
 不再使用本手册的旧整数占位、逐项财务反算、历史案例或独立算分规则。
 旧 `scripts/validate_rating_json.py <rating.json>` 命令仅转发主 skill 校验器。
-使用主 skill 的 `financial`、`calculate`、`finalize` 与 PDF 取证命令。
+使用主 skill 的 `financial`、`calculate`、`finalize` 命令；取证使用已有数据和宿主网页工具。
 数值/结构失败需要修复；文字提示交由人工复核，不能据此修改算分规则。
 安装前版本已备份为同路径 `.pre-unification.bak`，不作为运行时规则加载。
 """
