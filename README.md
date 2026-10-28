@@ -44,7 +44,7 @@ README.md
 | [entity-economy-skill](finance-macro/entity-economy-skill) | 实体经济强弱判断（PMI/固投/社零） | active |
 | [inflation-skill](finance-macro/inflation-skill) | 通胀分析（CPI/PPI/核心CPI） | active |
 | [financial-statement-analysis](finance-macro/financial-statement-analysis) | A 股 F10 财务分析：输入股票代码与报告期，输出带接口字段来源的中文报告（合并三表、指标计算、独立复核）；验收见其 [acceptance.md](finance-macro/financial-statement-analysis/acceptance.md) | active |
-| [basic-quality-rating](finance-macro/basic-quality-rating) | 自动化五维基本面评级（10 字段 nullable JSON）：企业/银行/保险财务 E 评分、结构化数据与官方网页取证、失败换路与取证预算、统一校验 | active |
+| [basic-quality-rating](finance-macro/basic-quality-rating) | 自动化五维基本面评级（10 字段 nullable JSON）：企业/银行/保险财务 E 评分、银行保险 API 候选取数、结构化数据与官方网页取证、失败换路与取证预算、统一校验 | active |
 | [ARCHIVED_MACRO_DECISION_LOGIC.md](finance-macro/ARCHIVED_MACRO_DECISION_LOGIC.md) | 已下线综合模型的判断逻辑归档 | archived |
 
 ### 开发工程 `dev-workflow/`

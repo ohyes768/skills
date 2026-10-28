@@ -3,7 +3,7 @@ name: basic-quality-rating
 description: "收到单只 A 股结构化财务 JSON、需要五维基本面评分与星级及 Markdown 报告 JSON 时使用。仅用于自动化经营质量分析，不做估值或买卖建议。"
 license: MIT
 metadata:
-  version: 3.5.1
+  version: 3.6.1
   author: xbtlin (https://github.com/xbtlin/ai-berkshire) + Hermes Agent
   source: adapted from ai-berkshire
   hermes:
@@ -153,6 +153,8 @@ A-D 使用当前可用的联网搜索/读取工具核实。优先公司年报、
 - 高分红、股东会高票通过或标准无保留审计意见，不能单独抵消披露违规；财务报表审计意见不能当作治理问题已解决的证明。各维按自身证据定分，不因“2 或 3 都不改变最终星级”反过来选分。
 
 ## E 财务质量（15%）：先按行业选规则
+
+银行/保险已有资料不足且需要结构化数值候选时，按 [接口取数与缺口](references/financial-data-api.md) 用已有脚本一次取得近年候选，复用缓存并记入 financial 预算。已知目标财报期时另传 --report-date（例如三季报期末），先看 report_alignment，不把旧期候选冒充最新期；不凭日历推断已披露。候选是第三方数据，不直接传入行业评分；核对官方来源和主体后再入证据包。接口不能覆盖的要求、逐法人指标及定性评估仍按下述规则处理，不能靠接口字段凑齐。
 
 **普通企业、公用事业与交通运输**：直接运行 `financial`，复用 score/status/checks/issues/risks，不手算另一套分数。需要解释降档、支持的行业或期间时读 [工具用法及企业 E 规则](references/tools.md)。必需财务数据或期间无法核对时 E=null，保留已核实弱项；不得从网页补齐、改写 stock.json，或以背景指标抵消已触发的降档。
 

@@ -126,3 +126,43 @@
   reference resolution, offline lock consistency and git diff --check passed.
   The citation reminder remains advisory; no source-truth validator was added.
 - No commit/push, deployed-skill synchronization or application changes performed.
+
+## v3.6 API candidate acquisition (2026-10-28)
+
+- Researched Eastmoney free main-finance JSON, Lixinger insurer financial API,
+  DataCube bank_id/insu_id and Tushare fina_indicator; references/financial-data-api.md
+  records source links, supported fields, credentials and uncovered requirements.
+  Only the free endpoint was actually called; no paid-account access is claimed.
+- Tests-first: initial missing module failed, then 14 acquisition tests passed.
+  Independent review reproduced outsize-integer, malformed timestamp suffix and
+  HTTPError cleanup issues. Added regression cases before correcting them; also
+  prevent output overwriting stock before network access. All 17 new tests pass.
+- Full suite: python -S -X utf8 -m unittest discover -s tests/basic-quality-rating -q:
+  141 tests passed. Ruff lint/format, skill metadata, local reference resolution,
+  offline dependency-free lock regeneration and scoped diff check passed.
+- Real network smoke: 600036/000001/601318/601628 yielded 18/19/18/18 historical
+  rows, with no row issues in this sample; each second fetch used verified cache.
+  Initial fetch seconds: 0.661/0.457/0.243/0.237 in this environment only.
+  Full CLI cached output/compact stdout checked with 600036. Receipts and raw
+  response hashes are under .tmp/financial-api-smoke/; no credentials involved.
+- All candidates remain third_party/unconfirmed and ready_for_scoring=false.
+  No full current insurer or bank E grade was issued, no legal-entity scope or
+  solvency type inferred, no official source certification or speed SLA claimed.
+- Other active financial-statement-analysis edits were preserved. No commit,
+  push, personal-web mutation or runtime installation was performed.
+
+## v3.6.1 explicit target report period (2026-10-28)
+
+- Nine tests added first and observed missing-argument/field failures, then passed:
+  exact Q3, H1-only missing Q3, rejected Q3 dates without older fallback, duplicate
+  Q3 removal, newer returned period, no requested target, bad-target preflight,
+  same raw cache/different targets, CLI missing-target receipt.
+- 150 full-suite tests passed without site-packages; Ruff lint/format, skill
+  metadata, offline lock generation and scoped diff check passed.
+- Saved real raw API responses reused without network: 000001 matched Q3
+  2026-09-30; 601318 was missing_target with latest usable 2026-06-30. Both retain
+  ready_for_scoring=false. These reflect saved samples, not fresh official filing
+  discovery or a claim that Ping An has not published a quarterly report.
+- Matching is report-period alignment only, not numeric reconciliation with
+  announcement text. No quarterly-to-annual conversion or single-quarter inference,
+  no personal-web wiring, source-policy relaxation, commit or remote deployment.

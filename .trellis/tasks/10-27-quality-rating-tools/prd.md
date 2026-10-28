@@ -80,3 +80,23 @@ User invoked skill-creator to review/optimize the entire skill and clarify final
 sources. Preserve PDF removal, scoring and exact nullable ten-field output. Make
 sources traceable within report_md without extra searches, forced counts or dates.
 Remove duplicated execution instructions and isolate mechanical E explanation.
+
+## Follow-up v3.6: bank/insurance API acquisition (2026-10-28)
+
+Research and implement an API helper inside this skill. Keep stock immutable,
+standard-library runtime and ten-field output. Free data may be incomplete or
+third-party; do not fabricate official provenance, legal-entity scope, capital
+requirements or insurer qualitative assessments. No account purchase, token
+collection, deployed-copy changes or modifications to other active work.
+Acceptance: bounded real requests for bank/insurer, reusable source-bound cache,
+traceable numeric candidates and explicit remaining gaps; tests for identity,
+chronology, units, nulls, malformed/failed requests and cache corruption.
+
+## Follow-up v3.6.1: explicit reporting-period alignment
+
+User asked to align candidate acquisition to the latest financial report, such as
+Q3. Accept an explicit target quarter-end outside immutable stock input; distinguish
+API latest returned period from latest usable period and target availability.
+Never treat H1 as Q3, older valid rows as a replacement for rejected target rows,
+or nine-month cumulative financial metrics as single-quarter observations.
+No personal-web or official announcement discovery integration is in this change.

@@ -89,3 +89,17 @@ sources cannot establish a key fact, preserve null; no parser fallback.
 - [x] Remove mandatory standalone validate calls; constrain conflict exception.
 - [x] Forward-test realistic reporting scenario independently; repair observed gaps.
 - [x] Run full suite, Ruff, skill/link/lock validation and diff review.
+
+## Follow-up v3.6 API research/fetcher
+
+- [x] Verify actual free endpoint and investigate commercial documented coverage.
+- [x] Tests first for candidate mappings, provenance, dates, identity and transport/cache.
+- [x] Implement fetch_financial_candidates.py with stdlib and bounded CLI output.
+- [x] Wire skill/reference, version and spec without changing scorer contracts.
+- [x] Run tests/lint/metadata, live bank+insurance+cache smoke, and independent review.
+
+## Follow-up v3.6.1 target reporting period
+
+- [x] Add regression tests for Q3/H1, target rejection, newer period, cache reuse and CLI.
+- [x] Add explicit report-date alignment without changing scorer or source contracts.
+- [x] Update skill/reference/spec, check cached real examples, full tests/lint/metadata.

@@ -374,3 +374,50 @@ consumer compatibility or live-model research correctness is established.
 - The no-check-financial material-conflict exception is ordinary-company-only;
   sector sidecars keep their checked path with disputed required facts missing
   (or supported unknown assessments), yielding null rather than bypassing checks.
+
+## v3.6 bank/insurance API candidates (2026-10-28)
+
+- fetch_financial_candidates.py is a standard-library-only, read-only network
+  helper for explicit bank/insurance payloads. Query fixed Eastmoney main finance
+  report with stock identity, current plus four prior calendar years, max100 rows/4MiB.
+  One transient retry, no auth/quota retry, no package or PDF dependencies.
+- Output is financial_metric_candidates, not bank/insurance sidecar: third_party,
+  ready_for_scoring=false, every metric needs_confirmation. Preserve raw value,
+  source field/label, units, source URL/JSON locator, dates and unconfirmed scope.
+  SOLVENCY_AR never automatically becomes core/solo/group solvency. Verify ROA
+  definition, CNY monetary conversion and NBV comparability before scoring use.
+- Validate code/name/sector, supported quarter dates and chronological availability.
+  Exclude future or revised-after-asof rows and duplicate periods; preserve known
+  zero/negative numbers, reject nonfinite/bool/string or outsize values per field.
+  This endpoint cannot reconstruct historical vintages or certify completeness.
+- Cache raw JSON, URL, hash and UTC fetch time atomically by URL for one hour;
+  revalidate identity on every use. Explicit refresh skips cache; failed refresh
+  leaves old file but does not return stale success. Corrupt cache is a clear
+  failure. Cache has no dependency on caller runtime or sibling financial skill.
+- Caller output cannot overwrite original stock or raw API cache. CLI --output
+  saves full packet and emits compact receipt; errors exit2 on stderr. Sector
+  scripts/scoring contracts and exact nullable ten-field final output unchanged.
+- API calls count in existing financial research budgets. Actual official source,
+  capital requirements, LCR/NSFR, entity-level insurer metrics/rating and qualitative
+  assessments remain analyst tasks. Do not mark all candidates confirmed or
+  require every normal stock run to invoke this helper.
+
+## v3.6.1 reporting-period alignment (2026-10-28)
+
+- Optional report_date / --report-date is a quarter-end <= as_of within the
+  acquisition window, validated before network access. It is separate from
+  immutable stock input; no 30-field input/final-output consumer change.
+- report_alignment distinguishes not_requested/matched/missing_target/
+  target_rejected, latest returned vs latest usable dates, exact target index
+  (null when unavailable) and newer_report_returned. Matched validates period
+  alignment only; it never certifies values, scope, latest official completeness
+  or scoring readiness. Do not fall back to H1 when requested Q3 is missing.
+- Determine requested report period from known actual filing metadata or explicit
+  request, never current calendar or data-fetch date. Discovery of company latest
+  official filing and personal-web argument integration are not implemented here.
+- A target's date-rejected/duplicate rows remain visible through latest-returned
+  metadata; older usable records cannot replace them for current-period claims.
+  Reuse the same raw cache when changing target; no automatic refresh loop.
+- Keep YTD/interim/annual semantics: a Q3 cumulative ROE is not single-quarter
+  performance or an annual-history replacement. Exact-period available metrics
+  still require official provenance and scope confirmation before sector scoring.
