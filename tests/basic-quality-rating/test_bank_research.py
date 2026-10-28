@@ -7,7 +7,13 @@ SCRIPTS = (
     Path(__file__).resolve().parents[2] / "finance-macro/basic-quality-rating/scripts"
 )
 sys.path.insert(0, str(SCRIPTS))
-from research_state import ALL_TOPICS, REQUIRED_TOPICS, ResearchRun, check_research
+from research_state import (
+    ALL_TOPICS,
+    BANK_REQUIRED_TOPICS,
+    REQUIRED_TOPICS,
+    ResearchRun,
+    check_research,
+)
 
 
 class BankResearchTests(unittest.TestCase):
@@ -35,7 +41,9 @@ class BankResearchTests(unittest.TestCase):
 
     def test_bank_budget_shared_across_metric_questions(self):
         self.run.init(self.stock, ["official"], bank_research=True)
-        for number, question in enumerate(("不良率", "资本", "流动性", "资本附加要求", "集团口径")):
+        for number, question in enumerate(
+            ("不良率", "资本", "流动性", "资本附加要求", "集团口径")
+        ):
             request_id = f"bank-{number}"
             self.run.start("financial", question, "E评分", request_id, now=1)
             self.run.result("financial", request_id, 1, "success", now=1)
@@ -43,6 +51,32 @@ class BankResearchTests(unittest.TestCase):
             self.run.start("financial", "换个关键词再查", "E评分", "bank-6", now=1)
         self.run.close("financial", "gap", "核心资本资料无法取得")
         self.assertEqual(self.run.status("financial")["status"], "gap")
+
+    def test_liquidity_topic_is_optional_but_retained_evidence_is_accepted(self):
+        self.run.init(self.stock, ["official"], bank_research=True)
+        self.assertEqual(
+            self.run.status("financial")["missing_topics"], list(BANK_REQUIRED_TOPICS)
+        )
+        facts = [
+            {
+                "topic": topic,
+                "statement": "已核对核心事实",
+                "url": "https://example.com/bank",
+                "locator": "集团指标表",
+                "period": "2026-06-30",
+            }
+            for topic in BANK_REQUIRED_TOPICS
+        ]
+        self.run.close("financial", "complete", "三类核心证据齐全；流动性未验证", facts)
+        self.assertEqual(self.run.status("financial")["missing_topics"], [])
+        self.run.reopen("financial", "发现一项流动性指标承压", "可能触发上限")
+        self.run.close(
+            "financial",
+            "complete",
+            "保留新增流动性证据",
+            [{**facts[0], "topic": "liquidity", "statement": "新取得的流动性证据"}],
+        )
+        self.assertEqual(self.run.status("financial")["evidence_count"], 4)
 
     def test_nonbank_cannot_enable_bank_mode(self):
         with self.assertRaises(ValueError):

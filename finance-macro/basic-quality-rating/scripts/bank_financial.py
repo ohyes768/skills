@@ -18,9 +18,10 @@ from decimal import Decimal
 from pathlib import Path
 from urllib.parse import urlsplit
 
-POLICY = "bank-research-v1"
+POLICY = "bank-research-v2"
 CAPITAL_METRICS = ("cet1_ratio", "tier1_ratio", "total_capital_ratio")
-SNAPSHOT_METRICS = ("npl_ratio", "provision_coverage", *CAPITAL_METRICS, "lcr", "nsfr")
+SNAPSHOT_METRICS = ("npl_ratio", "provision_coverage", *CAPITAL_METRICS)
+LIQUIDITY_METRICS = ("lcr", "nsfr")
 ANNUAL_METRICS = ("roe", "roa", "npl_ratio")
 OPTIONAL_METRICS = (
     "loan_provision_ratio",
@@ -29,7 +30,7 @@ OPTIONAL_METRICS = (
     "nim",
     "cost_income_ratio",
 )
-METRICS = frozenset((*ANNUAL_METRICS, *SNAPSHOT_METRICS, *OPTIONAL_METRICS))
+METRICS = frozenset((*ANNUAL_METRICS, *SNAPSHOT_METRICS, *LIQUIDITY_METRICS, *OPTIONAL_METRICS))
 PERIOD_METRICS = frozenset(("roe", "roa", "nim", "cost_income_ratio"))
 REQUIREMENT_METRICS = frozenset((*CAPITAL_METRICS, "provision_coverage", "loan_provision_ratio"))
 
@@ -122,6 +123,15 @@ def _metrics(values, field, *, requirement=False, issues=None):
     for key, value in values.items():
         if key not in accepted:
             continue
+        if (
+            key in LIQUIDITY_METRICS
+            and not requirement
+            and (
+                value is None
+                or (isinstance(value, dict) and "value" in value and value["value"] is None)
+            )
+        ):
+            continue  # Optional missing evidence, never zero or an assumed pass.
         try:
             result[key] = _metric(value, key, f"{field}.{key}", requirement=requirement)
         except (ValueError, TypeError) as exc:
@@ -230,6 +240,7 @@ def validate_bank_data(stock, packet):
         "requirements": {},
         "requirements_applicable": False,
         "liquidity_applicable": False,
+        "liquidity_status": "unverified",
         "peers": [],
     }
     issues, warnings = result["issues"], result["warnings"]
@@ -270,6 +281,21 @@ def validate_bank_data(stock, packet):
             for key in SNAPSHOT_METRICS:
                 if key not in latest["metrics"]:
                     issues.append(f"最新快照缺少核心指标 {key}")
+            missing_liquidity = [key for key in LIQUIDITY_METRICS if key not in latest["metrics"]]
+            if result["liquidity_applicable"]:
+                result["liquidity_status"] = (
+                    "unverified"
+                    if len(missing_liquidity) == 2
+                    else "partial"
+                    if missing_liquidity
+                    else "verified"
+                )
+                if missing_liquidity:
+                    warnings.append(
+                        f"流动性未验证：最新快照缺少 {'/'.join(missing_liquidity)}；"
+                        "缺失不阻止其他核心证据齐全时评分，不代表流动性达标；"
+                        "须在报告和 watch_points 披露限制"
+                    )
             try:
                 declared = _date(packet.get("requirements_period_end"), "requirements_period_end")
                 published = _date(
@@ -354,7 +380,10 @@ def score_bank(stock, packet):
     validated = validate_bank_data(stock, packet)
     checks, risks, caps = [], [], []
     warnings = [
-        "bank-research-v1 为尚未经实证校准的研究分档，不是监管评级或信用评级",
+        (
+            f"{POLICY} 为尚未经实证校准的研究分档，不是监管评级或信用评级；"
+            "LCR/NSFR 缺失不再阻止评分，与 v1 的缺证规则不同"
+        ),
         *validated["warnings"],
     ]
 
@@ -460,28 +489,42 @@ def score_bank(stock, packet):
                 "适用要求的期间或披露日期未确认；仅保留数值，不计算余量或判断达标",
             )
         liquidity_breach = validated["liquidity_applicable"] and any(
-            values[key] < 100 for key in ("lcr", "nsfr") if key in values
+            values[key] < 100 for key in LIQUIDITY_METRICS if key in values
         )
         if liquidity_breach:
             risks.append("LCR 或 NSFR 低于适用制度的100%监管底线")
-        if validated["liquidity_applicable"] and all(key in values for key in ("lcr", "nsfr")):
-            cap = _above(min(values["lcr"], values["nsfr"]), (130, 120, 110, 100))
+        available_liquidity = {key: metrics[key] for key in LIQUIDITY_METRICS if key in metrics}
+        if validated["liquidity_applicable"] and available_liquidity:
+            cap = _above(min(values[key] for key in available_liquidity), (130, 120, 110, 100))
             check(
                 "bank_liquidity",
-                {key: metrics[key] for key in ("lcr", "nsfr")},
+                available_liquidity,
                 period,
                 cap,
-                "仅适用于 LCR/NSFR 制度；两项较弱值决定流动性质量分档",
+                "仅适用于 LCR/NSFR 制度；已有指标较弱值决定流动性上限；"
+                + (
+                    "两项均已验证"
+                    if validated["liquidity_status"] == "verified"
+                    else "仅验证一项，另一项流动性未验证，不据此认定整体达标"
+                ),
             )
             if not liquidity_breach and cap <= 2:
                 risks.append("银行流动性指标距离底线较近")
         elif not validated["liquidity_applicable"]:
             check(
                 "bank_liquidity",
-                {key: metrics[key] for key in ("lcr", "nsfr") if key in metrics},
+                available_liquidity,
                 period,
                 None,
                 "流动性制度不受支持；仅保留数值，不套用 LCR/NSFR 评分或监管底线",
+            )
+        else:
+            check(
+                "bank_liquidity",
+                {},
+                period,
+                None,
+                "流动性未验证：缺少 LCR/NSFR，不参与上限计算，不补分或认定达标",
             )
         for name in ("provision_coverage", "loan_provision_ratio"):
             if validated["requirements_applicable"] and name in required and name in values:
@@ -542,6 +585,7 @@ def score_bank(stock, packet):
         "issues": validated["issues"],
         "risks": risks,
         "policy": POLICY,
+        "liquidity_status": validated["liquidity_status"],
         "warnings": warnings,
     }
 

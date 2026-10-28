@@ -507,3 +507,78 @@ Correct: they reject inconsistent registered workflow states; host enforcement a
 real-model research quality need separate integration and live acceptance. This
 iteration updates and pushes the repository only; the NAS installed copy and
 Hermes/Web callers are not synchronized by these changes.
+
+## v3.7.1 bounded web navigation
+
+Rating research uses normal page navigation, readable bodies and implemented
+financial candidate scripts. Do not inspect JS bundles, source maps, script
+configuration or browser network/console records to discover APIs; do not guess
+hosts, gateways, endpoints, parameters or legacy URLs. One failed direct page
+read may use one normal browser fallback, then switch source or close a gap.
+Each actual search/read needs a prior receipt, including nested batch requests;
+unsupported batch receipts require sequential calls. One supported candidate
+script execution counts once under its existing bounded internal retry contract.
+This is an agent instruction, not automatic host interception.
+
+
+## v3.8.0 optional bank liquidity (bank-research-v2)
+
+### Scope / Trigger
+The user removed mandatory LCR/NSFR acquisition to reduce rating cost. Scoring
+thresholds and ten-field JSON stay unchanged; historical ratings are not rewritten.
+
+### Signatures
+`score_bank` / `validate_bank_data` now return liquidity_status alongside the
+existing diagnostics. `ResearchRun` accepts liquidity evidence but does not
+require it for bank financial completion. Insurance required topics are unchanged.
+Checked `finalize` requires explicit missing-liquidity disclosure for scored banks.
+
+### Contracts
+Required snapshots: NPL, provision coverage, CET1/tier1/total capital plus dated
+full applicable requirements. Three annual ROE/ROA/NPL records remain mandatory.
+LCR/NSFR omissions, null metrics and explicit null values are absent evidence.
+Invalid supplied non-null records still block rating. Existing unsupported regimes
+remain ungraded. No historical substitution or proxy metric is introduced.
+Both missing: bank_liquidity cap=null, not 0/5. One available: its existing band
+caps E; either known value below 100 still caps 1. Both available: weaker band.
+liquidity_status verified/partial/unverified reports valid-value coverage only,
+not factual authenticity, regulatory compliance or complete liquidity safety.
+
+### Validation & Error Matrix
+- Missing liquidity with complete other core data: score, warning, no assumed pass.
+- Invalid supplied liquidity: retain issues and known risks, E=null.
+- Missing any other core data: E=null as before.
+- Scored bank with partial/unverified liquidity: report_md AND watch_points must
+  contain 流动性未验证; checked finalize/validator reject either omission.
+- Bank ledger needs profitability/asset_quality/capital; liquidity remains an
+  accepted optional topic. Old four-topic evidence remains readable in place.
+
+### Good / Base / Bad Cases
+Good: retain a known low NSFR and cap quality despite missing LCR. Base: absent
+pair, rate core financial quality and disclose unverified liquidity in both places.
+Bad: delete known weak values, infer liquidity from capital adequacy, or label an
+absent liquidity pair as a passing check. Report v2 to distinguish from v1 history.
+
+### Tests Required
+Cover missing pair, one missing, null vs zero, every single-metric band, invalid
+supplied values, other core gaps, optional ledger topics, checked CLI finalization
+and validator disclosure rejection. Full rating suite and metadata/lint checks apply.
+
+### Wrong vs Correct
+Wrong: optional liquidity certifies the bank is safe or removes all liquidity checks.
+Correct: missing liquidity no longer blocks a quality score, but known evidence
+continues to cap E and the report must disclose incomplete coverage.
+
+## v4.0 unified F10 MVP
+
+New runs fetch three statements and main indicators through f10_financial.py.
+F10 is accepted third-party financial input without per-number official research.
+Original stock is immutable; --f10-data binds the full stock fingerprint, archived
+response hashes, report/notice/update dates. Main ROEJQ is disclosed weighted ROE;
+never replace it with simple consolidated ROE. Single-quarter deducted profits
+are cumulative differences; YOY divides by abs(prior), zero/missing stays null.
+Normal E reuses existing rules. Financial firms use limited ROE/profit/trend
+scoring without enterprise debt caps; checked finalize requires explicit
+unassessed regulatory/solvency/liquidity/entity-risk disclosure in report and
+watch_points. This is a policy change, not equivalent to previous sector grades.
+Legacy sector sidecars remain compatible but are not part of the new workflow.

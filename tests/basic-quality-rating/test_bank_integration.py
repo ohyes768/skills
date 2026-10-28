@@ -175,6 +175,95 @@ class BankIntegrationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             finalize(draft_for(stock, 4), stock, check_financial=True, bank_data=packet)
 
+    def test_missing_liquidity_delivers_only_with_explicit_limitations(self):
+        from research_state import BANK_REQUIRED_TOPICS, REQUIRED_TOPICS, ResearchRun
+
+        stock = bank_stock()
+        packet = packet_for(stock)
+        for key in ("lcr", "nsfr"):
+            del packet["reports"][-1]["metrics"][key]
+        self.assertEqual(score_financial(stock, bank_data=packet)["score"], 5)
+        draft = draft_for(stock, 5)
+        with self.assertRaisesRegex(ValueError, "流动性未验证"):
+            finalize(draft, stock, check_financial=True, bank_data=packet)
+        draft["report_md"] += (
+            "\n流动性未验证：未取得 LCR/NSFR；按 bank-research-v2 评估。"
+        )
+        with self.assertRaisesRegex(ValueError, "watch_points"):
+            finalize(draft, stock, check_financial=True, bank_data=packet)
+        draft["watch_points"] = ["流动性未验证：LCR/NSFR 待核对，不据此认定达标"]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            run = ResearchRun(root / "research.json")
+            run.init(stock, ["official"], bank_research=True, research_limit=24)
+            topics = {**REQUIRED_TOPICS, "financial": BANK_REQUIRED_TOPICS}
+            for dimension, required in topics.items():
+                run.close(
+                    dimension,
+                    "complete",
+                    "核心证据已核对",
+                    [
+                        {
+                            "topic": topic,
+                            "statement": "已核对的核心事实",
+                            "url": "https://example.com/bank",
+                            "locator": "集团指标表",
+                            "period": "2026-06-30",
+                        }
+                        for topic in required
+                    ],
+                )
+            run.seal(draft["dimensions"])
+            for name, value in (("stock", stock), ("bank", packet), ("draft", draft)):
+                (root / f"{name}.json").write_text(json.dumps(value), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "rating_math.py"),
+                    "finalize",
+                    "--input",
+                    str(root / "draft.json"),
+                    "--stock",
+                    str(root / "stock.json"),
+                    "--check-financial",
+                    "--bank-data",
+                    str(root / "bank.json"),
+                    "--research-state",
+                    str(run.path),
+                    "--output",
+                    str(root / "rating.json"),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rated = json.loads(result.stdout)
+            self.assertEqual(len(rated), 10)
+            self.assertIsNotNone(rated["stars"])
+            self.assertEqual((root / "rating.json").read_text(), result.stdout)
+            self.assertEqual(
+                validate(
+                    rated,
+                    stock,
+                    check_financial=True,
+                    bank_data=packet,
+                    research_state=run.path,
+                )["status"],
+                "passed",
+            )
+            rated["watch_points"] = []
+            self.assertEqual(
+                validate(
+                    rated,
+                    stock,
+                    check_financial=True,
+                    bank_data=packet,
+                    research_state=run.path,
+                )["status"],
+                "failed",
+            )
+
     def test_sidecar_cannot_be_silently_ignored(self):
         stock = bank_stock()
         packet = packet_for(stock)

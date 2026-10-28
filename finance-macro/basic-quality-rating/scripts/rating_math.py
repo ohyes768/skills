@@ -91,7 +91,12 @@ def finalize(
     research_state=None,
     bank_data=None,
     insurance_data=None,
+    f10_data=None,
 ):
+    if f10_data is not None and (bank_data is not None or insurance_data is not None):
+        raise ValueError("F10数据包不能与旧行业证据包混用")
+    if f10_data is not None and not check_financial:
+        raise ValueError("F10数据包须配合 --stock 与 --check-financial")
     if check_financial and stock is None:
         raise ValueError("财务评分校验必须提供 --stock 原始输入")
     if bank_data is not None and insurance_data is not None:
@@ -122,12 +127,35 @@ def finalize(
     if check_financial:
         from financial_score import score_financial
 
-        expected = score_financial(stock, bank_data=bank_data, insurance_data=insurance_data)[
-            "score"
-        ]
+        if f10_data is not None:
+            from f10_financial import LIMITATION, score_f10
+
+            financial_result = score_f10(stock, f10_data)
+            if financial_result.get("limitations") and (
+                LIMITATION not in draft["report_md"]
+                or not any(LIMITATION in item for item in draft["watch_points"])
+            ):
+                raise ValueError("金融企业F10基础评分须在报告和watch_points披露专用风险未评估")
+        else:
+            financial_result = score_financial(
+                stock, bank_data=bank_data, insurance_data=insurance_data
+            )
+        expected = financial_result["score"]
         dimensions = draft["dimensions"]
         if not isinstance(dimensions, dict) or dimensions.get("financial") != expected:
             raise ValueError(f"financial 与原始输入计算不一致，应为 {expected!r}")
+        if (
+            financial_result.get("sector") == "bank"
+            and expected is not None
+            and financial_result.get("liquidity_status") in ("unverified", "partial")
+            and (
+                "流动性未验证" not in draft["report_md"]
+                or not any("流动性未验证" in item for item in draft["watch_points"])
+            )
+        ):
+            raise ValueError(
+                "银行流动性证据不完整：report_md 和 watch_points 均须标明“流动性未验证”"
+            )
     derived = calculate(draft["dimensions"])
     if research_state is not None:
         from research_state import check_research
@@ -187,6 +215,7 @@ def main():
     )
     parser.add_argument("--output", help="Atomically save final ten-field JSON (finalize only)")
     sidecars = parser.add_mutually_exclusive_group()
+    sidecars.add_argument("--f10-data", help="Unified F10 data packet (financial/finalize)")
     sidecars.add_argument("--bank-data", help="Explicit bank evidence sidecar (financial/finalize)")
     sidecars.add_argument(
         "--insurance-data", help="Explicit insurance evidence sidecar (financial/finalize)"
@@ -204,6 +233,7 @@ def main():
                 args.research_state,
                 args.bank_data,
                 args.insurance_data,
+                args.f10_data,
             )
             if value
         }:
@@ -220,15 +250,20 @@ def main():
             if args.command == "financial":
                 from financial_score import score_financial
 
-                result = score_financial(
-                    data,
-                    bank_data=_read_bank(args.bank_data) if args.bank_data else None,
-                    insurance_data=_read_sidecar(args.insurance_data, "--insurance-data")
-                    if args.insurance_data
-                    else None,
-                )
+                if args.f10_data:
+                    from f10_financial import score_f10
+
+                    result = score_f10(data, _read(args.f10_data))
+                else:
+                    result = score_financial(
+                        data,
+                        bank_data=_read_bank(args.bank_data) if args.bank_data else None,
+                        insurance_data=_read_sidecar(args.insurance_data, "--insurance-data")
+                        if args.insurance_data
+                        else None,
+                    )
             else:
-                if args.bank_data or args.insurance_data:
+                if args.bank_data or args.insurance_data or args.f10_data:
                     raise ValueError("金融证据包仅用于 financial/finalize")
                 if args.research_state:
                     from research_state import ResearchRun
@@ -242,6 +277,7 @@ def main():
                 _read(args.stock) if args.stock else None,
                 check_financial=args.check_financial,
                 research_state=args.research_state,
+                f10_data=_read(args.f10_data) if args.f10_data else None,
                 bank_data=_read_bank(args.bank_data) if args.bank_data else None,
                 insurance_data=_read_sidecar(args.insurance_data, "--insurance-data")
                 if args.insurance_data

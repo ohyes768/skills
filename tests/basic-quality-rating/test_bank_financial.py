@@ -93,9 +93,65 @@ class BankFinancialTests(unittest.TestCase):
         )
         self.assertEqual((original, data), saved)
         self.assertEqual(result["issues"], [])
-        self.assertIn("bank-research-v1", result["policy"])
+        self.assertEqual("bank-research-v2", result["policy"])
         self.assertTrue(result["checks"])
         json.dumps(result, allow_nan=False)
+
+    def test_missing_liquidity_pair_is_scored_without_assuming_a_pass(self):
+        data = packet()
+        for key in ("lcr", "nsfr"):
+            del data["reports"][-1]["metrics"][key]
+        before = copy.deepcopy(data)
+        result = bank.score_bank(stock(), data)
+        self.assertEqual((result["score"], result["status"]), (5, "scored"))
+        self.assertEqual(result["issues"], [])
+        self.assertEqual(result["liquidity_status"], "unverified")
+        self.assertTrue(
+            any("流动性未验证" in warning for warning in result["warnings"])
+        )
+        self.assertFalse(any("流动性" in risk for risk in result["risks"]))
+        check = next(c for c in result["checks"] if c["rule"] == "bank_liquidity")
+        self.assertIsNone(check["cap"])
+        self.assertEqual(check["input"], {})
+        self.assertEqual(data, before)
+
+    def test_liquidity_null_is_missing_but_zero_is_a_real_weakness(self):
+        for missing in (None, {"value": None}):
+            data = packet()
+            data["reports"][-1]["metrics"].update(lcr=missing, nsfr=missing)
+            self.assertEqual(bank.score_bank(stock(), data)["score"], 5)
+        data = packet()
+        data["reports"][-1]["metrics"].update(lcr=None, nsfr=metric(0))
+        result = bank.score_bank(stock(), data)
+        self.assertEqual(result["score"], 1)
+        self.assertEqual(result["liquidity_status"], "partial")
+        self.assertTrue(any("100%监管底线" in risk for risk in result["risks"]))
+
+    def test_single_liquidity_metric_still_caps_and_discloses_missing_counterpart(self):
+        for known, missing in (("lcr", "nsfr"), ("nsfr", "lcr")):
+            for value, cap in ((150, 5), (120, 4), (110, 3), (100, 2), (99, 1)):
+                data = packet()
+                del data["reports"][-1]["metrics"][missing]
+                data["reports"][-1]["metrics"][known] = metric(value)
+                with self.subTest(known=known, value=value):
+                    result = bank.score_bank(stock(), data)
+                    self.assertEqual(result["score"], cap)
+                    self.assertEqual(result["liquidity_status"], "partial")
+                    self.assertTrue(
+                        any(missing in warning for warning in result["warnings"])
+                    )
+                    check = next(
+                        c for c in result["checks"] if c["rule"] == "bank_liquidity"
+                    )
+                    self.assertEqual(set(check["input"]), {known})
+
+    def test_optional_liquidity_does_not_relax_other_core_gaps(self):
+        for core in ("npl_ratio", "provision_coverage", *bank.CAPITAL_METRICS):
+            data = packet()
+            for key in ("lcr", "nsfr", core):
+                del data["reports"][-1]["metrics"][key]
+            with self.subTest(core=core):
+                self.assertIsNone(bank.score_bank(stock(), data)["score"])
 
     def test_missing_bank_data_is_not_poor_quality(self):
         result = bank.score_bank(stock(), None)
@@ -105,11 +161,11 @@ class BankFinancialTests(unittest.TestCase):
     def test_core_gaps_preserve_known_weakness(self):
         data = packet()
         data["reports"][-1]["metrics"]["npl_ratio"] = metric(4)
-        del data["reports"][-1]["metrics"]["lcr"]
+        del data["reports"][-1]["metrics"]["tier1_ratio"]
         result = bank.score_bank(stock(), data)
         self.assertIsNone(result["score"])
         self.assertTrue(any("不良" in risk for risk in result["risks"]))
-        self.assertTrue(any("lcr" in issue for issue in result["issues"]))
+        self.assertTrue(any("tier1_ratio" in issue for issue in result["issues"]))
 
     def test_partial_safety_data_preserves_verified_breach(self):
         data = packet()

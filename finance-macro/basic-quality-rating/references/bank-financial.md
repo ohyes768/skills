@@ -31,9 +31,9 @@
 
    已有账本会追加 financial，不清空 A-D、已耗轮次或渠道故障；之后不带该参数也不会删掉 E。
    `start/result/close` 用法见 [取证控制](research-control.md)，dimension 使用 financial。
-   必要主题是 profitability / asset_quality / capital / liquidity。E 共用一轮初查加四轮网页补查，
+   必要主题是 profitability / asset_quality / capital；liquidity 为可选主题，旧账本中的该主题证据仍保留。E 共用一轮初查加四轮网页补查，
    不能按指标或换关键词重新计数；每轮先说明缺口及评分影响。原渠道配额/权限失败继续有效。
-   查齐即可结案 complete；到上限仍缺核心证据则 gap、E=null。具体重大冲突仍只允许重开一次。
+   三类核心证据查齐即可结案 complete；LCR/NSFR 缺失不用为它追加搜索，也不阻止 complete。到上限仍缺其他核心证据则 gap、E=null。具体重大冲突仍只允许重开一次。
    账本保存紧凑论据，具体数字和出处保存在 bank-data.json；complete 不替代数值校验。
 
 ## 2. bank-data.json 合同
@@ -72,7 +72,7 @@ reports 数组、requirements 对象、requirements_period_end、requirements_pu
 | 最近三年年度盈利与风险 | roe、roa、npl_ratio | 三个连续年度；年度末12月31日，roe/roa 的 basis=period |
 | 最新快照资产质量 | npl_ratio、provision_coverage | 不良率、拨备覆盖率；basis=point_in_time |
 | 最新快照资本 | cet1_ratio、tier1_ratio、total_capital_ratio | 核心一级、一级、总资本；basis=point_in_time |
-| 最新快照流动性 | lcr、nsfr | LCR允许point_in_time或quarter_average；NSFR为point_in_time |
+| 可选最新快照流动性 | lcr、nsfr | 缺失/显式null不阻止评分；有值时来源、口径仍须有效。LCR允许point_in_time或quarter_average；NSFR为point_in_time |
 | requirements | 三项资本同名字段 | 同样的数值/来源/定位/basis对象，basis=point_in_time |
 | 辅助指标 | loan_provision_ratio、special_mention_ratio、overdue_90_ratio、nim、cost_income_ratio | 缺失不自动扣分；nim/成本收入比为period，其余point_in_time |
 | 可选适用拨备要求 | requirements.provision_coverage / loan_provision_ratio | 只有取得该银行明确适用要求，才能判断对应合规缺口 |
@@ -83,7 +83,7 @@ quarter（3月31日、9月30日、12月31日）。年度盈利不使用半年/�
 5月起缺上一年度则不能倒退旧窗口。最新快照超过400天不评分；有更新披露应取更新期，
 不能故意省略更新但不完整的报告，用旧的完整报告规避缺口。脚本不能证明网上没有更新披露。
 
-latest 快照须包含全部核心指标；较新报告缺项目时，应补齐同报告期披露，不能拼入旧期数字。
+latest 快照须包含资产质量与资本核心指标（不含可选 LCR/NSFR）；较新报告缺项目时，应补齐同报告期披露，不能拼入旧期数字。
 报告期重复、未来披露、混合口径、资本比率顺序冲突或已提供拨贷比与不良率×覆盖率重大不一致，
 均阻止评分。无效指标不会抹掉其他可确认事实；限制与已知风险分开记录。
 目前只支持适用 LCR/NSFR 制度的银行，其他制度须明确未覆盖，不用代理值凑分。
@@ -92,7 +92,14 @@ latest 快照须包含全部核心指标；较新报告缺项目时，应补齐�
 published_at、scope=group、metrics。必须同组同期间，排除自身与重复代码；只比较相同 basis。
 无效同业记录忽略并警告；缺同业数据不扣分，不得冒称行业排名或代表全行业。
 
-## 3. 评分规则 bank-research-v1
+## 3. 评分规则 bank-research-v2
+
+v2 取消 LCR/NSFR 必填；三年盈利、资产质量、资本及趋势规则不变。与 v1 的完整性要求不同，历史结果不会自动改写，比较时须注明规则版本及流动性覆盖状态。
+
+- 最新期两项均缺失或 null：不设置流动性分数/上限，不补0、不补5；其他核心证据齐全仍可评分。报告及 watch_points 均写“流动性未验证”，说明没有验证流动性安全。
+- 仅有一项可靠值：按该项设置上限，另一项仍属“流动性未验证”；不能据一项达标宣称整体达标。两项都有时沿用较弱值。
+- 不为缺失项购买接口、改查旧期或追加取证；已有可核实指标必须保留，不能删除弱值以提高评分。显式提供但数值/来源/期间/口径无效时仍按冲突或错误处理，不静默当作缺失。
+- 其他核心证据缺失仍 E=null；不支持的流动性制度仍未覆盖，不借此套用其他制度。存贷比、现金余额不替代 LCR/NSFR。
 
 这是**尚未实证校准的经营质量研究分档**，不是监管评级或信用评级，也不代表未来收益。
 分档列清楚，避免让模型临场编阈值。监管合规与质量分档分开：150%拨备覆盖率是本研究
@@ -105,9 +112,9 @@ published_at、scope=group、metrics。必须同组同期间，排除自身与�
 | 最新不良率 | ≤1 / ≤1.5 / ≤2 / ≤3 / 更高 |
 | 最新拨备覆盖率 | ≥300 / ≥200 / ≥150 / ≥120 / 更低 |
 | 资本余量，单位百分点 | 三项“实际－完整适用要求”的最小值 ≥3 / ≥2 / ≥1 / ≥0 / 更低 |
-| 流动性 | min(LCR,NSFR) ≥130 / ≥120 / ≥110 / ≥100 / 更低 |
+| 可选流动性上限 | 已取得有效指标的最小值 ≥130 / ≥120 / ≥110 / ≥100 / 更低；两项均缺不设上限 |
 
-盈利基础分取ROE/ROA较低档，最终E取基础分与资产质量、资本、流动性及趋势上限的最小值，
+盈利基础分取ROE/ROA较低档，最终E取基础分与资产质量、资本、已有流动性及趋势上限的最小值，
 不能用高盈利抵消安全弱项。资本或适用流动性底线已确认不足、或有来源的适用拨备要求未达到，
 上限1。核心证据不足/冲突仍为null，不能因为已知一项弱点就绕过完整性要求硬给1分。
 
@@ -123,10 +130,11 @@ python3 <skill目录>/scripts/rating_math.py calculate --input dimensions.json -
 python3 <skill目录>/scripts/rating_math.py finalize --input draft.json --stock stock.json --check-financial --bank-data bank-data.json --research-state research.json --output rating.json
 ```
 
-正常运行直接 financial → finalize；financial 内已校验证据包，独立 validate 仅用于排查修包问题。finalize核对E与该证据包一致，
+正常运行 financial → calculate（绑定账本）→ finalize；financial 内已校验证据包，独立 validate 仅用于排查修包问题。finalize核对E与该证据包一致，
 同时要求银行E取证已结案。最终仍恰好十字段，bank-data本身不塞进输出合同。
 只读验证已有结果可加同一 --bank-data；提供证据包时必须配合 --stock --check-financial。
-报告写明 as_of、证据截止期、四类指标、资本余量、研究分档版本、限制与具体缺口。
+financial 返回 liquidity_status=verified / partial / unverified，仅表示证据包内两项值的有效覆盖状态，不证明来源真实或整体流动性安全。checks 中 bank_liquidity 的 cap=null 表示未计入，warnings 包含具体缺项。
+报告写明 as_of、证据截止期、三类核心指标、流动性覆盖状态、资本余量、bank-research-v2、限制与具体缺口。可评分但流动性不完整时，finalize --check-financial 要求 report_md 和 watch_points 均包含“流动性未验证”，缺任一处就拒绝交付；只检查标签存在，不代替语义核对。
 银行输入与新披露的实质性冲突须解决后入分，或以E=null交付并说明，不静默覆盖原数据。
 
 ## 依据与适用限制

@@ -1,5 +1,7 @@
 # 固定工具用法
 
+v4 新任务优先使用 [统一F10基础入口](f10-financial.md)，不走下述旧输入/行业取证流程。本文旧财务分支仅供历史CLI兼容；A-D账本和统一输出工具继续有效。
+
 以下 `<skill目录>` 是当前 skill 的实际目录；运行数据放在宿主指定的工作目录，不放源码目录。
 全部脚本只需 Python 3 标准库，无需下载或解析 PDF，也不依赖其他 skill。维护说明见 [安装与兼容迁移](setup-and-migration.md)。
 
@@ -65,7 +67,7 @@ python3 <skill目录>/scripts/rating_math.py financial --input stock.json --bank
 
 financial 内已校验数据包，不额外先跑 validate；独立 validate 子命令留给修包诊断。
 模板 stdout 保存为 bank-data.json，填入已确认的官方数据。核对数值后才入分，表格多年份、
-累计/年化、集团/母行须核对。银行四类规则及三年窗口、资本适用要求和辅助指标见银行参考。
+累计/年化、集团/母行须核对。银行三类核心指标及三年窗口、资本适用要求和辅助指标见银行参考。LCR/NSFR 可选，缺失不阻止评分；已有值仍限制上限。liquidity_status 为 partial/unverified 的可评分银行，报告与 watch_points 均须有“流动性未验证”，否则 checked finalize 拒绝交付。
 正常银行 finalize 和只读 validator 均加 --bank-data bank-data.json --stock stock.json --check-financial；
 research.json 先 init --bank-research，E 也须结案。研究分档未实证校准，报告不得称为监管评级。
 
@@ -91,3 +93,7 @@ python3 <skill目录>/scripts/validate_rating_json.py <rating.json> --stock <sto
 不修改原文件；复用 rating_math 的权重、星级、null 传播和规范 boundary，禁止另写第二套算分。
 正文缺章节、来源格式、未评级标注或疑似交易措辞仅提醒人工复核，不证明或否定语义正确性。
 免责声明、同值的财务指标不会成为机械拒绝原因。是否有真实证据、是否正确回答判别问题仍由分析者检查。
+
+## 网页工具边界
+
+搜索定位来源，正常读取正文或跟随公开链接；失败时最多再用现成浏览器打开同一页面一次，仍不可读则换源或 gap。禁止拆解网站 JS、读取网络/控制台挖掘接口、猜测域名/接口/旧地址及批量 URL 探测。只执行本 skill 已支持的财务接口，不在评级中开发适配器。实际搜索/读取（含 execute_code 内嵌套调用）逐次预留并登记回执，批量不能按外层一次计数；详见 [取证控制](research-control.md)。

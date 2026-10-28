@@ -25,6 +25,7 @@ REQUIRED_TOPICS = {
     "management": ("decisions", "allocation_alignment", "governance_succession"),
 }
 BANK_TOPICS = {"financial": ("profitability", "asset_quality", "capital", "liquidity")}
+BANK_REQUIRED_TOPICS = ("profitability", "asset_quality", "capital")
 INSURANCE_TOPICS = ("profitability", "solvency", "insurance_business", "asset_liability")
 ALL_TOPICS = {**REQUIRED_TOPICS, **BANK_TOPICS}
 MAX_ROUNDS = 5  # Initial web research plus four follow-ups, shared by each dimension.
@@ -128,7 +129,12 @@ def _dimension(state, dimension):
 
 def _missing(dimension, dim):
     covered = {fact["topic"] for fact in dim["evidence"]}
-    return [topic for topic in _topics(dimension, dim) if topic not in covered]
+    required = (
+        BANK_REQUIRED_TOPICS
+        if dimension == "financial" and dim.get("mode", "bank") == "bank"
+        else _topics(dimension, dim)
+    )
+    return [topic for topic in required if topic not in covered]
 
 
 def _topics(dimension, dim):
