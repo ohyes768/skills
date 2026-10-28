@@ -1,8 +1,8 @@
 """report_inputs.json → analysis.md 与 report_claims.json 同源渲染。
 
 正文由结构化绑定（fact_id/metric_id）确定性渲染，claim 随片段同时生成，
-证据页码由台账自动解析——禁止根据正文数值反查碰巧相等的支持事实。
-定量陈述必须绑定；自由段落中的静态数字仅允许年份与页码引用。
+接口来源由台账自动解析——禁止根据正文数值反查碰巧相等的支持事实。
+定量陈述必须绑定；自由段落中的静态数字仅允许期间年份。
 渲染失败（绑定缺失、值不可用、格式与数量类型不符、方向词与符号矛盾）
 时不写任何交付文件，返回集中修复清单。
 """
@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from decimal import ROUND_HALF_UP, Decimal
@@ -17,6 +18,7 @@ from pathlib import Path
 
 from artifacts import emit_status, read_json, write_json
 from report_values import NUMBER_RE, period_year_suffix
+from source_provenance import citation_text, source_refs
 
 INPUT_SCHEMA_VERSION = 1
 _CLAIM_TYPES = {"fact", "calculation", "inference", "company_explanation"}
@@ -89,13 +91,10 @@ class _Ledger:
     def __init__(self, run_dir: Path):
         self.facts = {f["fact_id"]: f for f in read_json(run_dir / "financials.json").get("facts", [])}
         self.metrics = {m["metric_id"]: m for m in read_json(run_dir / "metrics.json").get("metrics", [])}
-        manifest = read_json(run_dir / "extraction_manifest.json")
-        self.evidence_pages = {e["evidence_id"]: e.get("pdf_pages", [])
-                               for e in manifest.get("evidences", [])}
         self.document = read_json(run_dir / "document.json")
 
-    def resolve(self, binding: dict) -> tuple[Decimal, str, list[str], set[str], set[int]]:
-        """返回 (value, kind, fact_ids, metric_ids, evidence_pages)。"""
+    def resolve(self, binding: dict) -> tuple[Decimal, str, list[str], set[str], set[str]]:
+        """返回 (value, kind, fact_ids, metric_ids, source_keys)。"""
         fact_ids: set[str] = set()
         metric_ids: set[str] = set()
         if "metric_id" in binding:
@@ -123,12 +122,14 @@ class _Ledger:
             kind = _value_kind(None, None, fact)
         else:
             raise RenderIssue("binding needs fact_id or metric_id", binding=binding)
-        pages: set[int] = set()
-        for fact_id in fact_ids:
-            fact = self.facts[fact_id]
-            for evidence_id in fact.get("evidence_ids", []):
-                pages.update(self.evidence_pages.get(evidence_id, []))
-        return value, kind, sorted(fact_ids), sorted(metric_ids), pages
+        refs = source_refs(self.facts, sorted(fact_ids))
+        keys = {json.dumps(ref, sort_keys=True, ensure_ascii=False) for ref in refs}
+        return value, kind, sorted(fact_ids), sorted(metric_ids), keys
+
+
+def _source_text(keys: set[str]) -> str:
+    return citation_text([json.loads(key) for key in sorted(keys)])
+
 
 
 def _resolve_with_ctx(ledger: _Ledger, binding: dict, ctx: dict):
@@ -141,20 +142,17 @@ def _resolve_with_ctx(ledger: _Ledger, binding: dict, ctx: dict):
 
 
 def _check_static_text(text: str, context: dict, *, strict: bool = False) -> None:
-    """模板静态数字只允许年份与页码引用；定性段落（strict）禁止一切数字，
+    """模板静态数字只允许期间年份；定性段落（strict）禁止一切数字，
     与验收器的正文覆盖规则保持一致，避免渲染通过而验收失败。"""
     for number in NUMBER_RE.finditer(text):
         literal = number.group("number").replace(",", "")
-        if not strict:
-            prefix = text[max(0, number.start() - 8):number.start()]
-            if literal.isdigit() and re.search(r"(?:PDF\s*第|p\.)\s*$", prefix):
-                continue
-            if literal.isdigit() and len(literal) == 4 and period_year_suffix(text, number):
-                continue
+        if (not strict and literal.isdigit() and len(literal) == 4
+                and period_year_suffix(text, number)):
+            continue
         reason = ("qualitative paragraphs must not contain numbers; "
                   "move quantitative content to statements/tables"
                   if strict else
-                  "static number in free text must be a year or page citation")
+                  "static number in free text must be a period year")
         raise RenderIssue(f"number {literal!r}: {reason}", **context)
 
 
@@ -172,7 +170,7 @@ def _render_statement(ledger: _Ledger, anchor: str, statement: dict,
 
     fact_ids: set[str] = set()
     metric_ids: set[str] = set()
-    pages: set[int] = set()
+    pages: set[str] = set()
 
     def replace(match) -> str:
         name, fmt = match.group(1), match.group(2)
@@ -193,9 +191,8 @@ def _render_statement(ledger: _Ledger, anchor: str, statement: dict,
     if claim_type == "fact" and not fact_ids:
         raise RenderIssue("fact statement needs a fact binding", **ctx)
 
-    if statement.get("cite_pages", True) and pages:
-        citation = "、".join(str(page) for page in sorted(pages))
-        text = f"{text}（PDF第{citation}页）"
+    if statement.get("cite_sources", True) and pages:
+        text = f"{text}（来源：{_source_text(pages)}）"
 
     claim = {
         "claim_id": f"c-{claim_no:04d}",
@@ -203,12 +200,7 @@ def _render_statement(ledger: _Ledger, anchor: str, statement: dict,
         "text": text,
         "fact_ids": sorted(fact_ids),
         "metric_ids": sorted(metric_ids),
-        "evidence_ids": sorted({
-            evidence_id
-            for fact_id in fact_ids
-            for evidence_id in ledger.facts[fact_id].get("evidence_ids", [])
-        }),
-        "source_pages": sorted(pages),
+        "source_refs": [json.loads(key) for key in sorted(pages)],
         "claim_type": claim_type,
         "display_unit": statement.get("display_unit"),
     }
@@ -227,11 +219,17 @@ def _render_table_row(ledger: _Ledger, anchor: str, display_unit: str | None,
 
     fact_ids: set[str] = set()
     metric_ids: set[str] = set()
-    pages: set[int] = set()
+    pages: set[str] = set()
     cells: list[str] = []
+    allowed_keys: set[str] = set()
+    for cell in cells_spec:
+        if isinstance(cell, dict):
+            allowed_keys.update(_resolve_with_ctx(ledger, cell, ctx)[-1])
+    allowed_citation = _source_text(allowed_keys)
     for cell in cells_spec:
         if isinstance(cell, str):
-            _check_static_text(cell, ctx)
+            if cell != allowed_citation:
+                _check_static_text(cell, ctx)
             cells.append(cell)
             continue
         if not isinstance(cell, dict):
@@ -258,12 +256,7 @@ def _render_table_row(ledger: _Ledger, anchor: str, display_unit: str | None,
         "text": text,
         "fact_ids": sorted(fact_ids),
         "metric_ids": sorted(metric_ids),
-        "evidence_ids": sorted({
-            evidence_id
-            for fact_id in fact_ids
-            for evidence_id in ledger.facts[fact_id].get("evidence_ids", [])
-        }),
-        "source_pages": sorted(pages),
+        "source_refs": [json.loads(key) for key in sorted(pages)],
         "claim_type": claim_type,
         "display_unit": display_unit,
     }

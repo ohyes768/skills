@@ -12,10 +12,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
+from datetime import date as calendar_date
 from decimal import Decimal
 from pathlib import Path
 from urllib.parse import quote
@@ -54,12 +56,14 @@ class _TransientError(RuntimeError):
 
 def secucode(code: str) -> str:
     """301313 → 301313.SZ；600519 → 600519.SH。"""
-    code = code.strip()
-    if "." in code:
-        return code.upper()
-    if len(code) != 6 or not code.isdigit():
+    code = code.strip().upper()
+    if not re.fullmatch(r"\d{6}(?:\.(?:SH|SZ|BJ))?", code):
         raise FetchStructuredError(f"illegal security code: {code!r}")
-    return f"{code}.{'SH' if code.startswith('6') else 'SZ'}"
+    if "." in code:
+        return code
+    exchange = 'SH' if code.startswith('6') else ('BJ' if code.startswith(('4', '8', '9')) else 'SZ')
+    return f"{code}.{exchange}"
+
 
 
 def _report_url(report_name: str, secu: str, report_date: str) -> str:
@@ -76,7 +80,31 @@ def _parse_rows(payload: bytes, label: str) -> list[dict]:
         doc = json.loads(payload.decode("utf-8"), parse_float=Decimal)
     except (ValueError, UnicodeDecodeError) as exc:
         raise _TransientError(f"{label}: response is not valid JSON") from exc
-    return ((doc or {}).get("result") or {}).get("data") or []
+    if not isinstance(doc, dict) or doc.get("success") is False:
+        raise _TransientError(f"{label}: API failed or malformed response")
+    result = doc.get("result")
+    if not isinstance(result, dict) or not isinstance(result.get("data"), list):
+        raise _TransientError(f"{label}: malformed result/data")
+    rows = result["data"]
+    if not all(isinstance(row, dict) for row in rows):
+        raise _TransientError(f"{label}: malformed row")
+    return rows
+
+
+def validate_rows(rows: list[dict], secu: str, report_date: str) -> None:
+    """Reject mislabeled or ambiguous API rows before they enter the archive."""
+    if not isinstance(rows, list) or len(rows) != 1 or not isinstance(rows[0], dict):
+        raise FetchStructuredError("expected exactly one statement row")
+    for row in rows:
+        if not row.get("SECUCODE") and not row.get("SECURITY_CODE"):
+            raise FetchStructuredError("statement row missing security identity")
+        if row.get("SECUCODE") and str(row["SECUCODE"]).upper() != secu:
+            raise FetchStructuredError("statement row SECUCODE mismatch")
+        if row.get("SECURITY_CODE") and str(row["SECURITY_CODE"]) != secu.split(".")[0]:
+            raise FetchStructuredError("statement row SECURITY_CODE mismatch")
+        if str(row.get("REPORT_DATE", ""))[:10] != report_date:
+            raise FetchStructuredError("statement row REPORT_DATE mismatch")
+
 
 
 def _request_once(client: httpx.Client, url: str) -> bytes:
@@ -150,7 +178,13 @@ def fetch_structured(code: str, dates: list[str], run_dir: Path, *,
     run_dir.mkdir(parents=True, exist_ok=True)
     output_path = run_dir / "structured_financials.json"
     secu = secucode(code)
+    code = secu.split(".")[0]
     dates = sorted({d.strip() for d in dates if d.strip()})
+    try:
+        for report_day in dates:
+            calendar_date.fromisoformat(report_day)
+    except ValueError as exc:
+        raise FetchStructuredError("invalid report date") from exc
     if not dates:
         raise FetchStructuredError("no report dates requested")
 
@@ -163,6 +197,9 @@ def fetch_structured(code: str, dates: list[str], run_dir: Path, *,
         if (candidate and candidate.get("schema_version") == SCHEMA_VERSION
                 and candidate.get("source") == "structured_eastmoney"
                 and candidate.get("security_code") == code):
+            for day, kinds in candidate.get("reports", {}).items():
+                for rows in kinds.values():
+                    validate_rows(rows, secu, day)
             previous = candidate
     done = _cached_entries(previous, dates)
 
@@ -192,6 +229,7 @@ def fetch_structured(code: str, dates: list[str], run_dir: Path, *,
                 rows, digest, failure = _fetch_report(client, label, url, max_attempts,
                                                       effective_sleep)
                 if rows is not None:
+                    validate_rows(rows, secu, date)
                     reports[date][kind] = rows
                     digests[f"{date}/{kind}"] = digest
                 else:
@@ -202,7 +240,10 @@ def fetch_structured(code: str, dates: list[str], run_dir: Path, *,
 
     fetched_all = previous.get("response_sha256", {}) if previous else {}
     fetched_all.update(digests)
-    fetched_at = (previous or {}).get("fetched_at")
+    refreshed_at = datetime.now(UTC).isoformat()
+    entry_times = dict((previous or {}).get("entry_fetched_at", {}))
+    entry_times.update({key: refreshed_at for key in digests})
+    fetched_at = refreshed_at if digests else (previous or {}).get("fetched_at")
     doc = {
         "schema_version": SCHEMA_VERSION,
         "source": "structured_eastmoney",
@@ -210,6 +251,7 @@ def fetch_structured(code: str, dates: list[str], run_dir: Path, *,
         "secucode": secu,
         "report_dates": dates,
         "fetched_at": fetched_at or datetime.now(UTC).isoformat(),
+        "entry_fetched_at": entry_times,
         "requested": {"report_names": sorted(REPORTS.values()), "secucode": secu,
                       "report_dates": dates},
         "response_sha256": fetched_all,

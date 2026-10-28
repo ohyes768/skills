@@ -1,7 +1,7 @@
 """报告显示值解析：百分号、金额单位及显示精度均参与数值匹配。
 
 数字 token 分型：金额/比率按单位缩放匹配；方向词（下降/亏损）建模符号；
-「个百分点」按比率×100 匹配；年份+期间后缀、页码引用为非财务 token。
+「个百分点」按比率×100 匹配；年份+期间后缀为非财务 token。
 """
 
 import re
@@ -21,10 +21,6 @@ _PERIOD_SUFFIX_RE = re.compile(
     r"\s*(?:年|年上半年|年下半年|上半年|下半年|Q[1-4]|H[1-2]|第[一二三四]季度)", re.IGNORECASE
 )
 _PERCENT_POINT_SUFFIX_RE = re.compile(r"\s*个?\s*(?:百分点|pct|pp)(?![a-z])", re.IGNORECASE)
-_CITATION_RE = re.compile(r"(?:PDF\s*第|p\.)\s*(\d+(?:\s*[-–—、,，]\s*\d+)*)", re.IGNORECASE)
-_RANGE_PAGE_TAIL_RE = re.compile(
-    r"(?:第|p\.\s*)\d+(?:\s*[-–—、,，]\s*\d+)*\s*[-–—、,，]$", re.IGNORECASE
-)
 
 
 def matches_number(match, value: Decimal, display_unit: str | None = None,
@@ -68,25 +64,6 @@ def period_year_suffix(text: str, match) -> bool:
 def percentage_point_suffix(text: str, match) -> bool:
     suffix = text[match.end():match.end() + 8]
     return bool(_PERCENT_POINT_SUFFIX_RE.match(suffix))
-
-
-def in_range_citation(text: str, match) -> bool:
-    """数字位于「第56-57页」类范围页码的非首位置。"""
-    prefix = text[max(0, match.start() - 24):match.start()]
-    return bool(_RANGE_PAGE_TAIL_RE.search(prefix))
-
-
-def extract_cited_pages(text: str) -> set[int]:
-    """提取正文引用页码，范围「第56-57页」展开为区间，顿号列举逐项保留。"""
-    pages: set[int] = set()
-    for match in _CITATION_RE.finditer(text):
-        for part in re.split(r"[、,，]", match.group(1)):
-            nums = [int(n) for n in re.findall(r"\d+", part)]
-            if len(nums) == 2 and 0 < nums[1] - nums[0] <= 200:
-                pages.update(range(nums[0], nums[1] + 1))
-            else:
-                pages.update(nums)
-    return pages
 
 
 def text_contains_value(text: str, value: Decimal, display_unit: str | None = None,

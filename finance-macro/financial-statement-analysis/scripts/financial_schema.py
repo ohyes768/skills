@@ -32,13 +32,10 @@ _FACT_FIELDS = {
     "attribution",
     "period",
     "basis",
-    "evidence_ids",
     "review_status",
     "missing_reason",
 }
-# source 为可选字段（缺省视为 extracted），保证旧产物与既有生成器兼容。
-_SOURCE_VALUES = {"structured", "extracted"}
-_EVIDENCE_ID_RE = re.compile(r"^ev-\d{4,}$")
+_SOURCE_VALUES = {"structured", "derived"}
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # 指标合同：模型只提交规范 metric 名，归属与期间类型由合同固定，不可在输入里改写。
@@ -124,8 +121,7 @@ for _metric, _contract in METRIC_CONTRACTS.items():
 
 
 # 结构化数据源字段映射：metric → (报表 kind, 东财 F10 字段)。字段名以实测响应为准。
-# gross_profit / fx_effect_on_cash 无直接披露字段：前者可在下游做确定性派生，
-# 后者缺失时勾稽按 0 处理（既有语义），均不在此映射。
+# 毛利润由收入减成本派生；预付款、在建工程与汇率影响字段已核对存档 F10 响应。
 STRUCTURED_FIELD_MAP: dict[str, tuple[str, str]] = {
     "revenue": ("income", "TOTAL_OPERATE_INCOME"),
     "cost_of_sales": ("income", "OPERATE_COST"),
@@ -158,8 +154,11 @@ STRUCTURED_FIELD_MAP: dict[str, tuple[str, str]] = {
     "short_term_borrowings": ("balance", "SHORT_LOAN"),
     "long_term_borrowings": ("balance", "LONG_LOAN"),
     "contract_liabilities": ("balance", "CONTRACT_LIAB"),
+    "prepayments": ("balance", "PREPAYMENT"),
+    "construction_in_progress": ("balance", "CIP"),
+    "fx_effect_on_cash": ("cashflow", "RATE_CHANGE_EFFECT"),
 }
-STRUCTURED_UNSUPPORTED = ("gross_profit", "fx_effect_on_cash")
+STRUCTURED_UNSUPPORTED = ("gross_profit",)
 
 
 def metric_aliases() -> dict[str, list[str]]:
@@ -171,7 +170,7 @@ def metric_aliases() -> dict[str, list[str]]:
 
 
 def resolve_metric_label(metric: str | None, raw_label: str | None) -> str | None:
-    """先按提交的 metric 名解析，再退回 PDF 原文标签；都未注册则 None。"""
+    """先按提交的 metric 名解析，再退回原始标签；都未注册则 None。"""
     for candidate in (metric, raw_label):
         if not candidate:
             continue
@@ -201,6 +200,8 @@ def parse_amount(raw_value: str | None, raw_unit: str | None) -> Decimal | None:
     try:
         amount = Decimal(text)
     except InvalidOperation:
+        return None
+    if not amount.is_finite():
         return None
     if negative:
         amount = -amount
@@ -267,32 +268,18 @@ def validate_financials(document: dict) -> list[dict]:
                 errors.append(_error(fact_id, "value", f"expected decimal string, got {type(value).__name__}"))
             else:
                 try:
-                    Decimal(value)
+                    if not Decimal(value).is_finite():
+                        raise InvalidOperation
                 except InvalidOperation:
                     errors.append(_error(fact_id, "value", f"not a decimal string: {value!r}"))
 
-        evidence_ids = fact["evidence_ids"]
-        source = fact.get("source", "extracted")
+        source = fact.get("source")
         if source not in _SOURCE_VALUES:
             errors.append(_error(fact_id, "source", f"illegal value: {source!r}"))
-        if source == "structured":
-            # 结构化事实由程序拉取的披露口径背书，可信度由抽样核对（structured_check）
-            # 把关，不走 PDF evidence 链；抽样发现不一致会转 conflict。
-            if evidence_ids:
-                errors.append(
-                    _error(fact_id, "evidence_ids", "structured fact must not carry evidence_ids")
-                )
-        elif value is not None:
-            if not evidence_ids or not all(
-                isinstance(e, str) and _EVIDENCE_ID_RE.match(e) for e in evidence_ids
-            ):
-                errors.append(
-                    _error(fact_id, "evidence_ids", "non-null value requires valid evidence_ids")
-                )
-        elif evidence_ids and not all(
-            isinstance(e, str) and _EVIDENCE_ID_RE.match(e) for e in evidence_ids
-        ):
-            errors.append(_error(fact_id, "evidence_ids", "invalid evidence id format"))
+        if source == "structured" and not isinstance(fact.get("source_ref"), dict):
+            errors.append(_error(fact_id, "source_ref", "structured fact requires source_ref"))
+        if source == "derived" and (not fact.get("input_fact_ids") or not fact.get("formula")):
+            errors.append(_error(fact_id, "input_fact_ids", "derived fact requires operands and formula"))
 
         missing_reason = fact["missing_reason"]
         if value is None and not missing_reason:

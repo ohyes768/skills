@@ -1,6 +1,7 @@
 """fetch_structured：东财 F10 多期三表拉取、增量缓存与失败路径（离线 mock）。"""
 
 import json
+import re
 
 import fetch_structured
 import httpx
@@ -32,7 +33,8 @@ def ok_handler(request: httpx.Request) -> httpx.Response:
         "RPT_F10_FINANCE_GCASHFLOW": {"NETCASH_OPERATE": -57969741.72, "END_CCE": 105663595.93},
     }
     name = request.url.params.get("reportName")
-    return httpx.Response(200, content=report_payload(**by_name[name]),
+    day = re.search(r"REPORT_DATE='([^']+)'", request.url.params.get("filter")).group(1)
+    return httpx.Response(200, content=report_payload(SECUCODE="301313.SZ", SECURITY_CODE="301313", REPORT_DATE=day, **by_name[name]),
                           headers={"content-type": "application/json"})
 
 
@@ -127,7 +129,7 @@ def test_persistent_failure_recorded_and_archived(run_dir):
 
 def test_empty_responses_recorded_as_no_data(run_dir):
     """接口正常但无数据（未披露/银行保险不在通用表）→ no_data，不是致命错误。"""
-    payload = json.dumps({"result": None}).encode()
+    payload = json.dumps({"result": {"data": []}}).encode()
 
     def empty(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=payload)
@@ -151,7 +153,7 @@ def test_bad_json_retries_then_records_fetch_failed(run_dir):
 def missing_income_handler(request: httpx.Request) -> httpx.Response:
     """income 表正常返回但无数据（如未披露），其余两表正常。"""
     if request.url.params.get("reportName") == "RPT_F10_FINANCE_GINCOME":
-        return httpx.Response(200, content=json.dumps({"result": None}).encode(),
+        return httpx.Response(200, content=json.dumps({"result": {"data": []}}).encode(),
                               headers={"content-type": "application/json"})
     return ok_handler(request)
 
@@ -213,5 +215,21 @@ def test_cli_partial_when_a_report_is_missing(run_dir, capsys, monkeypatch):
 
     assert fetch_structured.main(["--code", "301313", "--dates", "2026-06-30",
                                   "--run-dir", str(run_dir)]) == 0
-    out = json.loads([line for line in capsys.readouterr().out.splitlines() if line.strip()][0])
+    out = json.loads(next(line for line in capsys.readouterr().out.splitlines() if line.strip()))
     assert out["status"] == "partial", "still-missing parts must not be masked as reused"
+
+
+@pytest.mark.parametrize("payload", [[], {"result": None}, {"success": False, "result": {"data": []}}, {"result": {"data": {}}}])
+def test_malformed_or_failed_api_is_not_no_data(run_dir, payload):
+    client = make_client(lambda request: httpx.Response(200, json=payload))
+    doc = fetch_structured.fetch_structured("301313", ["2026-06-30"], run_dir, client=client, max_attempts=1)
+    assert {v["reason"] for v in doc["fetch_failures"].values()} == {"fetch_failed"}
+
+
+@pytest.mark.parametrize("field,value", [("SECUCODE", "000001.SZ"), ("SECURITY_CODE", "000001"), ("REPORT_DATE", "2025-06-30")])
+def test_mislabeled_response_is_rejected(run_dir, field, value):
+    def wrong(request):
+        row = {"SECUCODE": "301313.SZ", "SECURITY_CODE": "301313", "REPORT_DATE": "2026-06-30", field: value}
+        return httpx.Response(200, content=report_payload(**row))
+    with pytest.raises(fetch_structured.FetchStructuredError):
+        fetch_structured.fetch_structured("301313", ["2026-06-30"], run_dir, client=make_client(wrong))

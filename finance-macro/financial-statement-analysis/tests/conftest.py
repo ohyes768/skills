@@ -4,8 +4,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def no_structured_network(request, monkeypatch):
     """离线保证：除 mock HTTP 的单测文件外，fetch_structured 一律拒绝——默认
-    compute 模式（结构化打底）在测试中不得发起真实网络请求，只允许走文件缓存
-    或显式回退。"""
+    compute 在测试中不得发起真实网络请求，只允许使用明确的离线夹具。"""
     if request.module.__name__ == "test_fetch_structured":
         return
     from fetch_structured import FetchStructuredError
@@ -38,7 +37,6 @@ def make_fact():
         aggregation: str = "cumulative",
         basis: str = "as_reported",
         frequency: str = "annual",
-        evidence_ids: list[str] | None = None,
         review_status: str = "verified",
     ) -> dict:
         return {
@@ -60,7 +58,8 @@ def make_fact():
                 "aggregation": aggregation,
             },
             "basis": basis,
-            "evidence_ids": evidence_ids or ["ev-0001"],
+            "source": "structured",
+            "source_ref": {},
             "review_status": review_status,
             "missing_reason": None,
         }

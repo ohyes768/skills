@@ -62,7 +62,7 @@ def test_legal_null_facts_produce_missing_status_without_crashing(make_fact, met
     document = build_core_document(make_fact)
     for fact in document["facts"]:
         if fact["metric"] == metric:
-            fact.update(value=None, raw_value="-", evidence_ids=[], review_status="missing",
+            fact.update(value=None, raw_value="-", review_status="missing",
                         missing_reason="not disclosed")
     assert validate_financials(document) == []
     result = calculate_metrics(document)

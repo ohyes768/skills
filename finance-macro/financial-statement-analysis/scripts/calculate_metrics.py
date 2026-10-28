@@ -39,7 +39,6 @@ def _entry(
         "status": status,
         "formula": formula,
         "input_fact_ids": input_ids,
-        "source_pages": [],
         "reason": reason,
     }
 
@@ -301,8 +300,9 @@ def _cash_reconciliation(facts: FactSelection) -> dict:
         fx = Decimal(fx_pick["value"])
         input_ids.append(fx_pick["fact_id"])
     else:
-        fx = ZERO
-        issues.append("fx_effect_on_cash not disclosed; treated as 0")
+        entry["status"] = "insufficient_data"
+        entry["issues"] = ["fx_effect_on_cash not disclosed; cannot reconcile cash"]
+        return entry
 
     expected = Decimal(opening["value"]) + flows["cfo"] + flows["cfi"] + flows["cff"] + fx
     mismatch = facts.measurement_error(input_ids)
@@ -566,22 +566,6 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(1)
 
     result = calculate_metrics(document)
-
-    manifest_path = run_dir / "extraction_manifest.json"
-    if manifest_path.exists():
-        evidences = {
-            e["evidence_id"]: e["pdf_pages"]
-            for e in read_json(manifest_path).get("evidences", [])
-        }
-        fact_evidence = {
-            f["fact_id"]: f.get("evidence_ids", []) for f in document.get("facts", [])
-        }
-        for metric in result["metrics"]:
-            pages: set[int] = set()
-            for fact_id in metric["input_fact_ids"]:
-                for ev in fact_evidence.get(fact_id, []):
-                    pages.update(evidences.get(ev, []))
-            metric["source_pages"] = sorted(pages)
 
     write_json(run_dir / "metrics.json", result)
     write_json(run_dir / "validation.json", {"schema_version": 1, "checks": result["validation"]})

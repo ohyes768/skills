@@ -46,7 +46,8 @@ def make_fact(**overrides) -> dict:
             "aggregation": "cumulative",
         },
         "basis": "as_reported",
-        "evidence_ids": ["ev-0001"],
+        "source": "structured",
+        "source_ref": {},
         "review_status": "verified",
         "missing_reason": None,
     }
@@ -55,7 +56,7 @@ def make_fact(**overrides) -> dict:
 
 
 def make_document(facts: list[dict]) -> dict:
-    return {"schema_version": 1, "document_sha256": "abc", "facts": facts}
+    return {"schema_version": 1, "source_sha256": "abc", "facts": facts}
 
 
 def test_valid_document_passes():
@@ -63,13 +64,13 @@ def test_valid_document_passes():
 
 
 def test_null_value_requires_missing_reason():
-    fact = make_fact(value=None, raw_value="—", evidence_ids=[], missing_reason=None)
+    fact = make_fact(value=None, raw_value="—", missing_reason=None)
     errors = validate_financials(make_document([fact]))
     assert any(e["field"] == "missing_reason" for e in errors)
 
 
 def test_missing_reason_for_missing_fact():
-    fact = make_fact(value=None, raw_value="—", evidence_ids=[], missing_reason="not disclosed")
+    fact = make_fact(value=None, raw_value="—", missing_reason="not disclosed")
     assert validate_financials(make_document([fact])) == []
 
 
@@ -79,10 +80,10 @@ def test_value_fact_must_not_have_missing_reason():
     assert any(e["field"] == "missing_reason" for e in errors)
 
 
-def test_value_requires_evidence_ids():
-    fact = make_fact(evidence_ids=[])
+def test_value_requires_source_ref():
+    fact = make_fact(source_ref=None)
     errors = validate_financials(make_document([fact]))
-    assert any(e["field"] == "evidence_ids" for e in errors)
+    assert any(e["field"] == "source_ref" for e in errors)
 
 
 def test_float_value_rejected():
@@ -122,10 +123,9 @@ def test_illegal_review_status_rejected():
     assert any(e["field"] == "review_status" for e in errors)
 
 
-def test_bad_evidence_id_format_rejected():
-    fact = make_fact(evidence_ids=["page nine"])
-    errors = validate_financials(make_document([fact]))
-    assert any(e["field"] == "evidence_ids" for e in errors)
+def test_unknown_source_rejected():
+    errors = validate_financials(make_document([make_fact(source="unknown")]))
+    assert any(e["field"] == "source" for e in errors)
 
 
 def test_duplicate_fact_id_rejected():

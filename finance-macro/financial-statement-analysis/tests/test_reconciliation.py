@@ -13,7 +13,7 @@ def build_cash_document(make_fact, closing="107") -> dict:
         make_fact("f-c05", "cff", "-5"),
         make_fact("f-c06", "fx_effect_on_cash", "2"),
     ]
-    return {"schema_version": 1, "document_sha256": "x", "facts": facts}
+    return {"schema_version": 1, "source_sha256": "x", "facts": facts}
 
 
 def cash_check(result: dict) -> dict:
@@ -54,3 +54,11 @@ def test_tolerance_follows_input_precision(make_fact):
     check = cash_check(result)
     assert check["status"] == "passed"
     assert Decimal(check["tolerance"]) == Decimal("0.005")
+
+
+def test_missing_fx_adjustment_is_not_assumed_zero(make_fact):
+    doc = build_cash_document(make_fact, closing="105")
+    doc["facts"] = [f for f in doc["facts"] if f["metric"] != "fx_effect_on_cash"]
+    check = cash_check(calculate_metrics(doc))
+    assert check["status"] != "passed"
+    assert check["residual"] is None

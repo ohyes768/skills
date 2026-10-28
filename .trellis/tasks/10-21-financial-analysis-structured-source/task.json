@@ -1,8 +1,8 @@
 {
   "id": "financial-analysis-structured-source",
   "name": "financial-analysis-structured-source",
-  "title": "财报 Skill 结构化数据源接入：东财 F10 双源核对",
-  "description": "以程序拉取的东财 F10 三表结构化数据为底，PDF 原文降级为验证与页码引用来源；LLM 职责从抽数缩减为抽查验证与分析判断，校验免疫系统全量保留。",
+  "title": "财报 Skill：统一 F10 数据源并移除旧取数链路",
+  "description": "按股票代码与报告期获取东财合并三表，保留可追溯事实、指标、报告及独立校验。",
   "status": "implementing",
   "dev_type": "backend",
   "scope": "financial-statement-analysis",
@@ -21,14 +21,13 @@
   "children": [],
   "parent": null,
   "relatedFiles": [
-    ".trellis/tasks/10-21-financial-analysis-structured-source/prd.md",
-    ".trellis/tasks/10-21-financial-analysis-structured-source/design.md",
-    ".trellis/tasks/10-21-financial-analysis-structured-source/implement.md",
-    ".trellis/tasks/10-21-financial-analysis-structured-source/research/structured-source-evidence.md",
-    "finance-macro/financial-statement-analysis/scripts/fetch_pdf.py",
+    "finance-macro/financial-statement-analysis/SKILL.md",
+    "finance-macro/financial-statement-analysis/scripts/run_pipeline.py",
+    "finance-macro/financial-statement-analysis/scripts/fetch_structured.py",
     "finance-macro/financial-statement-analysis/scripts/build_financials.py",
-    "finance-macro/financial-statement-analysis/scripts/financial_schema.py"
+    "finance-macro/financial-statement-analysis/scripts/source_provenance.py",
+    ".trellis/spec/backend/financial-statement-analysis.md"
   ],
-  "notes": "2026-10-21 P0-P3 实现完成 + P4 自动化验证通过：fetch_structured.py（多期拉取/增量缓存/Decimal 解析）；fact 合同加可选 source 字段；STRUCTURED_FIELD_MAP 31 指标映射；build_financials_structured 双源分支与抽样核对（verified/conflict/unchecked，冲突转 review_status=conflict 且阻断 verified）；run_pipeline compute --structured 含自动拉取失败回退；validate_report 由 structured_check.json 背书 structured facts。补回被 1c6996f 覆盖的 frequency 归一化修复及回归测试。290 例 pytest、Ruff、元数据校验全过；真实网络冒烟 301313 三期拉取成功且与 PDF 数值一致。A7 性能对比需真实 Hermes 环境，留待。未提交。",
+  "notes": "2026-10-28 用户明确要求单一 F10 来源。已完成代码/期间入口、字段来源链、来源及计算篡改检查、报告引用与独立复算；移除旧下载/提取/抽查/回退、资源和依赖。127 项 skill 测试及 Ruff 通过；真实 002093 2026H1 F10 prepare/compute 通过；独立评审通过。本轮按用户要求提交并推送；未部署到 NAS/Hermes。",
   "meta": {}
 }
