@@ -64,3 +64,19 @@ material bank/asset-management segments; no averaged solvency or bank proxies.
 Separate missing evidence from real weakness, research bands from legal minima,
 and NBV/CSM business value from regulatory capital. Reuse PDF cache and budgets.
 Plan and execute locally; no commit/push/deployment or published company rating.
+
+## Follow-up v3.5 (2026-10-28): fast, simple execution
+
+User requested removal of the PDF route to reduce runtime complexity. Keep stock
+JSON, sector scoring and nullable output; source additional facts from existing
+structured data or readable official web content. Remove PDF tools/dependencies,
+not sector evidence requirements. No automatic commit/push or remote deployment.
+Acceptance: no PDF tool calls/imports remain; dependency metadata is empty;
+remaining scoring, research and finalization tests work without site-packages.
+
+## Follow-up v3.5.1: whole-skill review and source presentation
+
+User invoked skill-creator to review/optimize the entire skill and clarify final
+sources. Preserve PDF removal, scoring and exact nullable ten-field output. Make
+sources traceable within report_md without extra searches, forced counts or dates.
+Remove duplicated execution instructions and isolate mechanical E explanation.

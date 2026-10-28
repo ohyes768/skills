@@ -21,7 +21,7 @@ python3 <skill目录>/scripts/research_state.py init --state <工作目录>/rese
 只保存渠道 ID 和故障状态，不保存密钥或整篇网页。
 
 状态绑定原始 stock 的身份及内容。重复 init 保留计数、证据和停用渠道，不能换配置重置。
-续跑使用同一文件；不能删除状态、改计数或另建目录绕过本轮预算。原文复用 PDF 缓存。
+续跑使用同一文件；不能删除状态、改计数或另建目录绕过本轮预算。复用已读取的网页正文和紧凑证据，不重复抓取；不启用 PDF 下载/解析。
 
 ## 一轮：具体问题 → 宿主工具 → 结果回执
 
@@ -70,7 +70,7 @@ evidence 是以下对象的数组（虚构格式例子）：
 ```json
 {
   "topic": "main_business", "statement": "已读原文确认的主营构成，附适用范围与限制",
-  "url": "https://example.com/annual.pdf", "locator": "PDF p12，主营构成表", "period": "2025年度"
+  "url": "https://example.com/annual-results", "locator": "主营构成栏目，收入构成表", "period": "2025年度"
 }
 ```
 

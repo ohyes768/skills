@@ -57,3 +57,18 @@ checks stock identity, terminal state, and null for gap dimensions without addin
 final output fields or changing legacy unflagged signatures. State CLI rejects
 corrupt files and cannot clear budgets with init. Note the boundary: an agent or
 host bypassing the CLI is not physically intercepted by these local tools.
+
+## Current follow-up: v3.5 / v3.5.1 supersedes PDF design above
+
+No PDF input/downloader/parser/cache/candidate path remains. Reuse host-readable
+web evidence and existing sourced structured data. All runtime scripts use the
+standard library. Sector evidence requirements remain unchanged.
+
+Source display: report_md inline [S1] markers and one final table mapping actual
+read pages to dates/periods, locators and supported facts. Caller input is [I1]
+without invented URL; no extra JSON fields. Unknown page dates are explicitly
+unknown, not replaced by access dates; sector published_at still mandatory.
+Move the explanatory enterprise rubric next to financial command documentation;
+keep executable scoring unchanged. Standalone sector validate is diagnostic,
+not a normal extra step. Ordinary-company external-conflict compatibility mode
+cannot be used with a sector sidecar. Keep semantic source checks advisory.

@@ -32,8 +32,8 @@ def metric(value, unit="pct", basis="period"):
         "value": value,
         "unit": unit,
         "basis": basis,
-        "source_url": "https://insurer.example/annual.pdf",
-        "locator": "PDF p.10, current period, stated scope",
+        "source_url": "https://insurer.example/annual-results",
+        "locator": "Financial indicators table, current period, stated scope",
     }
 
 
@@ -43,8 +43,8 @@ def assessment(status="supported", period="2026-06-30"):
         "statement": "Relevant source documents liability matching and reserve evidence for this entity, including stress analysis.",
         "period_end": period,
         "published_at": "2026-08-25",
-        "source_url": "https://insurer.example/annual.pdf",
-        "locator": "PDF p.20, matching and reserves table",
+        "source_url": "https://insurer.example/annual-results",
+        "locator": "Asset liability section, matching and reserves table",
     }
 
 
@@ -66,8 +66,8 @@ def entity(kind="life", id_="life"):
             "value": "AA",
             "period_end": "2026-03-31",
             "published_at": "2026-05-25",
-            "source_url": "https://insurer.example/solvency.pdf",
-            "locator": "PDF p.3, risk comprehensive rating",
+            "source_url": "https://insurer.example/solvency",
+            "locator": "Solvency section, risk comprehensive rating",
         },
         "annuals": [],
         "assessments": {"asset_liability": assessment(), "reserves": assessment()},

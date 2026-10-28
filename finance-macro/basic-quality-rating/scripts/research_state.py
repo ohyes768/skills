@@ -146,7 +146,7 @@ def _evidence(dimension, dim, facts):
         if fact not in dim["evidence"]:
             dim["evidence"].append(fact)
     if len(dim["evidence"]) > 12:
-        raise ValueError("本维度最多保留 12 条紧凑事实；原文保存在 PDF 缓存")
+        raise ValueError("本维度最多保留 12 条紧凑事实；复用已读取的网页原文，不重复抓取")
 
 
 def _summary(state, dimension=None):

@@ -1,11 +1,11 @@
 # 固定工具用法
 
 以下 `<skill目录>` 是当前 skill 的实际目录；运行数据放在宿主指定的工作目录，不放源码目录。
-财务计算、算分与校验只需 Python 3 标准库。PDF 依赖在安装时准备，见 [安装与兼容迁移](setup-and-migration.md)。
+全部脚本只需 Python 3 标准库，无需下载或解析 PDF，也不依赖其他 skill。维护说明见 [安装与兼容迁移](setup-and-migration.md)。
 
 A-D 取证开工先按 [有预算的取证与失败换路](research-control.md) 初始化 research.json，保存渠道故障、当前缺口、紧凑证据与轮次；已查清就复用，缺证则以 null 收口。
 
-## 1. 财务 E：企业原始输入与银行证据包
+## 1. 财务 E：企业原始输入与银行/保险证据包
 
 ```text
 python3 <skill目录>/scripts/rating_math.py financial --input <工作目录>/stock.json
@@ -32,61 +32,52 @@ ROE 历史取 roe_year 及前两年；同年相同值可去重，同年冲突、
 行业缺失、不支持或两级冲突时未评分，不从公司名字猜。银行和保险使用下述各自独立证据包；其他非银金融仍返回 null，保留子行业缺口说明。
 完整支持的行业集合与标签解析由 `financial_score.py` 维护；脚本返回具体问题，无需为常规运行读取源码。
 
-五维确定后继续用主 skill 的 calculate/finalize。正常 finalize 加 `--stock stock.json --check-financial --research-state research.json`，
+五维确定后继续用主 skill 的 calculate/finalize。来源编号及报告末尾来源表按主 skill“来源输出”执行。正常 finalize 加 `--stock stock.json --check-financial --research-state research.json`，
 能拦截手抄 E 分数错误。若有已披露的外部口径冲突，只能按主 skill 的受限兼容入口交付，不能偷偷替换输入数字。
+
+### 普通企业 E 规则（解释脚本结果时查阅）
+
+先检查可评分性：roe_avg_3y、debt_asset_ratio、年度扣非同比、最近两季单季扣非同比、最近三年连续有效的 roe_history 及对应期间必须足以核对。任一必需数据缺失、无效、年份不连续/同年冲突，或关键口径冲突未解，E 记 null；不得用默认基础分、缺失封顶或单年 ROE 代替。已知弱项仍写入风险，但不因缺失数据制造低分。非计分背景指标缺失不阻止评分。
+
+此段规则由 `rating_math.py financial` 自动执行，不能临时写另一套计算。年度扣非与 ROE 年份须对齐，ROE 历史窗口以 roe_year 为锚；单季标签须明确且两季相邻，不能把半年报/前三季累计当作单季。支持的行业、报告期写法见本节前文，具体失败原因由脚本返回。若发现会影响定分的外部口径冲突，披露并按 null 收口；不要改原始输入来迎合脚本。
+
+数据满足条件后，按以下顺序计算，覆盖规则只取更低分，不能同时匹配多个档位后自由选分。报告逐项列出输入数值、期间、等级与降档原因。
+
+1. **ROE 基础分**：用 roe_avg_3y。≥15 → 5；[12,15) → 4；[8,12) → 3；[5,8) → 2；<5 → 1。不自行计算三年均值或换用单年值。
+2. **负债等级**：普通行业 ≤40 为优，(40,60] 为良，(60,75] 为中，>75 为差。公用事业/交通运输阈值依次为 ≤55、(55,70]、(70,80]、>80。行业无法确认时 E 记 null，避免错套阈值。负债率良或中封顶 4，差封顶 2。
+3. **盈利等级**：年度扣非同比及最近两季单季同比三项均 >0 为优；数据齐全、两季均 ≥0 且存在 ≤0 项为良；恰有一季 <0 为中；连续两季 <0 为弱。依次封顶 5/4/3/2。
+4. **ROE 趋势**：roe_history 按年升序，忽略 null 后核查最近三年连续有效值。最近三年连续两次下降封顶 2；只有最近一年下降封顶 4；其余趋势（含先降后升）不扣。不能跳过最近年份的缺口，改用更早的三年窗口声称当前趋势。
+5. **严重弱项优先**：基础 ROE <5 直接为 1。ROE 弱（基础分 ≤2）、负债差、盈利弱、连续两次 ROE 下降这四类中有两类及以上，最终为 1；其余取基础分与各项上限的最小值。这些降分仅由已核实经营弱项触发。
+
+毛利率用于解释商业模式，不抵消负债或盈利弱项，也不因低毛利率惩罚高周转公司。三年 CAGR、年度利润额与分红比例作为风险补充，不替代上述指标。
 
 ### 银行分支
 
-先读 [银行证据与评分](bank-financial.md)。官方披露候选定位、证据包模板/校验只需使用固定工具，
+先读 [银行证据与评分](bank-financial.md)。用已有数据和可读官方网页补齐证据包，模板/校验使用固定工具，
 不修改 stock.json。银行补数明确传 --bank-data；不带时 E 为 insufficient_data，而非认定银行不适用评级。
 
 ```text
 python3 <skill目录>/scripts/bank_financial.py template --stock stock.json --as-of 2026-10-27
-python3 <skill目录>/scripts/bank_evidence.py --document-dir <document_dir> --max-chars 6000
-python3 <skill目录>/scripts/bank_financial.py validate --stock stock.json --input bank-data.json
 python3 <skill目录>/scripts/rating_math.py financial --input stock.json --bank-data bank-data.json
 ```
 
-模板 stdout 保存为 bank-data.json，填入已确认的官方数据。候选数字不自动入分，表格多年份、
+financial 内已校验数据包，不额外先跑 validate；独立 validate 子命令留给修包诊断。
+模板 stdout 保存为 bank-data.json，填入已确认的官方数据。核对数值后才入分，表格多年份、
 累计/年化、集团/母行须核对。银行四类规则及三年窗口、资本适用要求和辅助指标见银行参考。
 正常银行 finalize 和只读 validator 均加 --bank-data bank-data.json --stock stock.json --check-financial；
 research.json 先 init --bank-research，E 也须结案。研究分档未实证校准，报告不得称为监管评级。
 
-## 2. PDF：准备一次，搜索和读页复用
+## 2. 保险分支与取证来源
 
-保险先读 [保险证据与评分](insurance-financial.md)：用 insurance_financial.py template/validate
-及 insurance_evidence.py 候选定位，计算/交付加 --insurance-data insurance-data.json。
-集团/法人分开，金额与百分比单位显式校验；E 账本先 init --insurance-research。
-保险不套银行数据包，二者不能同时提供。上述银行命令和普通企业命令保持兼容。
+保险先读 [保险证据与评分](insurance-financial.md)，使用 insurance_financial.py template，
+计算/交付加 --insurance-data insurance-data.json。集团/法人分开，金额与百分比单位显式校验；
+E 账本先 init --insurance-research。保险不套银行数据包，二者不能同时提供。
 
-运行环境安装好后，用宿主已有 Python；也可用 `uv run --no-sync --project <skill目录> python ...` 调用已准备的环境。
-
-```text
-python3 <skill目录>/scripts/pdf_evidence.py prepare --url <原始PDF链接> --cache-dir <缓存目录>
-```
-
-返回 `document_dir`、来源 URL/哈希、页数、自动识别的公司/期间与 warnings；不输出全文。
-每个 URL 对应独立目录，缓存以 PDF、来源记录、文档元数据和页索引的哈希绑定。
-相同 URL 缓存命中不下载、不重新解析；URL 内容更新需显式 `--refresh`，刷新失败保留原缓存。
-缓存命中不代表远程来源没有更新：定期复评应先判断是否需要新公告/新 URL 或 refresh。
-
-```text
-python3 <skill目录>/scripts/pdf_evidence.py search --document-dir <上一步document_dir> --query 主营业务 --query 公司治理
-python3 <skill目录>/scripts/pdf_evidence.py read --document-dir <document_dir> --pages 12,20-22 --max-chars 6000
-```
-
-`search` 为逐页字面匹配，不是语义判断，每页每个 query 返回首个命中附近的短片段。
-`match_count` 是命中的“页面/query”数，不是所有出现次数；需要上下文时用 read 读取相关页。
-可重复传最多 16 个 query，每个不超过 256 字符。PDF 换行/空格可能影响命中，可用较短关键词定位。
-
-返回 `items` 中的 `page` 是 **PDF 文件 1 起算页码**，不是印刷页码；`printed_page` 仅作辅助。
-共享的 `source` 包含 requested_url/final_url/sha256。引用时保留来源、PDF 页码与期间，不把不同公司、年度、合并/母公司表混用。
-扫描页或文字提取不足会明确警告：未做 OCR，也不能据此认定资料不存在。
-
-每包正文默认 ≤6000 字符，上限 12000；read 一次最多选 100 页。
-`next_cursor` 非 null 时，以相同 document_dir 和选择条件追加 `--cursor <游标>` 续读。
-游标绑定来源、索引与查询条件；源文件刷新后旧游标失效。搜索/读取不调用网络或 PDF 解析器。
-缓存损坏时返回错误，按原 URL 使用 prepare --refresh 重建，不手改索引哈希。
+优先复用可核对出处的已有结构化数据。A-D 按主 skill 的来源层级选可读网页；银行/保险专用指标仍用官方披露。
+每项保留来源链接、网页栏目/表格/行列、期间、主体与单位；原网页缺值不能从摘要猜数。
+不下载或解析 PDF，不装解析依赖，不调用其他 skill 补做 PDF 流程。
+只有 PDF 来源或网页不可读时，在同一取证预算内换可读且符合对应维度来源要求的材料；核心缺口仍无法补齐则 null。
+已有来源链接可以保留为线索，但只有实际读到的内容才能作为已核实证据。
 
 ## 3. 只读校验已有结果
 

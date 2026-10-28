@@ -90,3 +90,39 @@
   locator evidence from synthetic complete-group score.
 - No complete current Ping An rating, empirical calibration, live-model factual
   accuracy, consumer deployment, commit/push or NAS synchronization is claimed.
+
+## v3.5 PDF route removal (2026-10-28)
+
+- Removed four PDF/cache/candidate scripts and three dedicated suites. No active
+  references to their commands/imports remain. Kept historical sourced numeric
+  fixtures; they require no PDF parsing and still exercise missing-data safety.
+- Regenerated uv.lock offline using the existing Python and workspace-local cache;
+  only the project remains, with empty dependencies. Default uv cache was not
+  writable, so no package installation or environment repair was attempted.
+- python -S -X utf8 -m unittest discover -s tests/basic-quality-rating -q:
+  124 tests passed without site-packages. Synthetic bank and insurance fixtures
+  use webpage URLs/table locators through checked scoring/finalization.
+- Ruff lint and format, skill metadata validation, git diff --check passed.
+- No measured live speedup or current live insurer rating is claimed. Missing
+  readable official facts can still yield null. No commit/push, installed-copy
+  update, sibling financial-statement-analysis edit or NAS deployment performed.
+
+## v3.5.1 whole-skill/source review (2026-10-28)
+
+- Independent read-only review found date ambiguity, missing claim/source mapping,
+  an overbroad financial-conflict exception, redundant sector validate calls and
+  inconsistent A-D source fallback wording. All five were corrected.
+- Entrypoint reduced from 258 to 227 lines relative to HEAD, retaining the scoring
+  standards and nullable contract. Enterprise mechanical explanation moved once
+  into references/tools.md; output example boilerplate and repeated setup removed.
+- Independent forward scenario: undated official product page + dated interim
+  report + unread governance-remediation snippet + caller financial inputs.
+  Correctly kept management null and all derived values null, distinguished
+  publication/access/period dates, cited only read sources, kept caller input
+  separate, and reused closed evidence without additional searches/validators.
+  This was a synthetic instruction-following check, not a live stock rating or
+  source-authenticity test; unavailable full evidence was not invented.
+- 124 tests passed with python -S; Ruff lint/format, skill metadata, local Markdown
+  reference resolution, offline lock consistency and git diff --check passed.
+  The citation reminder remains advisory; no source-truth validator was added.
+- No commit/push, deployed-skill synchronization or application changes performed.
