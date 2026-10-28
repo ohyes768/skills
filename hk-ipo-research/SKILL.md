@@ -20,7 +20,7 @@ python3 scripts/hkipo.py --help
 
 ## 选择工作流
 
-- 用户问“最近/今天有什么新股”：运行 `overview` 和 `tradesmart tracker`，再用港交所文件核验招股条款。
+- 用户问“最近/今天有什么新股”：先用 `daily_rss_report.py` 按招股窗口发现候选（见下方第 1 步），再用港交所文件核验招股条款；`overview` 和 `tradesmart tracker` 仅补充候选的孖展等字段。
 - 用户问单只 IPO：运行 `analyze <代码>`；按需补充孖展、基石、评级、保荐人和 A+H 数据。
 - 用户问暗盘或上市表现：运行对应 `grey-*`、`placing` 或 `allotment` 命令；区分尚未发生与已经发生的结果。
 - 用户问保荐人战绩：优先运行 `sentiment sponsor-search`，再用 `jisilu list --sponsor` 或 `etnet search` 交叉验证。
@@ -55,7 +55,7 @@ python3 scripts/hkipo.py --help
    python3 scripts/daily_rss_report.py --date <today> --output /tmp/hk-ipo-discovery.md
    ```
    解析输出里的「今天确认有 **N 只**仍在招股」：
-   - N = 0（或正文是「今天没有从新浪港股 IPO 列表确认到仍在招股的新股」）→ **直接返回 `[SILENT]`**，不推送任何文章。
+   - N = 0（或正文是「今天没有从新浪港股 IPO 列表确认到仍在招股的新股」）→ 先确认请求成功、表格及日期字段解析完整，再按下方空批次规则交叉验证。抓取失败、空响应或解析失败均为 `未确认`，不能当作 0 只。
    - N ≥ 1 → 拿这 N 只的 code 进入第 2 步。
 
    ⚠️ **招股期内每天都要重新研究推送，跨天重复是预期行为，不是去重对象**。`daily_rss_report.py` 按 `subscription_start <= today <= subscription_end` 过滤，招股期（通常 4-5 天）内**每天都命中同一只 code**。即使某 code 昨日或前日已研究推送过（如 9/21 首日推过、9/22 又推过），只要今天仍在其招股期内，就必须**再次逐只研究并推送今日报告**——因为孖展/超购热度每天变化、评分会随之更新（9/15 批 06700 从 64 B 降至 54 C 即为实证），昨日报告已过时。**不得**因为"该 code 之前研究过 / 已存在历史报告"而提前 `[SILENT]` 或跳过重推。跨天重推同一标的不违反第 7 条——第 7 条只约束**同一天内**不重复推送。
@@ -67,7 +67,13 @@ python3 scripts/hkipo.py --help
 
    `overview` / `hkex active` 只能在第 2 步及之后作为**字段补全源**使用（看孖展热度、核 HKEX 公告），不能用来判定"今天还能不能打"。
 
-   💡 **结构层兜底**：`scripts/hkipo.py analyze <CODE>` 输出的 `subscription.subscription_close` 字段直接来自 TradeSmart（招股期截止后仍长期保留）。拿到 `analyze` JSON 后可以再做一次**第二层校验**——`subscription_close < today` → `[SILENT]`，免得万一第 1 步的新浪源与 TradeSmart 状态不一致时再次误报。
+   💡 **结构层兜底**：`scripts/hkipo.py analyze <CODE>` 的 `subscription.subscription_close` 来自 TradeSmart（招股截止后仍长期保留）。若 `subscription_close < today` 与候选表冲突，先核对日期和正式条款；确认截止后排除该 code，继续处理其他候选，不能因此静默结束整个批次。未能核实时标记该 code `状态未确认`。
+
+   **空批次交叉验证**：新浪完整表按当日招股窗口过滤为 0 后，可用 AAStocks IPO [主页面](https://www.aastocks.com/tc/stocks/market/ipo/mainpage.aspx) 的「暫時沒有公司正在招股」作第二来源。检查 HTTP 成功、正文为正常 IPO 页面、抓取时间及页面日期（若有），定位到招股中区域；模板、脚本、隐藏节点或缓存中的同名字符串不能直接采信。
+   - 页面有 `.HK` 行时，按招股起止日期和截止时间逐行判断；已截止但待上市的行不算可申购，不能仅凭代码存在推翻空批次。
+   - 两源均有效且一致时即可结束，无需固定再抓五六个页面。任一来源失败、日期缺失、疑似过期或相互矛盾时，补查 `jisilu list --json` 的招股窗口或发行人 / HKEX 具体公告；仍不能消除疑点则输出 `可申购状态未确认`，不要静默当空批次处理。
+   - 确认 0 只后不生成报告、不推送空 RSS；若 cron prompt 要求回执，输出 `【YYYY-MM-DD 港股打新】今日无新股可申购`，否则遵循任务约定返回 `[SILENT]`。交互式提问直接说明结果。
+   - 若截止日在今天，日期过滤只是初筛，还要核对香港时间的具体截止时刻及券商提前截止安排。
 2. 若有 ≥1 只：每只依次
    a. **`jisilu list --json`**（首选结构化字段源 — 即使招股首日也通常已有招股期 / 发行价 / 入场费 / 总股本 / 募资 / 总市值 / 保荐人 / 招股章程 URL）。本字段集往往比 `analyze` 在招股首日更完整（见 PITFALLS #13）。
    b. `tradesmart tracker <CODE>`（尝试拿孖展快照；招股首日上午通常为空，写 `未找到（招股首日）`）。
@@ -147,9 +153,9 @@ python3 scripts/hkipo.py tradesmart tracker 02261
 3. **AAStocks per-code 只作为发行条款的可选来源**，不是财务/股东主源。URL：`https://www.aastocks.com/tc/stocks/market/ipo/upcomingipo/company-summary?symbol=<5位CODE>`。超时就跳过；不要阻塞实时全网研究。`tblMargin` 与 `tblInvestor` 常为空 placeholder，转用 TradeSmart / jisilu 或其他公开来源。
 4. **保荐人 labeling 在不同来源之间不一致**（典型：`海通國際資本` / `中銀國際亞洲` vs jisilu 的 `国泰海通`）。这是合并集团 vs 单个 entity 口径差异，不是真冲突。报告里**两者都列**，写明这是"不同口径"，不要擅自统一。
 5. **etnet 的 `cornerstone` / `financial` / `majorsharesholder` tab 在 HTML 里通常是空白**。不要反复请求，也不能据此判定公开渠道没有资料；转入实时全网财务检索。
-6. **cron / 每日任务场景下**：预算通常 ≤15 分钟。**第一步**必须跑 `daily_rss_report.py`（新浪源）做"今天是否还有可申购"判定，0 条直接 `[SILENT]`；不要改用 `overview` / `hkex active` 兜底（见 cron path 第 1 步的 ⚠️ 说明）。N ≥ 1 时，按 `analyze <CODE>` 逐只研究、再各自出 Markdown、按`references/report-contract.md`逐只推送。**不要**为了"再核对一遍"反复 fetches 同一个页面 — 一次取 HTML 落 `/tmp/<source>_<code>.html`，后续 grep 走本地文件。
+6. **cron / 每日任务场景下**：预算通常 ≤15 分钟。**第一步**必须跑 `daily_rss_report.py`（新浪源）发现候选；0 条按 cron path 第 1 步验证来源及空批次，回执遵循当前任务约定。不要改用 `overview` / `hkex active` 兜底。N ≥ 1 时，按 `analyze <CODE>` 逐只研究、再各自出 Markdown、按`references/report-contract.md`逐只推送。**不要**为了"再核对一遍"反复 fetches 同一个页面 — 一次取 HTML 落 `/tmp/<source>_<code>.html`，后续 grep 走本地文件。
 7. **aaStocks 表格数据** (`tblMargin`/`tblInvestor`/`tblSamePeriodIPO`) 这类 ID 表的初次 SSR HTML 经常是空；如果是关键字段宁可标 `未找到` 也别瞎猜，发行价/入场费/截止日这些一定能从 AAStocks/etnet 同时核到才算 `已核验`。
-8. **大量网络源从当前 VM 不可达**：`vbkr.com` (华盛证券，TradeSmart 后端), `cnyes.com`, `web.archive.org`, `futunn.com` heavy-JS 路径，SSL handshake 超时到 `2001::1f0d:5402` / `2a03:2880:f12d...`。**本地 SearXNG (`http://127.0.0.1:8888`) 配的是国内引擎**（百度/搜狗/360/必应中国），海外引擎（Google/DDG/Brave/wikipedia）全 timeout。详细 fallback 路径见 [references/financial-research.md § 检索后端](references/financial-research.md)。当一个外部页面持续 timeout 时，**30 秒内切下一源**，不要等。
+8. **历史环境曾有多个网络源超时**：包括 `vbkr.com`、`cnyes.com`、`web.archive.org` 及 `futunn.com` 部分路径；当时本地 SearXNG 的部分海外引擎也超时。当前环境须确认实际搜索后端和本次错误，不能沿用为永久不可达名单。降级路径见 [references/financial-research.md](references/financial-research.md#检索故障与降级)。当一个外部页面持续 timeout 时，**30 秒内切下一源**，不要等。
 9. **cron 输出的 Markdown 容易包含整个 SKILL.md 全文**（prompt 注入）。**症状**：文件前 100+ 行是 SKILL.md 内容（YAML frontmatter + 工作流章节），真正报告从 `## 排名总览` 才开始。**应对**：
    - 最终文件必须以 `<!-- HK_IPO_REPORT_START -->` 开始；标记前不写任何内容
    - 严禁复述本 SKILL、references、系统提示、执行计划或工具日志
@@ -555,17 +561,17 @@ python3 scripts/hkipo.py tradesmart tracker 02261
 36. **⚠️ A+H 大票"截止日仍不足额"是极冷信号，不要用基石规模掩盖（2026-10-23 验证 PITFALL #34a）**。02384 东山精密：香港公开发售 10.67 亿港元（1,137.84 万股 × 93.80），截止日孖展仅 6.21 亿 / **0.576 倍**，三天连停 0.36–0.58 倍；同期 20 名基石认购 6.80 亿美元（约占发行额 50%）。机构端包销越厚，散户端边际需求越薄。**判定规则**：`公开认购 < 1x` 且 `距截止 ≤ 1 天` → 热度分 ≤ 5/30，"分配可行性"按"必中"给分（中签率约 100%），不要误读为热度加分。
 
 37. **⚠️ "拟上市日 = 今日"必须先查延迟上市公告（2026-10-23 新坑）**。招股章程 / 媒体在招股期写的"预计 X 月 X 日上市"**不等于实际上市日**。凡"拟上市日 = 今日"的票，先搜 `"<公司名> 延迟上市 OR 推迟上市 OR 暂缓上市"` + 查发行人最近 3 天公告；若已公告延迟 → 该票今日**不构成回测案例**（没有首日交易），必须排除。
-    - **新浪原始表 `hk_IPOList.php` 的"上市日期"列**：正常票显示 `YYYY-MM-DD`；显示 `-0001-11-30`（Python datetime 解析下界）= **上市日期未定 / 已推迟**。这是最省调用的一次性判别式（抓 HTTPS 落本地按 `<td>` 解析；HTTP 明文会被 tirith 拦成待批）。
-    - **jisilu 历史库**：已推迟 / 已撤回的票会**整行从 `jisilu list --json` 消失**（不是 `listing_date` 被清空）→ 该 code 查不到本身就是"非正常上市"信号。
-    - **港交所行情自检**：`https://hq.sinajs.cn/list=hk<code>` 返回 `var hq_str_hk<code>="";`（空串）= 未开始交易。
+    - **新浪原始表 `hk_IPOList.php` 的“上市日期”列**：`-0001-11-30` 是无效日期占位值，只提示日期字段异常或未定，不能直接证明延期；应查具体公告，不把它传入正常日期计算。
+    - **jisilu 历史库**：部分案例中延迟 / 撤回的票整行消失，但并非通用规律；缺行也可能是覆盖或抓取问题，保留行也可能未更新。按 #40 核对具体公告。
+    - **新浪行情自检**：`https://hq.sinajs.cn/list=hk<code>` 返回 `var hq_str_hk<code>="";`（空串）仅说明本次未取得行情；按 #40 检查市场时段、个股覆盖及具体公告，不能直接推断未交易。
     - **实战案例（2026-10-23）**：06157 瘦西湖文旅原定 2026-10-23 挂牌（招股 10/14–10/20，指示性发售价 3.92–5.07 港元，独家保荐中国光大融资），但 **2026-10-20 公告《UPDATE ON THE GLOBAL OFFERING》延迟全球发售及主板上市**（理由原文仅"经考虑多项因素（包括现行市况）"）。后果：国际包销协议不订立 → 港发包销协议无法成为无条件 → H 股不发行不交付 → **白表 eIPO 申请股款于 2026-10-23（星期五）全数不计息退还**（EIPO 渠道按经纪安排退款）。公告**未披露**认购倍数 / 簿记需求 / 定价细节 → 不宜解读为"认购不足"或"定价谈崩"（属外界猜测）。
     - **打新流程含义**：招股截止日 ≠ 稳上市。做新股认购的资金计划必须把"可能全额退款（且不计息）"写进去。
     - **纪律**：回测 cron 不得因"今天有票原定上市"而触发；也不得回退到上一个有首日数据的交易日（选择偏差 + 时间泄漏）。
 
-38. **⚠️ N = 0 时 SKILL 的 `[SILENT]` 与 cron 交付要求冲突（2026-10-26 新坑）**。SKILL.md 第 1 步写「N = 0 → 直接返回 `[SILENT]`」，但 cron job `10ef8281a3bd`（用户 2026-10-16 显式配置，`deliver = origin`）的 prompt 写「N = 0 时 final response 只发一行：`【YYYY-MM-DD 港股打新】今日无新股可申购`」。
+38. **⚠️ N = 0 时 SKILL 的 `[SILENT]` 与 cron 交付要求冲突（2026-10-26 新坑）**。旧版 SKILL.md 第 1 步曾写「N = 0 → 直接返回 `[SILENT]`」，但 cron job `10ef8281a3bd`（用户 2026-10-16 显式配置，`deliver = origin`）的 prompt 写「N = 0 时 final response 只发一行：`【YYYY-MM-DD 港股打新】今日无新股可申购`」。当前第 1 步已统一回执规则。
     - **冲突后果**：若照 SKILL 返回 `[SILENT]`，cron framework 会**抑制投递** → 用户微信 / 飞书完全收不到消息，无法区分「任务没跑」和「今天确实没新股」。
     - **裁决**：**cron prompt 优先**（更具体 + 用户显式设定）。N = 0 → 输出一行 `【YYYY-MM-DD 港股打新】今日无新股可申购`，**不返回 `[SILENT]`**；仍然不生成 Markdown、不推送 RSS（不推空文章这条不变）。
-    - **适用范围**：仅 cron 场景。交互式调用（用户直接问「今天有什么新股」）仍可返回 `[SILENT]`。
+    - **适用范围**：cron 回执按当前任务约定；交互式调用（用户直接问「今天有什么新股」）直接说明查询结果，不用 `[SILENT]` 隐去答复。
     - **历史验证**：2026-10-26 空批次（周一），新浪源 + jisilu + 智通投资日志三源一致确认 0 只可申购；两个错误源（`overview` 显示 02384 孖展 6.73 亿 / 0.62 倍、`hkex active` 显示 10 家「处理中」）都会误报 → **PITFALL #6 第三次验证成立**。详见 [references/2026-10-26-batch-lessons.md](references/2026-10-26-batch-lessons.md)。
 
 39. **⚠️ 孖展超购倍数不是上市的充分条件——散户口径无法替代机构定价纪律（2026-10-26 新坑）**。
@@ -582,9 +588,15 @@ python3 scripts/hkipo.py tradesmart tracker 02261
 40. **⚠️ 延迟上市后 jisilu / 新浪两源会给出矛盾信号（2026-10-26 新坑）**。03275 微亿智造 10/25 公告延迟上市后：
     - **新浪 `hk_IPOList.php`「上市日期」列**已正确变为 `-0001-11-30`（上市日期未定）✅
     - **jisilu `jisilu list --json`** 仍**保留整行**且 `listing_date` 仍为 `2026-10-28`、`is_listed = false` ❌（未反映延迟）
-    - **`hq.sinajs.cn/list=hk03275`** 返回空串 ✅（未开始交易）
-    - **应对**：判定"是否已延迟/撤回"用**新浪列 + 行情空串 + 公告搜索**三源，**不依赖 jisilu 整行是否消失**（06157 / 06700 恰好消失，03275 不消失）。`jisilu` 的 `listing_date` / `is_listed` 在延迟公告后可能未更新 → 不可用它单独断言"该票仍会上市"。
-    - **自检**：行情空串必须带已知已上市 code 做对照组（如 `hk02636`），区分"未交易"与"接口故障"。
+    - **`hq.sinajs.cn/list=hk03275`** 返回空串（只说明该次请求未取得行情，不能单独证明未交易或延迟）。
+    - **应对**：判定“是否已延迟/撤回”以发行人 / HKEX 的具体公告正文、发布日期和适用代码为准，新浪日期和行情仅作辅助线索；搜索摘要或公告首页不算公告证据。**不依赖 jisilu 整行是否消失**（06157 / 06700 恰好消失，03275 不消失）。`jisilu` 的 `listing_date` / `is_listed` 在延迟公告后可能未更新，不可单独据此断言仍会上市。
+    - **自检**：行情空串时带已知已上市 code 对照，并检查请求参数、市场时段和数据覆盖。对照正常只能排除部分接口整体故障，个股仍可能尚未开盘、停牌或接口未覆盖；缺少公告证据时标记 `状态未确认`。
+
+42. **空批次需要有效数据的交叉验证**。AAStocks 的无招股提示只是候选发现的补充证据，不是字符串命中即 0 只；执行 cron 第 1 步的来源有效性、日期过滤和冲突处理。`.HK` 行可能只是已截止待上市的标的。
+
+43. **名称与代码错位时隔离该行数据**。2026-10-28 NAS 任务记录报告 AAStocks 上市表存在名称与代码不符的行；页面模板复用只是根因猜测，尚未核实。名称含 `(@EC)`、`購`、`牛熊` 等词只能触发核验，不能单凭关键词永久排除股票。用招股窗口表及发行人公告核对身份，冲突解决前隔离整行，包括暗盘及涨幅字段；不要从同一污染行继续取数。`累计 -100%`、空价格等异常值先标记 `待核验`，不得直接用于评分或证明事前判断正确。
+
+44. **搜索空结果不等于后端故障**。单次空结果可能是无匹配或索引覆盖不足；结合宽泛查询及 `unresponsive_engines`、超时、HTTP 错误诊断。故障只描述本次请求 / 所报引擎，不扩成永久全站不可用。必要时切换另一可用搜索工具或 Bing，核对具体正文；操作与边界见 [financial-research.md](references/financial-research.md#检索故障与降级)。
 
 ## 研究流程
 
@@ -621,6 +633,7 @@ python3 scripts/hkipo.py tradesmart tracker 02261
 
 按日期倒序排列。每个复盘文件都包含：本批标的 + 工具调用顺序 + 新增 / 验证的 PITFALL + 关键经验提炼。
 
+- [references/2026-10-28-batch-lessons.md](references/2026-10-28-batch-lessons.md) — NAS 当日任务记录的本地整理：空批次证据边界、行情缺失与页面字段污染、搜索故障降级；区分原始观察与已核验事实，修正 PITFALL #42–#44 的过度推断。
 - [references/2026-10-27-batch-lessons.md](references/2026-10-27-batch-lessons.md) — **空批次：0 只可申购**（周二空窗，10/23 两只收市 + 10/26 两只定价 + **10/27 两只公布结果** + 10/28 上市）；**PITFALL #6 第四次验证成立**（`overview` 仍显示 02384 孖展 6.73 亿 / 0.62 倍、`hkex active` 仍显示 10 家「处理中」，两个错误源今天都会误报）；**新增经验：TradeSmart `observed_at` 时间戳会滚动伪装成"今天"**（今日已是 `2026-10-27T00:05`，但数据是 10/23 截止时的残留快照 → PITFALL #11 的时间戳规则在跨天批次同样适用，**不能因为时间戳是今天就当成当日数据**）；五源一致确认 0 只（新浪全表 GBK 逐行核对 + jisilu `IN-SUB count = 0` + 智通 10/27 投资日志「新股活动」栏完全缺位 + AAStocks 招股日程 + 东方财富港股日历）；再次验证 **PITFALL #40**（03275 已 10/25 公告延迟上市，但 jisilu 仍保留整行且 `listing_date` 仍 = 10-28，新浪却是 `-0001-11-30` → 必须用「新浪列 + 行情空串 + 公告搜索」三源）；**cron 模式 `execute_code` 被安全钩拦截** → 改为 `write_file` 落 parser 脚本 + `terminal` 执行；工具调用约 16 次（≤ 30 预算）。
 - [references/2026-10-26-batch-lessons.md](references/2026-10-26-batch-lessons.md) — **空批次：0 只可申购**（周一空窗，10/23 两只截止 + 10/26 两只定价日）；新增 PITFALL **#38**（N = 0 时 SKILL 的 `[SILENT]` 与 cron 交付要求冲突 — cron job `10ef8281a3bd` `deliver=origin`，返回 `[SILENT]` 会抑制投递致用户收不到消息；**裁决：cron prompt 优先**，N = 0 输出 `【YYYY-MM-DD 港股打新】今日无新股可申购` 一行，仍不生成 Markdown / 不推 RSS）；**PITFALL #6 第三次验证成立**（`overview` 仍显示 02384 孖展 6.73 亿 / 0.62 倍、`hkex active` 仍显示 10 家「处理中」，两个错误源今天都会误报 → 只能靠新浪 `hk_IPOList.php` 的 `subscription_start ≤ today ≤ subscription_end` 严格过滤判定）；新浪源 + jisilu + 智通港股投资日志三源一致确认 0 只；工具调用 10 次（远低于 30 预算）。
 - [references/2026-10-27-backtest-audit-lessons.md](../hk-ipo-backtest/references/2026-10-27-backtest-audit-lessons.md) — **回测审计：0 成熟案例**（`f6ce56ef2c94`，16:00 收市后）；**六源**一致确认无新股完成首日交易（jisilu / 新浪全表 / 智通投资日志「新股活动」栏**整栏缺位** / `hq.sinajs.cn` 空串 + `hk02636` 对照组 / AAStocks per-code 招股日程 / `hkex active` + futu list）；**新增 PITFALL #41**（「公佈售股結果日 / 暗盤日」≠「首日交易日」— 02384 今日公布结果 + 暗盤 16:15-18:30，但**首日交易在 10/28** → 今日不构成回测案例；**AAStocks per-code「招股日程」首次被用作一手日程源**，比 jisilu `listing_date` 可靠）；PITFALL #34b 第三次验证（002384 收 101.09 / 招股期内累计 **-39.6%**，H/A 折价 35.4% → 30.0% → **27.0%**）；PITFALL #40 第三次验证（03275 延迟公告后第 2 天 jisilu 仍未更新）；不可用源清单（东方财富 `RPT_IPO_LIST` / 富途 `quote-api` / AAStocks JS 渲染页）；工具调用约 30 次。
