@@ -324,15 +324,20 @@ def _structured_value(row: dict, field: str) -> tuple[Decimal | None, str | None
     return None, f"unsupported structured value type: {type(raw).__name__}"
 
 
-def _evidence_value_index(run_dir: Path) -> set[Decimal]:
-    """收集 PDF 证据中出现的全部数值（含单位缩放），供全量存在性检查。"""
+def _evidence_value_index(run_dir: Path) -> dict[Decimal, list[tuple[str, str | None]]]:
+    """PDF 证据中出现的数值（含单位缩放）→ [(evidence_id, 原文字面)]。
+
+    缩放后的值（如「4.22亿元」）字面记 None：只计入存在性统计，不能作为原值出处。
+    """
     from report_values import NUMBER_RE, SCALES
 
     manifest_path = run_dir / "extraction_manifest.json"
     if not manifest_path.exists():
-        return set()
-    values: set[Decimal] = set()
+        return {}
+    values: dict[Decimal, list[tuple[str, str | None]]] = {}
     for record in read_json(manifest_path).get("evidences", []):
+        if record.get("kind") == "image_crop":
+            continue
         path = run_dir / record.get("file", "")
         if not path.exists():
             continue
@@ -350,18 +355,48 @@ def _evidence_value_index(run_dir: Path) -> set[Decimal]:
                 continue
         for text in texts:
             for match in NUMBER_RE.finditer(text):
+                literal = match.group("number")
                 try:
-                    num = Decimal(match.group("number").replace(",", ""))
+                    num = Decimal(literal.replace(",", ""))
                 except InvalidOperation:
                     continue
                 scale = SCALES.get((match.group("unit") or "").lower(), Decimal(1))
-                values.add(num * scale)
+                values.setdefault(num * scale, []).append(
+                    (record["evidence_id"], literal if scale == 1 else None))
     return values
+
+
+_PRESENCE_MIN = Decimal(1000)
+
+
+def _ground_structured(fact: dict, twin: dict | None,
+                       value_index: dict[Decimal, list[tuple[str, str | None]]]) -> None:
+    """给结构化事实挂原文出处：先认一致的抽查数，再认原文中同值的金额。
+
+    后者只接受未缩放、带小数且绝对值不小于 1000 的金额，避免页码、序号等碰巧同值。
+    """
+    if fact["value"] is None or fact["review_status"] == "conflict":
+        return
+    if (twin is not None and twin.get("review_status") == "verified"
+            and twin.get("evidence_ids") and _same_amount(fact["value"], twin["value"])):
+        fact.update(evidence_ids=list(twin["evidence_ids"]), raw_value=twin["raw_value"],
+                    evidence_basis="sample_match")
+        return
+    value = Decimal(fact["value"])
+    if abs(value) < _PRESENCE_MIN:
+        return
+    hits = [(ev, lit) for ev, lit in value_index.get(value, []) if lit and "." in lit]
+    if hits:
+        fact.update(evidence_ids=sorted({ev for ev, _ in hits}), raw_value=hits[0][1],
+                    evidence_basis="value_presence")
 
 
 def build_financials_structured(run_dir: Path, structured: dict,
                                 inputs: dict | None = None) -> tuple[dict | None, dict]:
-    """从 structured_financials.json 生成 facts（source=structured，无 evidence 链）。
+    """从 structured_financials.json 生成 facts（source=structured）。
+
+    非冲突的结构化事实若与抽查数一致或其金额出现在 PDF 证据中，挂上对应
+    evidence_ids 并以原文字面为 raw_value（evidence_basis 标明依据）；否则无出处。
 
     为每个可映射指标生成本期与比较期事实（duration: current+prior，instant:
     closing+opening）。字段缺失生成 missing 事实；响应缺字段记 warning 跳过。
@@ -486,10 +521,17 @@ def build_financials_structured(run_dir: Path, structured: dict,
     # （弱背书——不配对科目，只验证数值真实出现在原文；找不到通常是证据未覆盖该页）。
     value_index = _evidence_value_index(run_dir)
     presence = {"found": 0, "not_found": 0, "no_value": 0, "not_found_metrics": []}
+    grounding = {"sample_match": 0, "value_presence": 0, "ungrounded": 0}
     for fact in built:
         if fact["value"] is None:
             presence["no_value"] += 1
             continue
+        twin = extracted_index.get((fact["metric"], fact["period"]["end"]))
+        if twin is not None and (twin["scope"], twin["attribution"]) != (
+                fact["scope"], fact["attribution"]):
+            twin = None
+        _ground_structured(fact, twin, value_index)
+        grounding[fact.get("evidence_basis", "ungrounded")] += 1
         if Decimal(fact["value"]) in value_index:
             presence["found"] += 1
         else:
@@ -498,6 +540,7 @@ def build_financials_structured(run_dir: Path, structured: dict,
                 presence["not_found_metrics"].append(
                     {"metric": fact["metric"], "period_end": fact["period"]["end"]})
     check["presence"] = presence
+    check["grounding"] = grounding
 
     # 抽查覆盖建议：fact_inputs 未覆盖本期建议科目时提示补充（不阻塞）。
     covered = {f["metric"] for f in extracted_facts

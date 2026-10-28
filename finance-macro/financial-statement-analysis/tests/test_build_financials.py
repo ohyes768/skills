@@ -406,6 +406,12 @@ def test_sample_check_verified_when_twin_matches(run_dir):
     rev_facts = [f for f in financials["facts"] if f["metric"] == "revenue"
                  and f["period"]["end"] == "2026-06-30"]
     assert {f["source"] for f in rev_facts} == {"structured", "extracted"}
+    structured = next(f for f in rev_facts if f["source"] == "structured")
+    extracted = next(f for f in rev_facts if f["source"] == "extracted")
+    assert structured["evidence_basis"] == "sample_match"
+    assert structured["evidence_ids"] == extracted["evidence_ids"]
+    assert structured["raw_value"] == "230,730,296.15"
+    assert check["grounding"]["sample_match"] >= 1
     assert validate_financials(financials) == []
 
 
@@ -428,6 +434,7 @@ def test_sample_check_conflict_marks_fact(run_dir):
     conflicted = [f for f in financials["facts"]
                   if f["metric"] == "cost_of_sales" and f["source"] == "structured"]
     assert conflicted and conflicted[0]["review_status"] == "conflict"
+    assert conflicted[0]["evidence_ids"] == [], "conflict must not borrow evidence"
     assert any("mismatch" in i["error"] for i in validation["issues"])
 
 
@@ -454,6 +461,58 @@ def test_presence_scan_counts_found_and_not_found(run_dir):
     assert presence["found"] >= 1, "revenue current value exists in evidence text"
     assert presence["not_found"] >= 1, "values not in extracted pages stay not_found"
     assert presence["found"] + presence["not_found"] + presence["no_value"] == len(financials["facts"])
+
+
+def test_presence_grounds_structured_fact_with_literal(run_dir):
+    """原文出现同值金额：结构化事实挂该证据、raw_value 取原文字面，满足 C1。"""
+    prepare_build_run(run_dir)
+    txt = run_dir / "excerpts" / "ev-0002.txt"
+    txt.write_text(txt.read_text(encoding="utf-8") + "\n[p.55] 230,730,296.15\n",
+                   encoding="utf-8")
+    financials, validation = build_financials.build_financials_structured(run_dir, structured_doc())
+    assert financials is not None, validation["issues"]
+    revenue = next(f for f in financials["facts"] if f["metric"] == "revenue"
+                   and f["period"]["end"] == "2026-06-30")
+    assert revenue["evidence_basis"] == "value_presence"
+    assert revenue["evidence_ids"] == ["ev-0002"]
+    assert revenue["raw_value"] == "230,730,296.15"
+    assert revenue["raw_value"] in txt.read_text(encoding="utf-8")
+    ungrounded = [f for f in financials["facts"] if f["value"] and not f["evidence_ids"]]
+    assert ungrounded, "values absent from evidence stay without evidence"
+    assert all("evidence_basis" not in f for f in ungrounded)
+    grounding = validation["structured_check"]["grounding"]
+    assert grounding["value_presence"] >= 1 and grounding["ungrounded"] >= 1
+    assert validate_financials(financials) == []
+
+
+def test_presence_ignores_small_or_scaled_values(run_dir):
+    """小于 1000、无小数或经单位缩放的同值不作为出处，避免页码/摘要数碰巧同值。"""
+    prepare_build_run(run_dir)
+    doc = structured_doc()
+    doc["reports"]["2026-06-30"]["income"][0]["TOTAL_OPERATE_INCOME"] = "200000000"
+    txt = run_dir / "excerpts" / "ev-0002.txt"
+    txt.write_text(txt.read_text(encoding="utf-8") + "\n[p.3] 营业收入 2.00亿元\n[p.3] 200000000\n",
+                   encoding="utf-8")
+    financials, _ = build_financials.build_financials_structured(run_dir, doc)
+    revenue = next(f for f in financials["facts"] if f["metric"] == "revenue"
+                   and f["period"]["end"] == "2026-06-30")
+    assert revenue["evidence_ids"] == []
+
+
+def test_schema_rejects_structured_evidence_without_basis():
+    fact = {
+        "fact_id": "f-0001", "metric": "revenue", "raw_label": "TOTAL_OPERATE_INCOME",
+        "raw_value": "1.00", "raw_unit": "元", "value": "1.00", "unit": "元",
+        "currency": "CNY", "scope": "consolidated", "attribution": "group",
+        "period": {"kind": "duration", "start": "2026-01-01", "end": "2026-06-30",
+                   "frequency": "half_year", "aggregation": "cumulative"},
+        "basis": "as_reported", "evidence_ids": ["ev-0001"], "review_status": "verified",
+        "missing_reason": None, "source": "structured",
+    }
+    errors = validate_financials({"facts": [fact]})
+    assert any(e["field"] == "evidence_basis" for e in errors)
+    fact["evidence_basis"] = "value_presence"
+    assert not any(e["field"] == "evidence_basis" for e in validate_financials({"facts": [fact]}))
 
 
 def test_recommended_sample_metrics_warning(run_dir):

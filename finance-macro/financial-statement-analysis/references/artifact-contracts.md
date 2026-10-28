@@ -117,6 +117,14 @@ flips the structured fact to `review_status: conflict` and blocks `verified` rep
 validate_report accepts `source: structured` facts only when this file exists with
 `conflicts: 0`.
 
+`grounding` counts how non-null structured facts got PDF provenance (alias: 结构化事实出处 /
+原值落页): `sample_match` — a verified same-scope spot-check twin with equal amount, whose
+`evidence_ids` and literal `raw_value` are copied; `value_presence` — the amount appears
+verbatim in a non-image extracted evidence (unscaled, has decimals, |value| ≥ 1000), all
+such evidence ids attached and the first literal used as `raw_value`; `ungrounded` — neither,
+`evidence_ids` stays `[]`. Conflict facts are never grounded. A structured fact carrying
+`evidence_ids` must set `evidence_basis` to one of the two values (`financial_schema`).
+
 ## fact_inputs.json — generated from spec.json or written by agent; consumed by build_financials.py
 
 Two paths produce this file: for plain text-evidence facts the agent writes a compact

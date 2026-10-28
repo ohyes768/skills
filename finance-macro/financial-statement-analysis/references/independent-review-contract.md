@@ -60,9 +60,13 @@ statement 同理，例如 template 写“母公司口径营业收入 {rev:amount
 - D1/D2 只使用已核验合并事实；缺所需日期/科目记 `not_applicable`。
   同科目值冲突、计量维度不兼容或算术异常则失败，不按缺数据跳过。
   容差针对台账基准值，不是亿元/万元展示值，也不是相对误差。
-- C1 要求所用事实有 excerpt 原值链。结构化事实即使有双源抽查背书，也不自动满足 C1。
-  若它阻断独立复核，按主入口 `--pdf-only` 路径补齐有原文依据的事实输入并重算，受原目录剩余预算约束。
-  不预设每次执行两遍 compute，不改 source 或伪造 evidence。
+- C1 要求所用事实有 excerpt 原值链。结构化事实由 compute 自动挂出处：与抽查数一致
+  （`evidence_basis: sample_match`）或金额原样出现在已提取证据中（`value_presence`）时，
+  带上对应 `evidence_ids`，`raw_value` 取原文字面，C1 照常通过；`structured_check.json`
+  的 `grounding.ungrounded` 是仍无出处的条数。
+  若某个用到的结构化事实因无出处在 C1 失败：用 `evidence --pages` 补提该科目所在页后重跑默认
+  `compute`，或把它加入抽查单——**不要因此切换 `--pdf-only`**，也不改 source、不伪造 evidence。
+  `--pdf-only` 只用于结构化拉取失败或双源冲突需以 PDF 口径修复。
 - `independent_review.json` 字段：`passed`、`checks`、`issues`、`not_applicable`、`categories`。
   checks 为实际检查次数，categories 按编号计数；同一编号可检查多行/多个指标。
   passed=true 表示无失败，不代表所有科目有数据；报告说明未验证事项。

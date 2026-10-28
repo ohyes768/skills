@@ -108,7 +108,8 @@
   改用双事实句式"由上年同期 {prior} 转为本期 {cur}"。
 - **表格 `cells` 不含行标签**：`len(cells)` 必须等于 `len(columns) - 1`，行标签占第一列。
 - **行尾 `""` 需要原文页码**：该行至少有一个绑定，且绑定事实（或指标依赖的事实）有 evidence 页码，
-  否则报 `cannot generate source citation without evidence pages`。只有结构化事实支撑的指标行，
+  否则报 `cannot generate source citation without evidence pages`。结构化事实已挂出处
+  （有 `evidence_basis`）时同样有页码；只有无出处的结构化事实支撑的指标行，
   行尾改写静态文字 `本次计算`；无绑定的纯定性行，行尾不能留 `""`。
 - **核心结论 3–5 句含段落**：statement 条数加 paragraphs 按句号切出的句数，
   "4 个 statement + 1 段定性"已到上限，定性判断压成一段。

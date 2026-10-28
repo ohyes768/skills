@@ -38,6 +38,7 @@ _FACT_FIELDS = {
 }
 # source 为可选字段（缺省视为 extracted），保证旧产物与既有生成器兼容。
 _SOURCE_VALUES = {"structured", "extracted"}
+_STRUCTURED_EVIDENCE_BASES = {"sample_match", "value_presence"}
 _EVIDENCE_ID_RE = re.compile(r"^ev-\d{4,}$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -276,12 +277,18 @@ def validate_financials(document: dict) -> list[dict]:
         if source not in _SOURCE_VALUES:
             errors.append(_error(fact_id, "source", f"illegal value: {source!r}"))
         if source == "structured":
-            # 结构化事实由程序拉取的披露口径背书，可信度由抽样核对（structured_check）
-            # 把关，不走 PDF evidence 链；抽样发现不一致会转 conflict。
-            if evidence_ids:
-                errors.append(
-                    _error(fact_id, "evidence_ids", "structured fact must not carry evidence_ids")
-                )
+            # 结构化事实由抽样核对（structured_check）把关；只有与原文对上的才可挂
+            # evidence，并须用 evidence_basis 标明是抽查一致还是原文同值。
+            basis = fact.get("evidence_basis")
+            if evidence_ids and basis not in _STRUCTURED_EVIDENCE_BASES:
+                errors.append(_error(
+                    fact_id, "evidence_basis",
+                    f"structured fact with evidence_ids needs evidence_basis in "
+                    f"{sorted(_STRUCTURED_EVIDENCE_BASES)}"))
+            elif evidence_ids and not all(
+                isinstance(e, str) and _EVIDENCE_ID_RE.match(e) for e in evidence_ids
+            ):
+                errors.append(_error(fact_id, "evidence_ids", "invalid evidence id format"))
         elif value is not None:
             if not evidence_ids or not all(
                 isinstance(e, str) and _EVIDENCE_ID_RE.match(e) for e in evidence_ids
