@@ -100,3 +100,16 @@ API latest returned period from latest usable period and target availability.
 Never treat H1 as Q3, older valid rows as a replacement for rejected target rows,
 or nine-month cumulative financial metrics as single-quarter observations.
 No personal-web or official announcement discovery integration is in this change.
+
+## Follow-up v3.6.2: optional PDF evidence (2026-10-28)
+
+User approved structured/API candidates -> official readable announcement ->
+bounded PDF fallback for material table/footnote gaps. Supersedes the v3.5/v3.5.1
+absolute PDF ban, retaining the removal of bundled parsers and dependencies.
+Use only existing host reading capabilities; reuse source-bound files/excerpts,
+share dimension budgets, disclose unresolved gaps with null. Do not restore the
+legacy PDF-first/reverse-calculation workflow or change sector scoring contracts.
+Acceptance: aligned main/bank/insurance/research/tool/migration guidance; bounded
+page rules and traceable PDF citations; no new runtime dependencies; metadata,
+existing score/sidecar regressions and diff checks pass. Local source edits only,
+no automatic commit/push, NAS deployment or personal-web changes.

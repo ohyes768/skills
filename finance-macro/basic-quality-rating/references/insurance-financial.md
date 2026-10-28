@@ -15,8 +15,8 @@ python3 <skill目录>/scripts/insurance_financial.py template --stock stock.json
 --type 为 life / property / group。将模板 stdout 存入 insurance-data.json 后填入确认值。
 优先复用已有结构化数据，再读取上市公司/保险法人官网、交易所公告正文及偿付能力摘要的
 可读网页。保留来源链接、栏目/表格/行列位置，核对主体、年份、单位、表头、脚注与精算假设。
-不从新闻或搜索摘要猜值，不下载、解析或 OCR PDF，也不转调其他 skill 绕回该路径。
-只有 PDF 链接或网页不可读时，在原预算内寻找可读官方替代来源；仍缺核心证据则 E=null。
+不从新闻或搜索摘要猜值。正文缺关键表格、表头或脚注时，按 [有限 PDF 补证](pdf-fallback.md)
+用现成工具读官方原件相关页，不默认通读 PDF。无工具或原预算内仍缺核心证据则 E=null。
 
 ```text
 python3 <skill目录>/scripts/research_state.py init --state research.json --stock stock.json --providers <已有渠道ID列表> --insurance-research

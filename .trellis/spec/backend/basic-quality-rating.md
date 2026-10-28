@@ -167,7 +167,7 @@ own authorized scope. Source metadata version 3.0.0 marks this breaking change.
 ## v3.1.0 execution tools (2026-10-27)
 
 Historical: PDF tools described here and in v3.3/v3.4 were removed in v3.5.
-The current execution boundary is the v3.5 section below.
+The current evidence boundary is v3.6.2 below; deleted PDF helpers remain retired.
 
 - `financial_score.score_financial(stock)` is the sole executable E scorer.
   `rating_math financial` exposes score/status/checks/issues/risks/sector.
@@ -331,6 +331,9 @@ consumer compatibility or live-model research correctness is established.
 
 ## v3.5.0 dependency-free web evidence (2026-10-28)
 
+Historical policy: the absolute PDF prohibition below was superseded by v3.6.2.
+The removal of bundled PDF tools/dependencies remains in effect.
+
 - Input remains stock JSON; PDF input is neither required nor supported by this
   skill. Remove pdf_evidence.py, bank_evidence.py, insurance_evidence.py and
   metric_candidates.py plus their dedicated PDF tests. No caller remains in
@@ -421,3 +424,25 @@ consumer compatibility or live-model research correctness is established.
 - Keep YTD/interim/annual semantics: a Q3 cumulative ROE is not single-quarter
   performance or an annual-history replacement. Exact-period available metrics
   still require official provenance and scope confirmation before sector scoring.
+
+## v3.6.2 bounded optional PDF evidence (2026-10-28)
+
+- Evidence order is reusable structured/API candidates, readable official filing
+  content, then PDF only for a material missing/malformed table or footnote.
+  Sufficient HTML ends acquisition; third-party candidates still need confirmation.
+- references/pdf-fallback.md owns the optional reading procedure. Use existing
+  host capabilities or an installed PDF skill, never runtime installs, ad hoc
+  parsers or the retired PDF helpers. Standard-library scripts/dependencies stay
+  unchanged; PDF is not a caller input requirement or guaranteed host capability.
+- At most two documents, eight distinct pages each, sixteen total per run,
+  including contents pages. Reuse source-bound files/excerpts; do not reset
+  dimension rounds or failed routes when switching format. These are agent-side
+  instructions, not enforced host limits. No reliable reader means a disclosed
+  gap, not environment repair. Do not assume OCR availability.
+- Validate entity, period, units, table columns, footnotes and restatements.
+  Preserve official-vs-mirror provenance. PDF sources use one-based file pages
+  plus table/row/column locators in the existing report_md citation table.
+- Ordinary E remains input-only. Bank/insurance requirements, nullable ten-field
+  output, sidecar checks and scoring bands are unchanged. Retire deployed legacy
+  PDF-first runbooks separately during authorized deployment; local edits do not
+  synchronize installed copies or establish live speed/reliability.
