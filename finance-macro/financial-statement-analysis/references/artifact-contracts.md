@@ -20,6 +20,7 @@
 - financials.json：source=structured_eastmoney，source_sha256 绑定留档文件字节；facts 每项包含 metric、value、raw_value、单位、币种、scope、attribution、period、basis、review_status、missing_reason。
 - 普通事实 source=structured，source_ref 包含 security_code、report_kind、report_name、report_date、field、response_sha256。派生事实 source=derived，附 input_fact_ids、formula。来源字段由程序生成，agent 不编辑。
 - metrics.json：十四项指标（含可用状态、公式、input_fact_ids）、现金勾稽与 red_flags。缺失值不参与数值绑定。
+- analysis_pack.json：由事实重算的覆盖分层、利润桥、费用率、余额变化和定性支持条件。覆盖分层区分 present、no_data、fetch_failed、field_null、unmapped、not_calculated、not_in_model_input。空差额保持 null。分析包里的比率名不是 metric_id。
 - report_spec.json：agent 撰写定性分析的唯一输入；report_inputs.json 由程序构造。
 - analysis.md 与 report_claims.json：同源渲染。claim 记录实际正文、anchor、fact_ids、metric_ids、source_refs，引用必须等于绑定事实的来源闭包。
 - report_validation.json、independent_review.json：来源/正文校验与独立复算结果；run_state.json 保存报告预算；context_usage.jsonl 记录交付量，未获模型 token 用量时留空。

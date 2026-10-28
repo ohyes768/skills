@@ -340,12 +340,33 @@ def build_spec(run_dir: Path, skeleton: dict) -> tuple[dict, list[str]]:
     # 定性段落待办清单：骨架的提示语必须由 agent 改写成本次实际情况，
     # 否则报告里会留下「这里写……」这类提示语。清单放顶层，不塞进 section
     # （section 的额外键可能被渲染/校验契约拒绝）。
-    todo = [
-        {"anchor": s.get("anchor", ""), "index": i + 1, "hint": text[:60]}
-        for s in out_sections
-        for i, text in enumerate(s.get("paragraphs") or [])
-        if _is_placeholder_paragraph(text)
-    ]
+    from analysis_pack import build_analysis_pack, sentence_budget
+    pack = build_analysis_pack(run_dir)
+    core_statements = len(next(
+        (section.get("statements") or [] for section in out_sections
+         if section.get("anchor") == "## 核心结论"),
+        [],
+    ))
+    budget = sentence_budget(core_statements)
+    limits = [row["text"] for row in pack["narrative_limits"]]
+    evidence = ["coverage", "profit_bridge", "margins", "balance_changes", "qualitative_support"]
+    todo = []
+    for section in out_sections:
+        for index, text in enumerate(section.get("paragraphs") or []):
+            if not _is_placeholder_paragraph(text):
+                continue
+            todo.append({
+                "anchor": section.get("anchor", ""),
+                "section": section.get("anchor", ""),
+                "index": index + 1,
+                "position": index + 1,
+                "hint": text[:60],
+                "editable": True,
+                "digits": "forbidden",
+                "evidence": evidence,
+                "missing_limits": limits,
+                "sentence_budget": budget,
+            })
     if todo:
         spec["_paragraphs_todo"] = todo
 

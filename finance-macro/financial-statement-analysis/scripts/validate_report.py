@@ -38,7 +38,11 @@ def calculation_errors(run_dir: Path) -> list[str]:
         actual = read_json(Path(run_dir) / "metrics.json")
     except (OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
         return [f"calculation validation unavailable: {exc}"]
-    return [] if actual == expected else ["metrics, formulas or risk flags differ from source calculations"]
+    errors = [] if actual == expected else [
+        "metrics, formulas or risk flags differ from source calculations"]
+    from analysis_pack import analysis_pack_errors
+    errors.extend(analysis_pack_errors(run_dir))
+    return errors
 
 
 def _number_explained(text: str, number, value: Decimal, display_unit: str | None,
@@ -106,6 +110,17 @@ def validate_report(run_dir: Path) -> dict:
         result["body_mismatches"].append("nonempty report and claims are required")
     result["invalid_support"].extend(source_errors(run_dir, financials))
     result["invalid_support"].extend(calculation_errors(run_dir))
+    from analysis_pack import build_analysis_pack, qualitative_claim_errors
+    try:
+        inputs = read_json(run_dir / "report_inputs.json")
+        paragraphs = [
+            paragraph for section in inputs.get("sections") or []
+            for paragraph in section.get("paragraphs") or []
+        ]
+        result["invalid_support"].extend(dict.fromkeys(
+            qualitative_claim_errors(build_analysis_pack(run_dir), [*paragraphs, body])))
+    except (OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
+        result["invalid_support"].append(f"qualitative support unavailable: {exc}")
     # Delivered body and claims must be exactly the deterministic rendering of inputs.
     from render_report import render_report
     expected_body, expected_claims, render_issues = render_report(

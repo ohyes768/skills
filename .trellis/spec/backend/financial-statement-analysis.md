@@ -10,7 +10,7 @@ Applies to finance-macro/financial-statement-analysis when changing source inges
 - build_financials.build_financials_structured(run_dir, archive): exact-decimal normalized facts, nulls and source references.
 - source_provenance.source_errors(run_dir, financials=None): archive hash, field identity, values, periods, dimensions and derived operands.
 - calculate_metrics.calculate_metrics(financials): deterministic metrics, accounting checks and risk flags.
-- pack_context.build_packet: analyze/review only, bounded packets with a version-bound cursor.
+- pack_context.build_packet: analyze/review only, bounded packets with a version-bound cursor. compute and pack_context both expose packet.next_cursor at the top level. A null cursor ends the walk. An invalid cursor is an error with ended=false, not an end marker. compute.context remains a compatibility alias and is not present on pack_context.
 - run_pipeline.cmd_report: source validation, canonical calculation validation, bound rendering and independent review, always enabled.
 
 ## Source and Fact Invariants
@@ -19,7 +19,9 @@ Use existing F10 report kinds balance/income/cashflow and strict security/report
 
 financials.source_sha256 binds the serialized archive. Structured facts carry source_ref with security, report name/kind, report date, field and response hash. Derived gross profit declares revenue and cost operands. Null does not mean zero. Opening cash can use prior-year END_CCE or target-period BEGIN_CCE with its actual source reference. PREPAYMENT, CIP and RATE_CHANGE_EFFECT mappings were verified against saved F10 responses; null FX remains unavailable and cannot complete cash reconciliation.
 
-No analyst-entered facts or alternate source fallback. Optional comparison statements missing means nullable ratios and partial delivery. F10 cannot substantiate audit opinions, restrictions, related-party details or business-cause narratives.
+No analyst-entered facts or alternate source fallback. Optional comparison statements missing means nullable ratios and partial delivery. Coverage distinguishes archive presence, no_data, fetch_failed, field null, unmapped, not calculated and withheld from the model input. An archived comparison balance sheet must not be described as not retrieved. Null deltas stay null. F10 cannot substantiate audit opinions, restrictions, related-party details or business-cause narratives.
+
+analysis_pack.json is recomputed from source-bound facts. It carries the profit bridge, expense ratios, balance changes and qualitative support flags. Those ratio names are not metric_id values. Primary profit attribution, confirmed transfer from construction in progress, and a DuPont year-over-year driver are blocked unless their deterministic support flag is true. Other qualitative wording still needs human review. Report todos state the section, paragraph position, remaining core-sentence budget, evidence and these limits.
 
 ## Calculation and Report Invariants
 

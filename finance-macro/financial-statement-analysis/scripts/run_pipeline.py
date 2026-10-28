@@ -208,18 +208,30 @@ def cmd_compute(run_dir: Path) -> tuple[dict, int]:
     metrics = calculate_metrics(financials)
     write_json(run_dir / "metrics.json", metrics)
     write_json(run_dir / "validation.json", {"schema_version": 1, "checks": metrics["validation"]})
+    from analysis_pack import build_analysis_pack
+    write_json(run_dir / "analysis_pack.json", build_analysis_pack(run_dir))
     state = _load_state(run_dir)
     state.update(stage="compute", quality_status="partial")
     _save_state(run_dir, state)
     problems = [f"{c['check_id']}: {c['status']}" for c in metrics["validation"]
                 if c["status"] in {"failed", "conflict"}]
     missing = _missing_reports(read_json(run_dir / "document.json"), archive)
+    context = build_packet(run_dir, stage="analyze", request_id="compute-analysis")
     return ({"status": "partial" if problems or missing else "ok", "stage": "compute",
              "quality_status": "partial", "terminal": False, "issues": problems + missing,
              "warnings": mapping.get("warnings", []),
              "metric_counts": {"computed": sum(m["status"] == "computed" for m in metrics["metrics"])},
-             "context": build_packet(run_dir, stage="analyze", request_id="compute-analysis"),
-             "next_action": "generate report_spec.json with build_report_spec.py; author qualitative analysis"},
+             "packet": context["packet"],
+             "usage_summary": context["usage_summary"],
+             "packet_sha256": context["packet_sha256"],
+             "context": context,
+             "continuation": {
+                 "cursor_field": "packet.next_cursor",
+                 "pack_context_cursor_field": "packet.next_cursor",
+                 "end_when": "null",
+                 "invalid_cursor_status": "failed",
+             },
+             "next_action": "read packet.next_cursor until null, then author report_spec.json"},
             2 if problems or missing else 0)
 
 

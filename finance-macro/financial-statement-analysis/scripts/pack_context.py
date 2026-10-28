@@ -6,8 +6,6 @@ import hashlib
 import json
 from pathlib import Path
 
-from artifacts import read_json
-
 DEFAULT_MAX_CHARS = 12000
 STAGES = ("analyze", "review")
 
@@ -19,12 +17,8 @@ def build_packet(run_dir: Path, stage: str, request_id: str, *,
     if not 1000 <= max_chars <= DEFAULT_MAX_CHARS:
         raise ValueError("max_chars must be between 1000 and 12000")
     run_dir = Path(run_dir)
-    financials = read_json(run_dir / "financials.json")
-    metrics = read_json(run_dir / "metrics.json")
-    items = [{"kind": "fact", **fact} for fact in financials.get("facts", [])]
-    items += [{"kind": "metric", **metric} for metric in metrics.get("metrics", [])]
-    items += [{"kind": "check", **check} for check in metrics.get("validation", [])]
-    items += [{"kind": "red_flag", **flag} for flag in metrics.get("red_flags", [])]
+    from analysis_pack import packet_items
+    items = packet_items(run_dir)
     version = hashlib.sha256(json.dumps(items, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     start = 0
     if cursor:
@@ -68,8 +62,13 @@ def main(argv=None):
     parser.add_argument("--cursor")
     parser.add_argument("--max-chars", type=int, default=DEFAULT_MAX_CHARS)
     args = parser.parse_args(argv)
-    result = build_packet(Path(args.run_dir), args.stage, args.request_id,
-                          cursor=args.cursor, max_chars=args.max_chars)
+    try:
+        result = build_packet(Path(args.run_dir), args.stage, args.request_id,
+                              cursor=args.cursor, max_chars=args.max_chars)
+    except ValueError as exc:
+        print(json.dumps({"status": "failed", "error": str(exc), "terminal": False,
+                          "ended": False}, ensure_ascii=False))
+        return 1
     print(json.dumps(result, ensure_ascii=False))
     return 0
 
