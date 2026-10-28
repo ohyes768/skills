@@ -35,12 +35,12 @@ class BankResearchTests(unittest.TestCase):
 
     def test_bank_budget_shared_across_metric_questions(self):
         self.run.init(self.stock, ["official"], bank_research=True)
-        for number, question in enumerate(("不良率", "资本", "流动性")):
+        for number, question in enumerate(("不良率", "资本", "流动性", "资本附加要求", "集团口径")):
             request_id = f"bank-{number}"
             self.run.start("financial", question, "E评分", request_id, now=1)
             self.run.result("financial", request_id, 1, "success", now=1)
         with self.assertRaises(ValueError):
-            self.run.start("financial", "换个关键词再查", "E评分", "bank-4", now=1)
+            self.run.start("financial", "换个关键词再查", "E评分", "bank-6", now=1)
         self.run.close("financial", "gap", "核心资本资料无法取得")
         self.assertEqual(self.run.status("financial")["status"], "gap")
 

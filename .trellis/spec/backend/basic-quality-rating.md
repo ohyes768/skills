@@ -72,7 +72,7 @@ The skill makes no platform API calls and has no publishing side effects.
 | Invalid stock identity in automation | Terminate as failed; no interactive question or fabricated rating |
 
 Evidence gathering ends per dimension when its checklist is covered, or after
-two targeted follow-up rounds leave an explicit unscored gap. Completed facts
+four targeted web follow-up rounds leave an explicit unscored gap. Completed facts
 are reused. A concrete conflict that might change a score allows one extra round;
 unresolved material conflicts remain disclosed and unscored. Do not restart open-ended
 search while drafting or load the removed company-example scoring reference.
@@ -167,7 +167,7 @@ own authorized scope. Source metadata version 3.0.0 marks this breaking change.
 ## v3.1.0 execution tools (2026-10-27)
 
 Historical: PDF tools described here and in v3.3/v3.4 were removed in v3.5.
-The current evidence boundary is v3.6.2 below; deleted PDF helpers remain retired.
+The current evidence boundary is v3.7.0 below; deleted PDF helpers remain retired.
 
 - `financial_score.score_financial(stock)` is the sole executable E scorer.
   `rating_math financial` exposes score/status/checks/issues/risks/sector.
@@ -446,3 +446,64 @@ The removal of bundled PDF tools/dependencies remains in effect.
   output, sidecar checks and scoring bands are unchanged. Retire deployed legacy
   PDF-first runbooks separately during authorized deployment; local edits do not
   synchronize installed copies or establish live speed/reliability.
+
+## v3.7.0 web-only research
+
+Rating runs must not download, parse, render or read PDFs, including cached PDF
+extracts or delegation to another skill. Search locates sources; actual readable
+web bodies establish facts. PDF-only links and search snippets remain leads.
+Bank/insurance candidates still need official scope/period confirmation. Missing
+core web evidence produces null without changing ordinary E input-only rules.
+Each dimension allows initial research plus four web follow-ups (MAX_ROUNDS=5);
+one conflict reopen remains allowed. The global 24-receipt budget and 8-call
+delivery reserve remain unchanged. Limits are ceilings, not research targets.
+PDF prohibition is an agent instruction, not a host/network interception claim.
+
+
+## v3.7 execution budget and final-version delivery (2026-10-28)
+
+### Scope / Trigger
+New rating runs use execution control; scoring rules and ten-field output do not change.
+
+### Signatures
+- `research_state init ... --research-limit 24` opts into an immutable global reservation budget.
+- `rating_math calculate --input dimensions.json --research-state research.json` seals settled evidence and dimensions.
+- `rating_math finalize ... --research-state research.json --output rating.json` verifies and atomically saves the delivered object.
+
+### Contracts
+Optional execution object on a v1 ledger holds research_limit, delivery_reserve=8,
+phase=research/report, creation time and a calculated dimension/derived snapshot.
+Every new provider attempt, including fallback, consumes a reservation; pending
+replays do not. Reopen preserves all counters and invalidates the snapshot.
+The 8 delivery calls are a host-facing instruction, not a measured host balance.
+Host searches/reads must reserve before use; timestamps prove registration time only.
+Existing ledgers remain compatible and cannot be retrofitted via init with fake budgets.
+
+### Validation & Error Matrix
+- Changed limit or retrofitted execution metadata: init fails without resetting state.
+- Global budget exhausted: no new search receipt; stop and close from existing facts or gap.
+- Open evidence: calculate with ledger fails; checked finalize also fails.
+- Missing/stale snapshot on controlled ledger: finalize fails, no JSON stdout.
+- Reopen after seal: phase returns to research; all normal reopen limits remain.
+- Failed finalize: no new artifact, old output remains; caller must require current exit 0.
+- Output aliases input/stock/ledger/sidecar: fail rather than overwrite them.
+
+### Good / Base / Bad Cases
+Good: initialize before research, reserve/result per call, close all, calculate,
+write matching report, finalize and deliver the exact stdout. Base: budget exhausted
+with missing evidence, close gaps, calculate null totals and deliver ungraded JSON.
+Bad: fill one fake round after dozens of real calls, alter dimensions after calculate,
+or send an old output file after a failed finalization.
+
+### Tests Required
+Execution tests cover shared fallback budgets, duplicate reservation replay, init
+immutability, reopening invalidation, exhausted gap delivery, terminal sealing,
+stale same-star score changes, real CLI snapshot checks and atomic output preservation.
+Run the full rating suite, Ruff and skill metadata checks before synchronization.
+
+### Wrong vs Correct
+Wrong: these helpers intercept every external search or verify report facts.
+Correct: they reject inconsistent registered workflow states; host enforcement and
+real-model research quality need separate integration and live acceptance. This
+iteration updates and pushes the repository only; the NAS installed copy and
+Hermes/Web callers are not synchronized by these changes.

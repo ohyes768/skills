@@ -34,7 +34,7 @@ ROE 历史取 roe_year 及前两年；同年相同值可去重，同年冲突、
 行业缺失、不支持或两级冲突时未评分，不从公司名字猜。银行和保险使用下述各自独立证据包；其他非银金融仍返回 null，保留子行业缺口说明。
 完整支持的行业集合与标签解析由 `financial_score.py` 维护；脚本返回具体问题，无需为常规运行读取源码。
 
-五维确定后继续用主 skill 的 calculate/finalize。来源编号及报告末尾来源表按主 skill“来源输出”执行。正常 finalize 加 `--stock stock.json --check-financial --research-state research.json`，
+五维确定且全部取证结案后，用 `calculate --input dimensions.json --research-state research.json` 记录成稿快照。任何改分必须重跑该命令；finalize 会拒绝旧快照。继续用主 skill 的 finalize，带 `--output rating.json` 原子保存通过检查的结果，成功后立即停止工具调用并原样交付 stdout。来源编号及报告末尾来源表按主 skill“来源输出”执行。正常 finalize 加 `--stock stock.json --check-financial --research-state research.json`，
 能拦截手抄 E 分数错误。若有已披露的外部口径冲突，只能按主 skill 的受限兼容入口交付，不能偷偷替换输入数字。
 
 ### 普通企业 E 规则（解释脚本结果时查阅）
@@ -77,8 +77,8 @@ E 账本先 init --insurance-research。保险不套银行数据包，二者不�
 
 优先复用可核对出处的已有结构化数据。A-D 按主 skill 的来源层级选可读网页；银行/保险专用指标仍用官方披露。
 每项保留来源链接、网页栏目/表格/行列、期间、主体与单位；原网页缺值不能从摘要猜数。
-正文缺影响定分的表格或脚注时，按 [有限 PDF 补证](pdf-fallback.md) 使用现成宿主能力读相关页。
-这些评分脚本不提供 PDF 解析器；不在分析中安装依赖。补证共用已有预算，核心缺口仍无法补齐则 null。
+禁止下载、解析、截图或读取 PDF（含已有 PDF 缓存），不调用其他 skill 绕过。
+正文缺影响定分的表格或脚注时，在原预算内搜索其他可读网页；仍缺核心证据则 null。
 已有来源链接可以保留为线索，但只有实际读到的内容才能作为已核实证据。
 
 ## 3. 只读校验已有结果

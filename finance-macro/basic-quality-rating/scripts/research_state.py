@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from rating_math import _read
+from rating_math import _read, calculate
 from research_policy import fail_route, new_routes, select_route
 
 REQUIRED_TOPICS = {
@@ -27,7 +27,8 @@ REQUIRED_TOPICS = {
 BANK_TOPICS = {"financial": ("profitability", "asset_quality", "capital", "liquidity")}
 INSURANCE_TOPICS = ("profitability", "solvency", "insurance_business", "asset_liability")
 ALL_TOPICS = {**REQUIRED_TOPICS, **BANK_TOPICS}
-MAX_ROUNDS = 3  # Initial research plus two follow-ups, shared by each dimension.
+MAX_ROUNDS = 5  # Initial web research plus four follow-ups, shared by each dimension.
+DELIVERY_RESERVE = 8
 
 
 def _text(value, name, limit=1200):
@@ -58,6 +59,20 @@ def _check_shape(state):
             set(ALL_TOPICS),
         ):
             raise ValueError("状态身份或维度结构损坏")
+        execution = state.get("execution")
+        if execution is not None:
+            if (
+                type(execution["research_limit"]) is not int
+                or execution["research_limit"] < 1
+                or execution["phase"] not in ("research", "report")
+                or execution["delivery_reserve"] != DELIVERY_RESERVE
+                or _calls_used(state) > execution["research_limit"]
+            ):
+                raise ValueError("执行预算或阶段损坏")
+            if execution["phase"] == "report":
+                snapshot = execution["snapshot"]
+                if snapshot["derived"] != calculate(snapshot["dimensions"]):
+                    raise ValueError("成稿评分快照损坏")
         new_routes(list(state["providers"]))
         for route in state["providers"].values():
             if (
@@ -149,6 +164,10 @@ def _evidence(dimension, dim, facts):
         raise ValueError("本维度最多保留 12 条紧凑事实；复用已读取的网页原文，不重复抓取")
 
 
+def _calls_used(state):
+    return sum(len(r["attempts"]) for d in state["dimensions"].values() for r in d["rounds"])
+
+
 def _summary(state, dimension=None):
     def brief(key, dim):
         return {
@@ -174,6 +193,17 @@ def _summary(state, dimension=None):
     return {
         "stock": state["stock"],
         "terminal": all(dim["status"] != "open" for dim in state["dimensions"].values()),
+        **(
+            {
+                "execution": {
+                    "phase": state["execution"]["phase"],
+                    "research_remaining": state["execution"]["research_limit"] - _calls_used(state),
+                    "delivery_reserve": state["execution"]["delivery_reserve"],
+                }
+            }
+            if "execution" in state
+            else {}
+        ),
         "providers": state["providers"],
         "dimensions": {key: brief(key, dim) for key, dim in state["dimensions"].items()},
     }
@@ -201,8 +231,21 @@ def _dispatch(state, dimension, round_, now):
         decision = select_route(state["providers"], round_["attempts"], now=now)
         attempt = len(round_["attempts"]) + 1
         if decision["action"] == "search":
+            execution = state.get("execution")
+            if execution and _calls_used(state) >= execution["research_limit"]:
+                round_["closed"] = True
+                return {
+                    "action": "stop",
+                    "dimension": dimension,
+                    "reason": "全局取证预算已用尽；用已得事实 complete 或 gap，保留交付调用",
+                }
             round_["attempts"].append(
-                {"provider": decision["provider"], "outcome": "pending", "result_sha256": None}
+                {
+                    "provider": decision["provider"],
+                    "outcome": "pending",
+                    "result_sha256": None,
+                    "reserved_at": now,
+                }
             )
         elif decision["action"] in ("stop", "decide"):
             round_["closed"] = True
@@ -258,7 +301,17 @@ class ResearchRun:
                 self._save(state)
             return response
 
-    def init(self, stock, providers, *, bank_research=False, insurance_research=False):
+    def init(
+        self,
+        stock,
+        providers,
+        *,
+        bank_research=False,
+        insurance_research=False,
+        research_limit=None,
+    ):
+        if research_limit is not None and (type(research_limit) is not int or research_limit < 1):
+            raise ValueError("research_limit 必须为正整数")
         identity, input_sha = _identity(stock), _digest(stock)
         routes = new_routes(providers)
         if bank_research and insurance_research:
@@ -287,6 +340,11 @@ class ResearchRun:
                 state = _load(self.path)
                 if state["input_sha256"] != input_sha or list(state["providers"]) != providers:
                     raise ValueError("状态已绑定其他输入或渠道配置；不能重新 init 重置预算")
+                if research_limit is not None and (
+                    "execution" not in state
+                    or state["execution"]["research_limit"] != research_limit
+                ):
+                    raise ValueError("不能补建或变更执行预算；旧账本按原模式续跑，不事后补账")
                 if (
                     financial_mode
                     and "financial" in state["dimensions"]
@@ -294,6 +352,8 @@ class ResearchRun:
                 ):
                     raise ValueError("financial 已绑定其他行业模式，不能重置取证预算")
                 if financial_mode and "financial" not in state["dimensions"]:
+                    if state.get("execution", {}).get("phase") == "report":
+                        raise ValueError("成稿后不能追加行业取证模式")
                     state["dimensions"]["financial"] = empty_dimension("financial")
                     self._save(state)
             else:
@@ -307,6 +367,14 @@ class ResearchRun:
                         for key in (ALL_TOPICS if financial_mode else REQUIRED_TOPICS)
                     },
                 }
+                if research_limit is not None:
+                    state["execution"] = {
+                        "research_limit": research_limit,
+                        "delivery_reserve": DELIVERY_RESERVE,
+                        "phase": "research",
+                        "snapshot": None,
+                        "created_at": time.time(),
+                    }
                 self._save(state)
             return _summary(state)
 
@@ -320,6 +388,8 @@ class ResearchRun:
         now = time.time() if now is None else now
 
         def change(state):
+            if state.get("execution", {}).get("phase") == "report":
+                raise ValueError("已进入成稿阶段；具体分档冲突须先 reopen，不再取证")
             dim = _dimension(state, dimension)
             for key, other in state["dimensions"].items():
                 for round_ in other["rounds"]:
@@ -380,6 +450,7 @@ class ResearchRun:
                 return _dispatch(state, dimension, round_, now)
             if record["outcome"] != "pending" or round_["closed"]:
                 raise ValueError("该回执已结案或取消，不接受迟到结果")
+            record["recorded_at"] = now
             record["result_sha256"] = signature
             record["outcome"] = outcome
             if outcome == "failure":
@@ -429,6 +500,9 @@ class ResearchRun:
             dim = _dimension(state, dimension)
             if dim["status"] == "open" or dim["reopen_used"]:
                 raise ValueError("仅已结案维度可因具体冲突重开一次")
+            if "execution" in state:
+                state["execution"]["phase"] = "research"
+                state["execution"]["snapshot"] = None
             dim["reopen_used"] = True
             dim["status"] = "open"
             dim["reason"] = f"冲突：{conflict}；影响：{impact}"
@@ -436,8 +510,28 @@ class ResearchRun:
 
         return self._update(change)
 
+    def seal(self, dimensions):
+        derived = calculate(dimensions)
 
-def check_research(path, draft, stock=None, *, require_bank=False, require_insurance=False):
+        def change(state):
+            check_research(
+                self.path, {**state["stock"], "dimensions": dimensions}, require_snapshot=False
+            )
+            if "execution" in state:
+                state["execution"]["phase"] = "report"
+                state["execution"]["snapshot"] = {
+                    "dimensions": dimensions,
+                    "derived": derived,
+                    "calculated_at": time.time(),
+                }
+            return derived
+
+        return self._update(change)
+
+
+def check_research(
+    path, draft, stock=None, *, require_bank=False, require_insurance=False, require_snapshot=True
+):
     state = _load(Path(path))
     if _identity(draft) != state["stock"]:
         raise ValueError("取证状态与本次评级股票身份不一致")
@@ -459,6 +553,16 @@ def check_research(path, draft, stock=None, *, require_bank=False, require_insur
         if dim["status"] == "complete" and (draft["dimensions"][key] is None or _missing(key, dim)):
             raise ValueError(f"{key} complete 状态与证据/分数不一致")
 
+    if require_snapshot and "execution" in state:
+        execution = state["execution"]
+        if (
+            execution["phase"] != "report"
+            or execution["snapshot"]["dimensions"] != draft["dimensions"]
+        ):
+            raise ValueError(
+                "未计算最终版维度或改分后快照失效；先 calculate --research-state，再成稿/finalize"
+            )
+
 
 def main(argv=None):
     if hasattr(sys.stdout, "reconfigure"):
@@ -468,6 +572,9 @@ def main(argv=None):
     parser.add_argument("command", choices=("init", "status", "start", "result", "close", "reopen"))
     parser.add_argument("--state", required=True)
     parser.add_argument("--stock")
+    parser.add_argument(
+        "--research-limit", type=int, help="Immutable global research-call budget (init only)"
+    )
     parser.add_argument("--providers", nargs="+")
     parser.add_argument(
         "--bank-research", action="store_true", help="Enable bank E evidence budget (init only)"
@@ -488,6 +595,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     run = ResearchRun(args.state)
     try:
+        if args.research_limit is not None and args.command != "init":
+            raise ValueError("--research-limit 仅用于 init")
         if (args.bank_research or args.insurance_research) and args.command != "init":
             raise ValueError("金融取证模式参数仅用于 init")
         if args.command == "init":
@@ -498,6 +607,7 @@ def main(argv=None):
                 args.providers,
                 bank_research=args.bank_research,
                 insurance_research=args.insurance_research,
+                research_limit=args.research_limit,
             )
         elif args.command == "status":
             result = run.status(args.dimension)

@@ -88,21 +88,21 @@ class ResearchStateTests(unittest.TestCase):
         self.assertEqual(next_dim["provider"], "backup")
         self.assertEqual(self.run.status()["providers"]["primary"]["reason"], "quota")
 
-    def test_initial_plus_two_followups_exhaust_without_fabricating_facts(self):
-        for n in range(1, 4):
+    def test_initial_plus_four_followups_exhaust_without_fabricating_facts(self):
+        for n in range(1, 6):
             request = f"q-{n}"
             self.start(request_id=request)
             self.run.result("business", request, 1, "empty", now=100)
             end = self.run.result("business", request, 2, "empty", now=100)
             self.assertEqual(end["action"], "decide")
         with self.assertRaises(ValueError):
-            self.start(request_id="q-4")
+            self.start(request_id="q-6")
         self.assertEqual(self.run.status("business")["evidence"], [])
-        self.run.close("business", "gap", "初查及两轮补查后仍缺关键事实")
+        self.run.close("business", "gap", "初查及四轮补查后仍缺关键事实")
         self.assertEqual(self.run.status("business")["status"], "gap")
 
     def test_last_success_can_complete_after_budget_is_spent(self):
-        for n in range(1, 4):
+        for n in range(1, 6):
             request = f"q-{n}"
             self.start(request_id=request)
             self.run.result(
@@ -110,11 +110,11 @@ class ResearchStateTests(unittest.TestCase):
                 request,
                 1,
                 "success",
-                evidence=facts("business") if n == 3 else [],
+                evidence=facts("business") if n == 5 else [],
                 now=100,
             )
-        self.run.close("business", "complete", "第三轮已获得最后缺口")
-        self.assertEqual(self.run.status("business")["rounds_used"], 3)
+        self.run.close("business", "complete", "第五轮已获得最后缺口")
+        self.assertEqual(self.run.status("business")["rounds_used"], 5)
 
     def test_complete_requires_topics_and_real_reference_shape(self):
         with self.assertRaises(ValueError):

@@ -20,18 +20,18 @@
 2. 优先复用已有结构化资料，再用宿主搜索/网页读取工具核对银行官网、交易所公告正文、
    官方业绩指标表及第三支柱披露的可读网页。记录 source_url 与 locator（栏目、表格、行列），
    核对公司、年份、单位、集团/母行口径和指标定义，不从新闻或搜索摘要猜数字。
-   正文缺关键表格、表头或脚注时，按 [有限 PDF 补证](pdf-fallback.md) 用现成工具读官方原件相关页；
-   不默认通读 PDF。无工具或同一预算内仍缺核心数据则 E=null。财务表与资本监管表可能口径不同，逐项确认。
+   禁止读取 PDF 或 PDF 缓存。正文缺关键表格、表头或脚注时，在已有预算内搜索其他官方可读网页；
+   仍缺核心数据则 E=null。财务表与资本监管表可能口径不同，逐项确认。
 
 3. 银行 E 也使用现有取证账本。初始化时加 `--bank-research`：
 
    ```text
-   python3 <skill目录>/scripts/research_state.py init --state research.json --stock stock.json --providers <已有渠道ID列表> --bank-research
+   python3 <skill目录>/scripts/research_state.py init --state research.json --stock stock.json --providers <已有渠道ID列表> --bank-research --research-limit 24
    ```
 
    已有账本会追加 financial，不清空 A-D、已耗轮次或渠道故障；之后不带该参数也不会删掉 E。
    `start/result/close` 用法见 [取证控制](research-control.md)，dimension 使用 financial。
-   必要主题是 profitability / asset_quality / capital / liquidity。E 共用一轮初查加两轮补查，
+   必要主题是 profitability / asset_quality / capital / liquidity。E 共用一轮初查加四轮网页补查，
    不能按指标或换关键词重新计数；每轮先说明缺口及评分影响。原渠道配额/权限失败继续有效。
    查齐即可结案 complete；到上限仍缺核心证据则 gap、E=null。具体重大冲突仍只允许重开一次。
    账本保存紧凑论据，具体数字和出处保存在 bank-data.json；complete 不替代数值校验。
@@ -119,7 +119,8 @@ published_at、scope=group、metrics。必须同组同期间，排除自身与�
 
 ```text
 python3 <skill目录>/scripts/rating_math.py financial --input stock.json --bank-data bank-data.json
-python3 <skill目录>/scripts/rating_math.py finalize --input draft.json --stock stock.json --check-financial --bank-data bank-data.json --research-state research.json
+python3 <skill目录>/scripts/rating_math.py calculate --input dimensions.json --research-state research.json
+python3 <skill目录>/scripts/rating_math.py finalize --input draft.json --stock stock.json --check-financial --bank-data bank-data.json --research-state research.json --output rating.json
 ```
 
 正常运行直接 financial → finalize；financial 内已校验证据包，独立 validate 仅用于排查修包问题。finalize核对E与该证据包一致，

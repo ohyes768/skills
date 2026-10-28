@@ -2,7 +2,9 @@
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 WEIGHTS = {
@@ -180,7 +182,10 @@ def main():
         action="store_true",
         help="Verify E against original --stock (finalize only)",
     )
-    parser.add_argument("--research-state", help="Verify terminal research ledger (finalize only)")
+    parser.add_argument(
+        "--research-state", help="Bind calculated dimensions or verify terminal ledger"
+    )
+    parser.add_argument("--output", help="Atomically save final ten-field JSON (finalize only)")
     sidecars = parser.add_mutually_exclusive_group()
     sidecars.add_argument("--bank-data", help="Explicit bank evidence sidecar (financial/finalize)")
     sidecars.add_argument(
@@ -189,9 +194,29 @@ def main():
     args = parser.parse_args()
     try:
         data = _read(args.input)
+        if args.output and args.command != "finalize":
+            raise ValueError("--output 仅用于 finalize")
+        if args.output and Path(args.output).resolve() in {
+            Path(value).resolve()
+            for value in (
+                args.input,
+                args.stock,
+                args.research_state,
+                args.bank_data,
+                args.insurance_data,
+            )
+            if value
+        }:
+            raise ValueError("输出不能覆盖草稿、原始输入、账本或行业证据包")
         if args.command != "finalize":
-            if args.stock or args.check_financial or args.research_state:
-                raise ValueError("--stock、--check-financial 与 --research-state 仅用于 finalize")
+            if (
+                args.stock
+                or args.check_financial
+                or (args.research_state and args.command == "financial")
+            ):
+                raise ValueError(
+                    "--stock、--check-financial 仅用于 finalize；financial 不接受 --research-state"
+                )
             if args.command == "financial":
                 from financial_score import score_financial
 
@@ -205,7 +230,12 @@ def main():
             else:
                 if args.bank_data or args.insurance_data:
                     raise ValueError("金融证据包仅用于 financial/finalize")
-                result = calculate(data)
+                if args.research_state:
+                    from research_state import ResearchRun
+
+                    result = ResearchRun(args.research_state).seal(data)
+                else:
+                    result = calculate(data)
         else:
             result = finalize(
                 data,
@@ -217,7 +247,20 @@ def main():
                 if args.insurance_data
                 else None,
             )
-        print(json.dumps(result, ensure_ascii=False, allow_nan=False))
+        serialized = json.dumps(result, ensure_ascii=False, allow_nan=False)
+        if args.output:
+            output = Path(args.output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            fd, name = tempfile.mkstemp(prefix=output.name + ".", dir=output.parent)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                    stream.write(serialized + "\n")
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(name, output)
+            finally:
+                Path(name).unlink(missing_ok=True)
+        print(serialized)
     except (OSError, ValueError, TypeError) as exc:
         print(f"rating_math: {exc}", file=sys.stderr)
         return 2

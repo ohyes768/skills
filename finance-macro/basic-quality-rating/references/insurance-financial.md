@@ -15,15 +15,15 @@ python3 <skill目录>/scripts/insurance_financial.py template --stock stock.json
 --type 为 life / property / group。将模板 stdout 存入 insurance-data.json 后填入确认值。
 优先复用已有结构化数据，再读取上市公司/保险法人官网、交易所公告正文及偿付能力摘要的
 可读网页。保留来源链接、栏目/表格/行列位置，核对主体、年份、单位、表头、脚注与精算假设。
-不从新闻或搜索摘要猜值。正文缺关键表格、表头或脚注时，按 [有限 PDF 补证](pdf-fallback.md)
-用现成工具读官方原件相关页，不默认通读 PDF。无工具或原预算内仍缺核心证据则 E=null。
+不从新闻或搜索摘要猜值。禁止读取 PDF 或 PDF 缓存。
+正文缺关键表格、表头或脚注时，在原预算内搜索其他官方可读网页；仍缺核心证据则 E=null。
 
 ```text
-python3 <skill目录>/scripts/research_state.py init --state research.json --stock stock.json --providers <已有渠道ID列表> --insurance-research
+python3 <skill目录>/scripts/research_state.py init --state research.json --stock stock.json --providers <已有渠道ID列表> --insurance-research --research-limit 24
 ```
 
 E 使用 financial 维度，必要主题为 profitability、solvency、insurance_business、asset_liability。
-start/result/close 用法见 [取证控制](research-control.md)。所有指标共用一次初查和两轮补查，
+start/result/close 用法见 [取证控制](research-control.md)。所有指标共用一次初查和四轮网页补查，
 沿用全局渠道故障、已读原文与具体冲突一次重开规则，不能按子公司或换关键词重置预算。
 已有 A-D 账本可追加保险模式，保留已耗预算；既有银行 E 模式不能改成保险重置预算。
 查齐并解决影响分档的冲突再 complete；核心缺口到上限则 gap，E=null。
@@ -136,7 +136,8 @@ coverage 也使用该格式，另含 entity_ids（与 entities 的ID恰好相同
 
 ```text
 python3 <skill目录>/scripts/rating_math.py financial --input stock.json --insurance-data insurance-data.json
-python3 <skill目录>/scripts/rating_math.py finalize --input draft.json --stock stock.json --check-financial --insurance-data insurance-data.json --research-state research.json
+python3 <skill目录>/scripts/rating_math.py calculate --input dimensions.json --research-state research.json
+python3 <skill目录>/scripts/rating_math.py finalize --input draft.json --stock stock.json --check-financial --insurance-data insurance-data.json --research-state research.json --output rating.json
 ```
 
 正常运行直接 financial → finalize，financial 内已校验证据包；独立 validate 仅用于修包诊断。
