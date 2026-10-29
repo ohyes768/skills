@@ -22,7 +22,7 @@ class SkillVersionTests(unittest.TestCase):
 
     def test_finalize_stamps_own_metadata_version(self):
         result = rating_math.finalize(self.draft())
-        self.assertEqual(result["skill_version"], "4.3.0")
+        self.assertEqual(result["skill_version"], "4.4.0")
         self.assertEqual(len(result), 11)
         self.assertEqual(validate(result)["status"], "passed")
 

@@ -17,7 +17,7 @@ from rating_math import DERIVED, LABELS, OUTPUT_FIELDS, _read, _read_bank, _read
 def _report_warnings(data):
     warnings = []
     text = data["report_md"]
-    for label in ("业务核实", "五维", "边界", "结论", "风险", "证据来源"):
+    for label in ("业务核实", "五维", "结论", "风险", "证据来源"):
         if label not in text:
             warnings.append(f"报告可能缺少 {label} 内容，请人工复核")
     for label in LABELS.values():

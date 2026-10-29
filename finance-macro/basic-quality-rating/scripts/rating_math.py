@@ -38,6 +38,13 @@ OUTPUT_FIELDS = (
 DERIVED = {"weighted_score", "stars", "boundary"}
 THRESHOLDS = (200, 300, 400, 450)
 
+# Reject aggregate-rating presentation, not real hotel grades or company names.
+REPORT_RATING_RE = re.compile(
+    r"星级(?!酒店|宾馆)|踩线|升星|降星|[⭐★☆]|非边界档位"
+    r"|(?<![A-Za-z0-9])[1-5]\s*星(?!级?(?:酒店|宾馆))"
+    r"|(?:评级|评为|评定为|综合|总体)[^。\n；]{0,8}[一二三四五]\s*星(?!电子|级?(?:酒店|宾馆))"
+)
+
 
 def read_skill_version():
     """Stamp provenance from this installed skill, never from the caller/model."""
@@ -135,6 +142,10 @@ def finalize(
             raise TypeError(f"{field} 必须为字符串数组")
         for value in draft[field]:
             _text(value, field)
+    for field in ("summary", "report_md", "risks", "watch_points"):
+        values = draft[field] if isinstance(draft[field], list) else [draft[field]]
+        if any(REPORT_RATING_RE.search(value) for value in values):
+            raise ValueError(f"{field} 不得展示总体星级或踩线提示；只展示五维分数及分析理由")
     if stock is not None:
         if not isinstance(stock, dict):
             raise ValueError("stock 必须为输入股票 JSON 对象")

@@ -31,7 +31,7 @@ class RatingValidationTests(unittest.TestCase):
                 "report_md": "# 基本面评级：虚构测试公司（000001）\n\n"
                 "本报告不含目标价，不提供加仓或减仓建议。\n毛利率为 2.95%。\n"
                 "业务核实\n五维：业务模式、护城河、行业前景、管理层、财务质量\n"
-                "星级与边界\n结论与风险\n证据来源：https://example.com/annual.pdf",
+                "结论与风险\n证据来源：https://example.com/annual.pdf",
             }
         )
 

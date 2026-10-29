@@ -3,7 +3,7 @@ name: basic-quality-rating
 description: "收到单只 A 股结构化财务 JSON、需要五维基本面评分与星级及 Markdown 报告 JSON 时使用。仅用于自动化经营质量分析，不做估值或买卖建议。"
 license: MIT
 metadata:
-  version: 4.3.0
+  version: 4.4.0
   author: xbtlin (https://github.com/xbtlin/ai-berkshire) + Hermes Agent
   source: adapted from ai-berkshire
   hermes:
@@ -117,7 +117,7 @@ python3 <skill目录>/scripts/rating_math.py calculate --input dimensions.json -
 python3 <skill目录>/scripts/research_progress.py sources --output progress.json --stock stock.json --f10-data f10-data.json
 ```
 
-复用 calculate 的星级及 boundary 原文，来源表使用脚本生成的编号；报告重要事实在句末引用 [S1]。来源表只列实际用于结论的材料，缺日期不造日期，推断写明“据此判断”。调用方背景若确实用于报告，按输出合同单列 [I1]；不造上游来源。来源脚本不联网、不替代事实核验。
+calculate 的 weighted_score/stars/boundary 仅保留为兼容 JSON 字段，报告、摘要、风险和关注项不展示总体星级、星星、踩线或升降星描述；来源表使用脚本生成的编号；报告重要事实在句末引用 [S1]。来源表只列实际用于结论的材料，缺日期不造日期，推断写明“据此判断”。调用方背景若确实用于报告，按输出合同单列 [I1]；不造上游来源。来源脚本不联网、不替代事实核验。
 
 按输出合同一次生成 draft.json，包含 code/name/dimensions/summary/risks/watch_points/report_md。只修具体字段或段落，改分时同步进度及报告并重跑 calculate。新的具体冲突沿用原补查上限；只有公司/核心业务/关键来源根本错误可完整重写一次，不无限重写。
 
@@ -125,6 +125,6 @@ python3 <skill目录>/scripts/research_progress.py sources --output progress.jso
 python3 <skill目录>/scripts/rating_math.py finalize --input draft.json --stock stock.json --check-financial --f10-data f10-data.json --progress progress.json --output rating.json
 ```
 
-交付前检查身份/期间、分项与理由、缺口/null、星级与边界、引用对应。finalize 复核结构、输入身份、进度分数及 F10 算分，不证明事实或语义。成功后原样回复 stdout 的一个 JSON 对象，无围栏、前后缀或额外字段，并停止调用工具；失败只修具体错误，不交付半成品或旧文件。
+交付前检查身份/期间、分项与理由、缺口/null、兼容 JSON 算分和引用对应。报告仅展示五维分数、理由、结论、风险及来源，不设星级与边界章节。finalize 复核结构、输入身份、进度分数及 F10 算分，不证明事实或语义。成功后原样回复 stdout 的一个 JSON 对象，无围栏、前后缀或额外字段，并停止调用工具；失败只修具体错误，不交付半成品或旧文件。
 
 十一字段恰为 code/name/dimensions/weighted_score/stars/boundary/summary/risks/watch_points/report_md/skill_version。dimensions 恰为 business/moat/industry/management/financial，值为1–5整数或 null；risks/watch_points 为字符串数组。scored_at/data_date 由调用方记录。只读复核已有文件、历史 CLI 或部署迁移时，才按需读 [工具兼容说明](references/tools.md) 与 [安装迁移](references/setup-and-migration.md)。
