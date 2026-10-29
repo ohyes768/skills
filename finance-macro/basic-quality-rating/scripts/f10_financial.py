@@ -8,7 +8,7 @@ import re
 import sys
 from datetime import UTC, date, datetime
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from bank_financial import stock_fingerprint
 from fetch_financial_candidates import BASE_URL, _download, _rows, _source_date, _write
@@ -150,6 +150,45 @@ def normalize(stock, packet):
     )
     if target not in main:
         payload["latest_quarter_yoy_pct"] = None
+    sources = []
+    for kind in ("main", "balance"):
+        source = packet["datasets"][kind]
+        url = source.get("url")
+        row = datasets[kind].get(target)
+        if (
+            not source.get("body")
+            or not isinstance(url, str)
+            or urlsplit(url).scheme not in ("http", "https")
+            or not urlsplit(url).netloc
+        ):
+            continue
+        if kind == "balance" and payload["debt_asset_ratio"] is None:
+            continue
+        sources.append(
+            {
+                "dataset": kind,
+                "title": f"东方财富F10：{REPORTS[kind]}",
+                "url": url,
+                "published_at": _source_date(row["NOTICE_DATE"], "NOTICE_DATE").isoformat()
+                if row
+                else None,
+                "accessed_at": datetime.fromisoformat(source["fetched_at"]).date().isoformat()
+                if source.get("fetched_at")
+                else None,
+                "target_publication": True,
+                "period": f"{years[0]}—{anchor}年度；{prev_year}Q{prev_quarter}、{year}Q{quarter}",
+                "locator": "ROEJQ、KCFJCXSYJLR、KCFJCXSYJLRTZ"
+                if kind == "main"
+                else "TOTAL_ASSETS、TOTAL_LIABILITIES",
+                "support": "基础ROE、年度与单季扣非盈利及趋势"
+                if kind == "main"
+                else "目标期合并资产负债率",
+            }
+        )
+        if kind == "balance":
+            sources[-1]["period"] = target
+        elif not row:
+            sources[-1]["support"] = "目标期未返回可用主要指标；不能用旧期补评分"
     return (
         payload,
         issues,
@@ -158,6 +197,7 @@ def normalize(stock, packet):
             "annual_year": anchor,
             "source": "东方财富F10（第三方，未逐项官方核验）",
             "latest_weighted_roe": number(latest.get("ROEJQ")),
+            "sources": sources,
         },
     )
 
@@ -176,10 +216,9 @@ def score_f10(stock, packet):
             )
         ]
         missing = avg is None or any(v is None for v in profits)
-        if missing:
-            score = None
-        else:
-            base = 1 + sum(avg >= t for t in (5, 8, 12, 15))
+        base = 1 + sum(avg >= t for t in (5, 8, 12, 15)) if avg is not None else None
+        cap = None
+        if all(v is not None for v in profits):
             negative = sum(v < 0 for v in profits[1:])
             cap = (
                 2
@@ -190,13 +229,37 @@ def score_f10(stock, packet):
                 if any(v <= 0 for v in profits)
                 else 5
             )
-            trend = [h["value"] for h in payload["roe_history"]]
-            score = min(base, cap, 4 if trend[0] > trend[1] > trend[2] else 5)
+        trend = [h["value"] for h in payload["roe_history"]]
+        trend_cap = (
+            (4 if trend[0] > trend[1] > trend[2] else 5)
+            if all(v is not None for v in trend)
+            else None
+        )
+        score = None if missing else min(base, cap, trend_cap)
         result = {
             "score": score,
             "status": "insufficient_data" if missing else "scored",
             "sector": sector,
-            "checks": [{"rule": "f10_profitability_v1", "input": payload, "cap": score}],
+            "checks": [
+                {"rule": "roe_base", "input": {"roe_avg_3y": avg}, "cap": base},
+                {
+                    "rule": "earnings",
+                    "input": {
+                        k: payload[k]
+                        for k in (
+                            "net_profit_ex_non_recurring_yoy",
+                            "previous_quarter_yoy_pct",
+                            "latest_quarter_yoy_pct",
+                        )
+                    },
+                    "cap": cap,
+                },
+                {
+                    "rule": "roe_trend",
+                    "input": {"roe_history": payload["roe_history"]},
+                    "cap": trend_cap,
+                },
+            ],
             "risks": [],
             "issues": ["缺少三年ROE或年度/相邻单季扣非同比"] if missing else [],
         }
@@ -206,11 +269,38 @@ def score_f10(stock, packet):
             if trend[0] > trend[1] > trend[2]:
                 result["risks"].append("最近三年加权ROE连续下降")
         result["limitations"] = [LIMITATION]
+        coverage["sources"] = [s for s in coverage["sources"] if s["dataset"] == "main"]
     else:
         result = score_financial(payload)
         result["limitations"] = []
     result["issues"].extend(issues)
     result.update(policy="f10-basic-v1", coverage=coverage, normalized_input=payload)
+    rules = {check["rule"]: check for check in result["checks"]}
+    base = rules.get("roe_base", {}).get("cap")
+    caps = {key: check["cap"] for key, check in rules.items() if key != "roe_base"}
+    labels = {
+        "debt": "负债规则",
+        "earnings": "盈利规则",
+        "roe_trend": "ROE趋势",
+        "severe_weaknesses": "严重弱项组合",
+    }
+    parts = [f"三年ROE基础档{base}分" if base is not None else "三年ROE基础档未确定"]
+    parts.extend(
+        f"{labels.get(key, key)}上限{value}分"
+        if value is not None
+        else f"{labels.get(key, key)}待核实"
+        for key, value in caps.items()
+    )
+    parts.append(
+        f"最终取{result['score']}分" if result["score"] is not None else "核心数据不足，未评级"
+    )
+    result["explanation"] = {
+        "base_score": base,
+        "caps": caps,
+        "final_score": result["score"],
+        "missing": result["issues"] if result["score"] is None else [],
+        "text": "；".join(parts) + "。",
+    }
     return result
 
 

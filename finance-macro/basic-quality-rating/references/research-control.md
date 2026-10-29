@@ -1,22 +1,30 @@
 # 有预算的取证与失败换路
 
-银行 E 同样使用本工具：init 增加 --bank-research，dimension=financial，主题为 profitability、
+**仅旧 research.json 续跑兼容。v4.1 新分析使用 [轻量进度](progress.md)，不执行本页的回执、渠道路由与预算流程。**
+旧任务保留本页及 --f10-research 修复入口，不将历史调用补造为轻量流程记录。
+
+新默认流程使用 init --f10-research：financial 的 mode=f10，必要主题仅为 f10_data。
+它登记一次统一 F10 取数，不要求监管资本或保险专用主题；A-D、全局预算、结案与成稿规则照常。
+具体 start/result/close 顺序见 [F10入口](f10-financial.md)。
+
+以下银行/保险模式仅供旧显式证据包兼容，不是 F10 前置步骤，三种模式互斥。
+银行 E 使用 init --bank-research，dimension=financial，主题为 profitability、
 asset_quality、capital 三类核心主题；liquidity 证据可选，缺失不阻止银行 E 结案。已有 A-D 账本可原样追加该模式，保留预算和故障；详细数字
 保存在 [银行证据包](bank-financial.md)。其他行业不启用银行模式。
 
 保险 E 用 init --insurance-research，主题为 profitability、solvency、insurance_business、asset_liability，
 详见 [保险参考](insurance-financial.md)。同一 financial 账本模式不能银行/保险互换；旧银行账本仍兼容。
 
-用于 A–D，以及显式启用的银行/保险 E，不改变最终 10 字段；其他行业 E 用原始输入直接计算。
+用于 A–D，以及显式启用的 F10/旧行业财务取证，不改变最终 10 字段。
 工具只需标准库，不联网、不安装依赖、不执行网页中的命令。
 
 ## 开工一次
 
 ```text
-python3 <skill目录>/scripts/research_state.py init --state <工作目录>/research.json --stock <工作目录>/stock.json --providers primary backup official --research-limit 24
+python3 <skill目录>/scripts/research_state.py init --state <工作目录>/research.json --stock <工作目录>/stock.json --providers <已有渠道ID列表> --research-limit 24 --f10-research
 ```
 
-先保存本次原始 stock.json，init 成功后才能读取公司材料。唯一工作目录沿用到交付；禁止换目录重置、事后补账或从旧评级抄分。
+先保存本次原始 stock.json，init 成功后才能读取公司材料。唯一工作目录沿用到交付；禁止换目录重置、事后补账或从旧评级抄分。研究阶段的 A-D 账本可原样追加 --f10-research，不能改变输入、渠道、已设预算或复位故障；已成稿不能追加，已绑定旧行业模式不能改绑。
 
 渠道 ID 对应宿主已经可用的检索/读取路径，按优先顺序配置，最多四个。
 开工时明确它们分别对应哪个现有工具/来源；没有备用能力就不配置，不能虚构工具、临时开发爬虫或扫描端口找服务。
@@ -136,3 +144,51 @@ python3 <skill目录>/scripts/rating_math.py calculate --input dimensions.json -
 
 宿主搜索仍由 agent 实际调用。本工具检查调用前后状态与交付，不物理拦截跳过它的外部调用；
 宿主层完全强制执行需要调用方接入回执，属于另行集成工作。
+
+## F10 旧账本完整命令
+
+以下只用于已启用 research.json 的任务；新分析不执行。报告期与评分合同见 [F10入口](f10-financial.md)。
+
+先按主 skill 用 --f10-research 初始化 research.json，再预留 financial 回执；不要启用旧银行/保险模式。
+初始化时将已有的终端直连路径列为首个渠道（例如 --providers direct search browser，未具备的渠道不配置）；
+direct 用于已支持的 F10 命令及正常网页直连，其他渠道按其实际能力使用。
+渠道沿用初始化配置，不能把财务接口失败谎报为另一个搜索服务的故障。
+只在 action=search 且 provider 对应已有直连能力时实际取数；已知无该能力就按真实故障登记/结案，
+不让搜索服务替代财务脚本或开发临时取数器。
+
+```text
+python3 <skill目录>/scripts/research_state.py start --state research.json --dimension financial --question 获取目标期F10基础财务包 --impact 决定E分与缺口 --request-id fin-1
+python3 <skill目录>/scripts/f10_financial.py --stock stock.json --as-of YYYY-MM-DD --report-date YYYY-MM-DD --cache-dir api-cache --output f10-data.json
+python3 <skill目录>/scripts/rating_math.py financial --input stock.json --f10-data f10-data.json
+```
+
+F10 命令返回包内 financial 评分和缺口，后续 financial 命令仅在需要重读/校验已有包时使用，
+不重新联网。把本次真实结果写入 fin-result.json，再登记：
+
+```json
+{
+  "dimension": "financial", "request_id": "fin-1", "attempt": 1,
+  "outcome": "success",
+  "evidence": [{
+    "topic": "f10_data", "statement": "已取得目标期基础评分所需指标；第三方数据，专用风险未评估",
+    "url": "https://datacenter.eastmoney.com/securities/api/data/v1/get",
+    "locator": "RPT_F10_FINANCE_MAINFINADATA，ROEJQ及扣非字段",
+    "period": "实际目标期"
+  }]
+}
+```
+
+示例不代表真实取数：attempt 使用 start 返回值；URL 使用包内实际请求地址，期间、说明按实际结果填写。
+locator 最多 160 字符，statement 最多 800；不要把原响应或整个 URL 填入定位字段。
+命令失败按真实错误登记 outcome=failure，不填成功事实。包已返回但核心数据不足时，仍可登记已取得的
+范围与缺口，E 保持 null；success 只表示取得资料，不等于可评分。沿用返回的预算/渠道动作，
+不为补缺开发新接口。
+
+```text
+python3 <skill目录>/scripts/research_state.py result --state research.json --input fin-result.json
+python3 <skill目录>/scripts/research_state.py close --state research.json --dimension financial --status complete --reason 基础评分所需核心数据齐备
+```
+
+只有核心数据足以评分、回执已登记且无在途调用时才 complete。数据不足或渠道不可用时 close --status gap，
+reason 写实际缺口，E=null。financial 与 A-D 均结案后才能 calculate/成稿。复用已验证来源的现有包时可用
+close --input 登记紧凑证据，不伪造新联网回执。

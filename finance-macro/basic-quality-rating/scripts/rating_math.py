@@ -92,7 +92,10 @@ def finalize(
     bank_data=None,
     insurance_data=None,
     f10_data=None,
+    progress=None,
 ):
+    if progress is not None and research_state is not None:
+        raise ValueError("--progress 与旧 --research-state 不能混用")
     if f10_data is not None and (bank_data is not None or insurance_data is not None):
         raise ValueError("F10数据包不能与旧行业证据包混用")
     if f10_data is not None and not check_financial:
@@ -157,6 +160,10 @@ def finalize(
                 "银行流动性证据不完整：report_md 和 watch_points 均须标明“流动性未验证”"
             )
     derived = calculate(draft["dimensions"])
+    if progress is not None:
+        from research_progress import check_progress
+
+        check_progress(progress, draft["dimensions"], stock, identity=draft)
     if research_state is not None:
         from research_state import check_research
 
@@ -166,6 +173,7 @@ def finalize(
             stock,
             require_bank=bank_data is not None,
             require_insurance=insurance_data is not None,
+            require_f10=f10_data is not None,
         )
     result = {**draft, **derived}
     return {field: result[field] for field in OUTPUT_FIELDS}
@@ -210,7 +218,9 @@ def main():
         action="store_true",
         help="Verify E against original --stock (finalize only)",
     )
-    parser.add_argument(
+    progress_flags = parser.add_mutually_exclusive_group()
+    progress_flags.add_argument("--progress", help="Verify lightweight A-D evidence progress")
+    progress_flags.add_argument(
         "--research-state", help="Bind calculated dimensions or verify terminal ledger"
     )
     parser.add_argument("--output", help="Atomically save final ten-field JSON (finalize only)")
@@ -231,6 +241,7 @@ def main():
                 args.input,
                 args.stock,
                 args.research_state,
+                args.progress,
                 args.bank_data,
                 args.insurance_data,
                 args.f10_data,
@@ -243,9 +254,10 @@ def main():
                 args.stock
                 or args.check_financial
                 or (args.research_state and args.command == "financial")
+                or (args.progress and args.command == "financial")
             ):
                 raise ValueError(
-                    "--stock、--check-financial 仅用于 finalize；financial 不接受 --research-state"
+                    "--stock、--check-financial 仅用于 finalize；financial 不接受进度/账本参数"
                 )
             if args.command == "financial":
                 from financial_score import score_financial
@@ -271,12 +283,17 @@ def main():
                     result = ResearchRun(args.research_state).seal(data)
                 else:
                     result = calculate(data)
+                    if args.progress:
+                        from research_progress import check_progress
+
+                        check_progress(args.progress, data)
         else:
             result = finalize(
                 data,
                 _read(args.stock) if args.stock else None,
                 check_financial=args.check_financial,
                 research_state=args.research_state,
+                progress=args.progress,
                 f10_data=_read(args.f10_data) if args.f10_data else None,
                 bank_data=_read_bank(args.bank_data) if args.bank_data else None,
                 insurance_data=_read_sidecar(args.insurance_data, "--insurance-data")

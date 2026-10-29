@@ -582,3 +582,69 @@ scoring without enterprise debt caps; checked finalize requires explicit
 unassessed regulatory/solvency/liquidity/entity-risk disclosure in report and
 watch_points. This is a policy change, not equivalent to previous sector grades.
 Legacy sector sidecars remain compatible but are not part of the new workflow.
+
+## v4.0.1 F10 research ledger mode
+
+Normal init includes --f10-research. ResearchRun.init(f10_research=True) adds a
+financial dimension with mode=f10 and required topic f10_data for any sector.
+It uses existing start/result/close, budget, provider failure and seal gates;
+no bank/insurance regulatory topics are required. A successful packet fetch is
+not automatically sufficient to score: missing core data closes gap with E=null.
+All modes are mutually exclusive. Research-stage A-D ledgers may append F10
+without resetting identity, providers, rounds, execution budget or route failures;
+report-stage or sector-bound ledgers cannot be rebound. No flag retains legacy
+A-D-only behavior. Checked F10 finalization with a ledger requires its matching
+closed mode, while no-ledger legacy compatibility is retained. Tests cover real
+CLI receipts, budgets/replay, append/mode rejection and score/finalize integration.
+
+## v4.1 lightweight progress (2026-10-29)
+
+New runs use research_progress.py init --stock stock.json --output progress.json,
+then direct source-batch file edits; no start/result/close or financial receipts.
+Progress binds original identity and full input hash, shared fact IDs with source,
+locator and period, A-D topic references, score/reason/gaps and failed providers.
+One fact can support several topics/dimensions; code validates shape/coverage,
+not whether the fact actually answers a question or is authentic. A-D complete
+requires all topics, integer score and no core gaps; gap requires null score and
+concrete gaps; open cannot be delivered. F10 is an independent checked packet.
+
+rating_math calculate/finalize and validate_rating_json accept --progress,
+mutually exclusive with --research-state. Match progress A-D scores, enforce
+original input binding at finalization, recompute E with existing F10 checks and
+preserve exact ten-field/null arithmetic. Calculate and validation do not mutate
+progress or create legacy snapshots; init preserves an existing valid same-input
+file. Output cannot alias progress/input/sidecars. Single writer per run; no
+claim of transactional concurrent edits, host-call counts, hard budgets or elapsed
+time enforcement. Existing legacy ledgers, including v4.0.1, remain unchanged.
+
+Tests cover cross-topic/dimension reuse, wrong input, malformed references,
+missing topics, score drift, open/gap states, checked F10+validator integration,
+CLI resume, and failed-output preservation. Live speed is measured separately;
+local tests do not certify deployment or research quality.
+
+## v4.2 shared sources and readable F10 traces
+
+The default entrypoint retains A-D judgment rubrics and normal CLI flow; input
+fields and report/citation contracts live in contextual references. Old ledger
+and sector instructions are compatibility-only, not default execution steps.
+New progress schema 2 stores sources separately with stable S-number IDs, title,
+http(s) URL, source_type (official/research/data_platform/media), published_at
+(ISO date or null), and actual accessed_at. Facts may reference source_id; schema
+1 and inline URL facts remain readable without invented metadata or auto-migration.
+Topic validation resolves source URLs while preserving the persisted shared form.
+
+research_progress.py sources --output progress.json [--stock stock.json
+--f10-data f10-data.json] is read-only, offline and prints Markdown. Include only
+referenced A-D facts plus F10 main/applicable balance sources recomputed from the
+original input-bound packet. Reuse exact URLs/IDs, distinguish unknown publication
+and access dates, label target-period publication dates separately, escape table
+cells, and do not list unrelated datasets. F10 source metadata is not official
+certification; legacy unknown titles/dates remain explicitly unrecorded. Full
+facts remain in progress; table support excerpts are limited to 120 characters.
+
+score_f10 exposes explanation with base_score, caps, final_score, missing and text.
+Financial-sector checks expose ROE base, earnings cap and trend cap separately;
+ordinary explanations reuse existing scorer checks. Missing required data keeps
+final_score null; no partial overall rating is created. Thresholds, policy name,
+original stock and final ten-field contract stay unchanged. Real runtime latency
+and factual judgment require separate behavioral evaluation.

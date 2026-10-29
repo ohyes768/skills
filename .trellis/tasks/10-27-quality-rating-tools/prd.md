@@ -113,3 +113,42 @@ Acceptance: aligned main/bank/insurance/research/tool/migration guidance; bounde
 page rules and traceable PDF citations; no new runtime dependencies; metadata,
 existing score/sidecar regressions and diff checks pass. Local source edits only,
 no automatic commit/push, NAS deployment or personal-web changes.
+
+## Follow-up v4.1: lightweight progress (2026-10-29)
+
+User approved replacing per-request ledger operations in new runs with a compact
+progress.json: shared source-bound facts, A-D topic references, decisions/gaps,
+and failed providers. F10 remains an independent checked packet, without a
+financial receipt. No fabricated call counters, host enforcement, or remote edits.
+Preserve the concurrent v4.0.1 legacy F10 ledger repair and existing ledger callers.
+
+Implementation plan: first add failing tests for fact reuse, identity binding,
+topic coverage, gap/null propagation, score drift, read-only calculate/finalize,
+F10 integration and CLI output preservation. Add research_progress.py with init
+and compact status; direct edits persist a source batch without start/result/close.
+Add mutually exclusive --progress to calculate/finalize/validator. Update the
+default skill and F10 reference to the new path, retain explicitly legacy ledger
+documentation, bump metadata, then run full regressions/lint/metadata checks.
+No schema tests claim factual truth, complete real-world research or speed gains.
+
+## Follow-up v4.2: instructions, shared citations and F10 explanations (2026-10-29)
+
+User approved review items 1/2/3: shorten the normal entrypoint while retaining
+A-D rubrics; move input fields/output details to contextual references and keep
+legacy workflows out of normal execution. Add shared source metadata (title,
+actual URL, source class, publication/access dates) and fact source_id references.
+Generate a read-only Markdown citation table from referenced facts and applicable
+F10 sources. Unknown dates remain unknown; do not fabricate metadata or fetch
+extra sources. Preserve existing v1/inline progress and ten-field output.
+Expose F10 base score, independent caps, final score, gaps and a readable trace
+without changing thresholds. Reuse ordinary scorer checks. Verify CLI sources,
+provenance/identity/date errors, nullable finalization and old/new progress with
+full unit regressions. No publishing, deployment, commit/push or measured speed
+claim is authorized by this development request.
+
+Validation: 186 full-suite tests pass with Python -S using a workspace TEMP/TMP
+directory (the first full-suite attempt hit sandbox system-temp permissions in
+legacy tests). Ruff check/format, skill metadata, offline lock and Markdown link
+targets pass. Seven new progress tests cover shared facts, all-gap delivery,
+input binding, score drift, malformed state, CLI resume/calculate/finalize/validator,
+and output preservation. No network data/model run, deployment, commit or push.

@@ -52,6 +52,7 @@ def validate(
     bank_data=None,
     insurance_data=None,
     f10_data=None,
+    progress=None,
 ):
     """Validate without correcting or mutating the supplied rating."""
     errors = []
@@ -66,6 +67,7 @@ def validate(
             bank_data=bank_data,
             insurance_data=insurance_data,
             f10_data=f10_data,
+            progress=progress,
         )
         for field in DERIVED:
             actual, wanted = data[field], expected[field]
@@ -101,7 +103,9 @@ def main(argv=None):
     parser.add_argument("input", help="Final rating JSON (not a draft)")
     parser.add_argument("--stock", help="Original stock JSON for identity verification")
     parser.add_argument("--check-financial", action="store_true", help="Verify E against --stock")
-    parser.add_argument("--research-state", help="Verify terminal research ledger")
+    progress_flags = parser.add_mutually_exclusive_group()
+    progress_flags.add_argument("--progress", help="Verify lightweight evidence progress")
+    progress_flags.add_argument("--research-state", help="Verify terminal legacy ledger")
     sidecars = parser.add_mutually_exclusive_group()
     sidecars.add_argument("--f10-data", help="Unified F10 packet; requires financial check")
     sidecars.add_argument(
@@ -119,6 +123,7 @@ def main(argv=None):
             _read(args.stock) if args.stock else None,
             check_financial=args.check_financial,
             research_state=args.research_state,
+            progress=args.progress,
             f10_data=_read(args.f10_data) if args.f10_data else None,
             bank_data=_read_bank(args.bank_data) if args.bank_data else None,
             insurance_data=_read_sidecar(args.insurance_data, "--insurance-data")

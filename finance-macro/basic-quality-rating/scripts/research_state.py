@@ -27,6 +27,7 @@ REQUIRED_TOPICS = {
 BANK_TOPICS = {"financial": ("profitability", "asset_quality", "capital", "liquidity")}
 BANK_REQUIRED_TOPICS = ("profitability", "asset_quality", "capital")
 INSURANCE_TOPICS = ("profitability", "solvency", "insurance_business", "asset_liability")
+F10_TOPICS = ("f10_data",)
 ALL_TOPICS = {**REQUIRED_TOPICS, **BANK_TOPICS}
 MAX_ROUNDS = 5  # Initial web research plus four follow-ups, shared by each dimension.
 DELIVERY_RESERVE = 8
@@ -84,7 +85,7 @@ def _check_shape(state):
                 raise ValueError("渠道状态损坏")
         ids = []
         for key, dim in state["dimensions"].items():
-            if key == "financial" and dim.get("mode", "bank") not in ("bank", "insurance"):
+            if key == "financial" and dim.get("mode", "bank") not in ("bank", "insurance", "f10"):
                 raise ValueError("financial 取证模式损坏")
             if (
                 dim["status"] not in ("open", "complete", "gap")
@@ -123,7 +124,7 @@ def _load(path):
 
 def _dimension(state, dimension):
     if dimension not in state["dimensions"]:
-        raise ValueError("未知 dimension；金融 financial 取证须先用 init 的对应行业模式启用")
+        raise ValueError("未知 dimension；financial 须先 init --f10-research 或旧行业取证模式")
     return state["dimensions"][dimension]
 
 
@@ -138,6 +139,8 @@ def _missing(dimension, dim):
 
 
 def _topics(dimension, dim):
+    if dimension == "financial" and dim.get("mode") == "f10":
+        return F10_TOPICS
     if dimension == "financial" and dim.get("mode", "bank") == "insurance":
         return INSURANCE_TOPICS
     return ALL_TOPICS[dimension]
@@ -314,16 +317,25 @@ class ResearchRun:
         *,
         bank_research=False,
         insurance_research=False,
+        f10_research=False,
         research_limit=None,
     ):
         if research_limit is not None and (type(research_limit) is not int or research_limit < 1):
             raise ValueError("research_limit 必须为正整数")
         identity, input_sha = _identity(stock), _digest(stock)
         routes = new_routes(providers)
-        if bank_research and insurance_research:
-            raise ValueError("银行与保险取证模式不能同时启用")
-        financial_mode = "insurance" if insurance_research else "bank" if bank_research else None
-        if financial_mode:
+        if sum(bool(mode) for mode in (bank_research, insurance_research, f10_research)) > 1:
+            raise ValueError("F10、银行与保险取证模式不能同时启用")
+        financial_mode = (
+            "f10"
+            if f10_research
+            else "insurance"
+            if insurance_research
+            else "bank"
+            if bank_research
+            else None
+        )
+        if financial_mode in ("bank", "insurance"):
             from financial_score import _sector
 
             if _sector(stock, []) != financial_mode:
@@ -536,21 +548,36 @@ class ResearchRun:
 
 
 def check_research(
-    path, draft, stock=None, *, require_bank=False, require_insurance=False, require_snapshot=True
+    path,
+    draft,
+    stock=None,
+    *,
+    require_bank=False,
+    require_insurance=False,
+    require_f10=False,
+    require_snapshot=True,
 ):
     state = _load(Path(path))
     if _identity(draft) != state["stock"]:
         raise ValueError("取证状态与本次评级股票身份不一致")
     if stock is not None and _digest(stock) != state["input_sha256"]:
         raise ValueError("取证状态与原始 stock 输入不一致")
-    if require_bank and require_insurance:
-        raise ValueError("只能使用一种金融取证模式")
-    required_mode = "bank" if require_bank else "insurance" if require_insurance else None
+    if sum(bool(mode) for mode in (require_bank, require_insurance, require_f10)) > 1:
+        raise ValueError("只能使用一种财务取证模式")
+    required_mode = (
+        "f10"
+        if require_f10
+        else "bank"
+        if require_bank
+        else "insurance"
+        if require_insurance
+        else None
+    )
     if required_mode and (
         "financial" not in state["dimensions"]
         or state["dimensions"]["financial"].get("mode", "bank") != required_mode
     ):
-        raise ValueError("金融补数须先 init 对应行业模式，并结案 financial 取证")
+        raise ValueError("财务补数须先 init --f10-research 或对应行业模式，并结案 financial 取证")
     for key, dim in state["dimensions"].items():
         if dim["status"] == "open":
             raise ValueError(f"{key} 尚未结案，先 complete 或 gap")
@@ -590,6 +617,11 @@ def main(argv=None):
         action="store_true",
         help="Enable insurance E evidence budget (init only)",
     )
+    parser.add_argument(
+        "--f10-research",
+        action="store_true",
+        help="Enable unified F10 acquisition budget (init only)",
+    )
     parser.add_argument("--dimension")
     parser.add_argument("--question")
     parser.add_argument("--impact")
@@ -603,7 +635,9 @@ def main(argv=None):
     try:
         if args.research_limit is not None and args.command != "init":
             raise ValueError("--research-limit 仅用于 init")
-        if (args.bank_research or args.insurance_research) and args.command != "init":
+        if (
+            args.bank_research or args.insurance_research or args.f10_research
+        ) and args.command != "init":
             raise ValueError("金融取证模式参数仅用于 init")
         if args.command == "init":
             if not args.stock:
@@ -613,6 +647,7 @@ def main(argv=None):
                 args.providers,
                 bank_research=args.bank_research,
                 insurance_research=args.insurance_research,
+                f10_research=args.f10_research,
                 research_limit=args.research_limit,
             )
         elif args.command == "status":
