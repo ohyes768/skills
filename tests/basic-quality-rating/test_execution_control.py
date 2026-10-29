@@ -175,7 +175,7 @@ class ExecutionControlTests(unittest.TestCase):
         delivered = subprocess.run(final, check=False, capture_output=True, text=True)
         self.assertEqual(delivered.returncode, 0, delivered.stderr)
         self.assertEqual(output.read_text(), delivered.stdout)
-        self.assertEqual(len(json.loads(delivered.stdout)), 10)
+        self.assertEqual(len(json.loads(delivered.stdout)), 11)
         old = output.read_bytes()
         self.draft["dimensions"]["business"] = 3
         draft.write_text(json.dumps(self.draft), encoding="utf-8")

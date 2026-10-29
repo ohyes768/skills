@@ -37,14 +37,14 @@ class ResearchIntegrationTests(unittest.TestCase):
             self.run.close(key, "gap", "来源受限，缺乏可靠事实")
             self.draft["dimensions"][key] = None
 
-    def test_unfinished_state_blocks_and_gap_state_keeps_ten_fields(self):
+    def test_unfinished_state_blocks_and_gap_state_keeps_eleven_fields(self):
         # Legacy unflagged path stays compatible.
-        self.assertEqual(len(finalize(self.draft, self.stock)), 10)
+        self.assertEqual(len(finalize(self.draft, self.stock)), 11)
         with self.assertRaises(ValueError):
             finalize(self.draft, self.stock, research_state=self.state)
         self.gap_all()
         rated = finalize(self.draft, self.stock, research_state=self.state)
-        self.assertEqual(len(rated), 10)
+        self.assertEqual(len(rated), 11)
         self.assertIsNone(rated["stars"])
         self.assertEqual(
             validate(rated, self.stock, research_state=self.state)["status"], "passed"

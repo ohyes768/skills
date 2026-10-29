@@ -95,7 +95,7 @@ python3 <skill目录>/scripts/rating_math.py finalize --input draft.json --stock
 calculate 只读进度，返回总分/星级/边界；不再 seal 或创建账本快照。finalize 核对原始输入、
 A-D 完成状态和分数，并从 F10 原响应重算 E；缺证据维度为 null。语义检查由分析者完成。
 只读复核时 `validate_rating_json.py rating.json --stock stock.json --check-financial --f10-data f10-data.json --progress progress.json`。
---progress 与旧 --research-state 互斥。成功仍交付固定十字段 JSON，进度文件不进入最终对象。
+--progress 与旧 --research-state 互斥。成功仍交付固定十一字段 JSON，进度文件不进入最终对象。
 
 ## 时间与调用边界
 

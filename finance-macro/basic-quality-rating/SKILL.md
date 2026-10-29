@@ -3,7 +3,7 @@ name: basic-quality-rating
 description: "收到单只 A 股结构化财务 JSON、需要五维基本面评分与星级及 Markdown 报告 JSON 时使用。仅用于自动化经营质量分析，不做估值或买卖建议。"
 license: MIT
 metadata:
-  version: 4.2.0
+  version: 4.3.0
   author: xbtlin (https://github.com/xbtlin/ai-berkshire) + Hermes Agent
   source: adapted from ai-berkshire
   hermes:
@@ -13,7 +13,7 @@ metadata:
 
 # 基本面自动化评级
 
-输入单只 A 股结构化 JSON，输出固定十字段 JSON（含 Markdown 报告）。仅评价经营质量，不做估值、买卖或仓位建议，不访问调用平台、不写库或发布结果。A-D 按证据判断，E 使用 F10 基础财务规则；权重为 25/25/20/15/15。
+输入单只 A 股结构化 JSON，输出固定十一字段 JSON（含 Markdown 报告与 skill_version）。skill_version 由 finalize 从本次实际执行目录的 SKILL.md metadata.version 自动写入，不自行猜测或使用调用方期望版本。仅评价经营质量，不做估值、买卖或仓位建议，不访问调用平台、不写库或发布结果。A-D 按证据判断，E 使用 F10 基础财务规则；权重为 25/25/20/15/15。
 
 ## 输入与正常流程
 
@@ -127,4 +127,4 @@ python3 <skill目录>/scripts/rating_math.py finalize --input draft.json --stock
 
 交付前检查身份/期间、分项与理由、缺口/null、星级与边界、引用对应。finalize 复核结构、输入身份、进度分数及 F10 算分，不证明事实或语义。成功后原样回复 stdout 的一个 JSON 对象，无围栏、前后缀或额外字段，并停止调用工具；失败只修具体错误，不交付半成品或旧文件。
 
-十字段恰为 code/name/dimensions/weighted_score/stars/boundary/summary/risks/watch_points/report_md。dimensions 恰为 business/moat/industry/management/financial，值为1–5整数或 null；risks/watch_points 为字符串数组。scored_at/data_date 由调用方记录。只读复核已有文件、历史 CLI 或部署迁移时，才按需读 [工具兼容说明](references/tools.md) 与 [安装迁移](references/setup-and-migration.md)。
+十一字段恰为 code/name/dimensions/weighted_score/stars/boundary/summary/risks/watch_points/report_md/skill_version。dimensions 恰为 business/moat/industry/management/financial，值为1–5整数或 null；risks/watch_points 为字符串数组。scored_at/data_date 由调用方记录。只读复核已有文件、历史 CLI 或部署迁移时，才按需读 [工具兼容说明](references/tools.md) 与 [安装迁移](references/setup-and-migration.md)。

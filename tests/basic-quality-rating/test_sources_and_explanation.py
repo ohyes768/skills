@@ -186,7 +186,7 @@ class SourceTests(unittest.TestCase):
         result = finalize(
             draft, stock, check_financial=True, f10_data=packet, progress=self.path
         )
-        self.assertEqual(len(result), 10)
+        self.assertEqual(len(result), 11)
         self.assertIsNone(result["stars"])
         self.assertEqual(result["dimensions"]["financial"], 5)
 

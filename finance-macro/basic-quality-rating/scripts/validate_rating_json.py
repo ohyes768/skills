@@ -58,7 +58,7 @@ def validate(
     errors = []
     try:
         if not isinstance(data, dict) or set(data) != set(OUTPUT_FIELDS):
-            raise ValueError("评级必须为固定 10 字段 JSON 对象")
+            raise ValueError("评级必须为固定 11 字段 JSON 对象（含 skill_version）")
         expected = finalize(
             data,
             stock,

@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -32,9 +33,20 @@ OUTPUT_FIELDS = (
     "risks",
     "watch_points",
     "report_md",
+    "skill_version",
 )
 DERIVED = {"weighted_score", "stars", "boundary"}
 THRESHOLDS = (200, 300, 400, 450)
+
+
+def read_skill_version():
+    """Stamp provenance from this installed skill, never from the caller/model."""
+    text = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text(encoding="utf-8-sig")
+    frontmatter = text.split("---", 2)[1]
+    match = re.search(r"(?m)^  version: *([0-9]+\.[0-9]+\.[0-9]+) *$", frontmatter)
+    if not match:
+        raise ValueError("SKILL.md metadata.version 缺失或无效")
+    return match.group(1)
 
 
 def _stars(total):
@@ -108,13 +120,16 @@ def finalize(
         raise ValueError("金融证据包必须配合 --stock 与 --check-financial，不能忽略资料")
     if not isinstance(draft, dict):
         raise TypeError("草稿必须为 JSON 对象")
-    required = set(OUTPUT_FIELDS) - DERIVED
+    required = set(OUTPUT_FIELDS) - DERIVED - {"skill_version"}
     if required - set(draft) or set(draft) - set(OUTPUT_FIELDS):
         raise ValueError(
             f"草稿缺少字段 {sorted(required - set(draft))}；多余字段 {sorted(set(draft) - set(OUTPUT_FIELDS))}"
         )
     for field in ("code", "name", "summary", "report_md"):
         _text(draft[field], field)
+    skill_version = read_skill_version()
+    if "skill_version" in draft and draft["skill_version"] != skill_version:
+        raise ValueError(f"skill_version 必须与实际 skill 版本 {skill_version} 一致")
     for field in ("risks", "watch_points"):
         if not isinstance(draft[field], list):
             raise TypeError(f"{field} 必须为字符串数组")
@@ -175,7 +190,7 @@ def finalize(
             require_insurance=insurance_data is not None,
             require_f10=f10_data is not None,
         )
-    result = {**draft, **derived}
+    result = {**draft, **derived, "skill_version": skill_version}
     return {field: result[field] for field in OUTPUT_FIELDS}
 
 

@@ -165,7 +165,7 @@ class BankIntegrationTests(unittest.TestCase):
         rated = finalize(
             draft_for(stock, 5), stock, check_financial=True, bank_data=packet
         )
-        self.assertEqual(len(rated), 10)
+        self.assertEqual(len(rated), 11)
         self.assertEqual(rated["stars"], 4)
         self.assertEqual(
             validate(rated, stock, check_financial=True, bank_data=packet)["status"],
@@ -239,7 +239,7 @@ class BankIntegrationTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             rated = json.loads(result.stdout)
-            self.assertEqual(len(rated), 10)
+            self.assertEqual(len(rated), 11)
             self.assertIsNotNone(rated["stars"])
             self.assertEqual((root / "rating.json").read_text(), result.stdout)
             self.assertEqual(
@@ -323,7 +323,7 @@ class BankIntegrationTests(unittest.TestCase):
                 *common,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(len(json.loads(result.stdout)), 10)
+            self.assertEqual(len(json.loads(result.stdout)), 11)
             (root / "rating.json").write_text(result.stdout, encoding="utf-8")
             checked = cli(
                 "validate_rating_json.py",

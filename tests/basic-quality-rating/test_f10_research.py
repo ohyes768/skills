@@ -174,7 +174,7 @@ class F10ResearchTests(unittest.TestCase):
         )
         self.assertEqual(result["dimensions"]["financial"], 5)
         self.assertIsNone(result["stars"])
-        self.assertEqual(len(result), 10)
+        self.assertEqual(len(result), 11)
 
     def test_documented_cli_init_start_result_close(self):
         stock = self.root / "stock.json"

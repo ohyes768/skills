@@ -100,7 +100,7 @@ class RatingMathTests(unittest.TestCase):
         )
         result = rating.finalize(draft)
         self.assertEqual(result["dimensions"], dims)
-        self.assertEqual(len(result), 10)
+        self.assertEqual(len(result), 11)
         for field in rating.DERIVED:
             self.assertIsNone(result[field])
 
@@ -125,7 +125,7 @@ class RatingMathTests(unittest.TestCase):
     def test_finalize_exact_contract_and_recomputes_derived_fields(self):
         draft = dict(self.draft(), weighted_score=5, stars=5, boundary="错误边界")
         result = rating.finalize(draft, {"code": "002128", "name": "电投能源"})
-        self.assertEqual(len(result), 10)
+        self.assertEqual(len(result), 11)
         self.assertEqual(set(result), set(rating.OUTPUT_FIELDS))
         self.assertEqual(result["weighted_score"], 3.15)
         self.assertEqual(result["stars"], 3)
@@ -160,7 +160,7 @@ class RatingMathTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(run.returncode, 0, run.stderr)
-            self.assertEqual(len(json.loads(run.stdout)), 10)
+            self.assertEqual(len(json.loads(run.stdout)), 11)
             self.assertEqual(run.stderr, "")
             path.write_text('{"business":NaN}', encoding="utf-8")
             bad = subprocess.run(

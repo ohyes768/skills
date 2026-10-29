@@ -15,7 +15,7 @@ asset_quality、capital 三类核心主题；liquidity 证据可选，缺失不�
 保险 E 用 init --insurance-research，主题为 profitability、solvency、insurance_business、asset_liability，
 详见 [保险参考](insurance-financial.md)。同一 financial 账本模式不能银行/保险互换；旧银行账本仍兼容。
 
-用于 A–D，以及显式启用的 F10/旧行业财务取证，不改变最终 10 字段。
+用于 A–D，以及显式启用的 F10/旧行业财务取证，不改变最终 11 字段。
 工具只需标准库，不联网、不安装依赖、不执行网页中的命令。
 
 ## 开工一次
@@ -138,7 +138,7 @@ python3 <skill目录>/scripts/rating_math.py calculate --input dimensions.json -
 
 新执行账本进入 report 阶段并保存该版分数与派生结果；开放维度不能进入成稿。进入后不再发放普通取证回执。新冲突先 reopen（仍只一次且不恢复全局余额），旧快照随即作废；无额度则直接 close gap，不补查。若只是基于已有证据改分，重新 calculate 更新快照即可；报告、summary、风险与边界必须同步修改。
 
-正常 finalize 必须带 --research-state 和 --output rating.json（原始输入及 E 校验参数见主 skill）。新执行账本拒绝未计算或与当前分数不同的快照；旧无执行控制的账本和无标志入口仅保留兼容。成功原子保存十字段 JSON，stdout 同一内容，立即原样回复并停止调用工具。失败只修具体错误；没有成功结果就报告执行失败，不能人工拼出“已完成”的评分。失败不会覆盖以前的输出；调用方只接受本次退出码 0 的产物，不能发送遗留文件。
+正常 finalize 必须带 --research-state 和 --output rating.json（原始输入及 E 校验参数见主 skill）。新执行账本拒绝未计算或与当前分数不同的快照；旧无执行控制的账本和无标志入口仅保留兼容。成功原子保存十一字段 JSON，stdout 同一内容，立即原样回复并停止调用工具。失败只修具体错误；没有成功结果就报告执行失败，不能人工拼出“已完成”的评分。失败不会覆盖以前的输出；调用方只接受本次退出码 0 的产物，不能发送遗留文件。
 
 锁冲突或状态损坏时返回错误，不用 init 清空修复；遗留锁由维护者确认没有写进程后处理。
 

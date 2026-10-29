@@ -1,7 +1,7 @@
 # 银行：有来源的数据包与专用 E 规则
 
 银行按本参考执行，不使用普通企业的负债率、季度扣非符号或 ROE 趋势重罚。
-五维权重、最终十字段及 null 传播不变。保险、证券等不使用本分支。
+五维权重、最终十一字段及 null 传播不变。保险、证券等不使用本分支。
 
 需要结构化补数时先读 [接口取数与缺口](financial-data-api.md)：免费脚本返回候选及原始出处，官方核对后才入下述评分包。
 
@@ -131,7 +131,7 @@ python3 <skill目录>/scripts/rating_math.py finalize --input draft.json --stock
 ```
 
 正常运行 financial → calculate（绑定账本）→ finalize；financial 内已校验证据包，独立 validate 仅用于排查修包问题。finalize核对E与该证据包一致，
-同时要求银行E取证已结案。最终仍恰好十字段，bank-data本身不塞进输出合同。
+同时要求银行E取证已结案。最终仍恰好十一字段，bank-data本身不塞进输出合同。
 只读验证已有结果可加同一 --bank-data；提供证据包时必须配合 --stock --check-financial。
 financial 返回 liquidity_status=verified / partial / unverified，仅表示证据包内两项值的有效覆盖状态，不证明来源真实或整体流动性安全。checks 中 bank_liquidity 的 cap=null 表示未计入，warnings 包含具体缺项。
 报告写明 as_of、证据截止期、三类核心指标、流动性覆盖状态、资本余量、bank-research-v2、限制与具体缺口。可评分但流动性不完整时，finalize --check-financial 要求 report_md 和 watch_points 均包含“流动性未验证”，缺任一处就拒绝交付；只检查标签存在，不代替语义核对。

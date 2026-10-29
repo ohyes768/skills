@@ -2,7 +2,7 @@
 
 用于申万保险子行业。保险不是银行，也不能使用普通企业的资产负债率阈值。
 先确认研究对象是寿险、产险还是综合保险集团，再生成独立 insurance-data.json。
-原 stock.json 保留；最终仍为五维、固定十字段、任一维 null 则无总星级。
+原 stock.json 保留；最终仍为五维、固定十一字段、任一维 null 则无总星级。
 
 需要结构化补数时先读 [接口取数与缺口](financial-data-api.md)：免费脚本返回候选及原始出处，官方核对后才入下述评分包。
 
@@ -142,7 +142,7 @@ python3 <skill目录>/scripts/rating_math.py finalize --input draft.json --stock
 
 正常运行直接 financial → finalize，financial 内已校验证据包；独立 validate 仅用于修包诊断。
 显式保险包不能和银行包同时提供，也不能给其他行业用。finalize 要求E与该保险包计算一致，
-正常流程提供取证账本，必须是保险模式且已结案；不把证据包加进最终十字段。
+正常流程提供取证账本，必须是保险模式且已结案；不把证据包加进最终十一字段。
 兼容API不传 --research-state 时仅校验数值/结构，不证明取证流程已完成，不能据此宣称完整验收。
 报告列主体、指标、期间、来源、评估依据、具体缺口及研究分档限制。
 只读 validator 也支持相同 --insurance-data --stock --check-financial；已通过后不重复做同样数值校验。

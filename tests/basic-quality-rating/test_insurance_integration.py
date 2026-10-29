@@ -139,7 +139,7 @@ class InsuranceIntegrationTests(unittest.TestCase):
         output = finalize(
             draft(score), original, check_financial=True, insurance_data=evidence
         )
-        self.assertEqual(len(output), 10)
+        self.assertEqual(len(output), 11)
         self.assertEqual(
             validate(output, original, check_financial=True, insurance_data=evidence)[
                 "status"

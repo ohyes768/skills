@@ -8,11 +8,13 @@
 
 星级下界为 1/2/3/4/4.5，分别对应 1–5 星。距任一档位分界 2/3/4/4.5 严格小于 0.25 时，脚本生成一句 boundary，枚举合法单维 ±1 后只描述确实能跨档的变化；其余为 null。量表端点 1/5 不是档位分界。复用脚本原文，不逐维列算式；整体未评级时 boundary=null，报告写“未评级，不计算边界”。
 
-## 输出合同（10 字段）
+## 输出合同（11 字段）
 
-最终回复只有一个 JSON 对象，无代码围栏、前后缀或独立 Markdown。固定 10 个顶层字段，dimensions 恰为以下五键，分数为 1-5 整数或 null，五维齐全可评分时 stars 为 1-5 整数、weighted_score 为数字；任一维 null 时 stars/weighted_score/boundary 全部为 null，boundary 为字符串或 null，risks/watch_points 为字符串数组。字符串换行 JSON 编码为 `\n`，禁止 NaN、注释和尾逗号。scored_at、data_date 由调用方记录，不自行添加。
+skill_version 是本次实际执行 skill 的 metadata.version，由 rating_math.py finalize 自动写入；草稿可省略，提供时必须与实际版本一致，禁止填写调用方要求的版本冒充已升级。
 
-顶层字段恰为 `code`、`name`、`dimensions`、`weighted_score`、`stars`、`boundary`、`summary`、`risks`、`watch_points`、`report_md`；dimensions 恰为 `business`、`moat`、`industry`、`management`、`financial`。report_md 为包含下列内容的简体中文 Markdown 字符串：
+最终回复只有一个 JSON 对象，无代码围栏、前后缀或独立 Markdown。固定 11 个顶层字段，dimensions 恰为以下五键，分数为 1-5 整数或 null，五维齐全可评分时 stars 为 1-5 整数、weighted_score 为数字；任一维 null 时 stars/weighted_score/boundary 全部为 null，boundary 为字符串或 null，risks/watch_points 为字符串数组。字符串换行 JSON 编码为 `\n`，禁止 NaN、注释和尾逗号。scored_at、data_date 由调用方记录，不自行添加。
+
+顶层字段恰为 `code`、`name`、`dimensions`、`weighted_score`、`stars`、`boundary`、`summary`、`risks`、`watch_points`、`report_md`、`skill_version`；dimensions 恰为 `business`、`moat`、`industry`、`management`、`financial`。report_md 为包含下列内容的简体中文 Markdown 字符串：
 
 1. **标题与日期**：`# 基本面评级：名称（代码）`；实际分析日期、信息丰富度及依据；可评级时写星级，未评级时写“灰色地带（证据不足，未评级）”，不显示星星。
 2. **业务核实**：主营业务、收入来源与当期证据。
@@ -35,4 +37,4 @@
 - **来源层级**：标明公司/交易所/监管披露、研报、数据平台或媒体。转载同源不算独立核验。行业规则文档只支持规则解释，不能冒充公司当期经营证据。
 - **没有取得的资料**：只有链接、摘要或访问失败的线索不能进入“已核实来源”表；若影响评分，在对应维度及 watch_points 写清缺口。全程没有外部可核实来源时，直接说明，表中只保留实际使用的输入，不凑编号、链接或来源数量。
 
-仅列已用于结论或反证的来源，不设置最低篇数，不为填满表格重启已完成的搜索。progress.json、f10-data.json 是工作文件；最终输出仍是十字段 JSON，来源编号和表格都编码在 report_md 内，不另加 sources 字段或在 JSON 后附链接。
+仅列已用于结论或反证的来源，不设置最低篇数，不为填满表格重启已完成的搜索。progress.json、f10-data.json 是工作文件；最终输出仍是十一字段 JSON，来源编号和表格都编码在 report_md 内，不另加 sources 字段或在 JSON 后附链接。

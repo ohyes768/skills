@@ -66,7 +66,7 @@ class ProgressTests(unittest.TestCase):
         before = self.path.read_bytes()
         check_progress(self.path, self.dimensions, self.stock)
         result = finalize(self.draft(), self.stock, progress=self.path)
-        self.assertEqual(len(result), 10)
+        self.assertEqual(len(result), 11)
         self.assertEqual(result["stars"], 3)
         self.assertEqual(before, self.path.read_bytes())
         self.assertNotIn("execution", self.data)
