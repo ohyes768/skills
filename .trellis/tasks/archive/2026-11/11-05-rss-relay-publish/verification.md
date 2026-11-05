@@ -47,4 +47,4 @@ Python 3.14，全部使用假服务和隔离回执；完整输出留在本地 .c
 
 daily-review 当前目录没有 .git；其 daily_review.py、rss_relay_client.py、README.md 已直接更新。stock-info-dingding 修改 xwlb_to_rss.py、tests/test_xwlb_to_rss.py，新增 rss_relay_client.py。skills 中已有的 finance-macro/csi300-brief/ 属于其他工作，未修改。
 
-任务保留 in_progress 供正常提交/归档流程使用；源码实现和本地验收已完成。
+源码实现和本地验收已完成。用户随后授权提交推送：skills 功能提交 dbc08a1、stock-info-dingding 提交 ba7cd33；每日复盘目录无 Git 仓库，仍仅本地保存。本任务随后按 Trellis 流程归档。

@@ -3,7 +3,7 @@
   "name": "rss-relay-publish",
   "title": "公共 RSS 发布 Skill 与跨平台脚本",
   "description": "公共 RSS skill/跨平台 CLI 及全部 8 类来源源码迁移已实现，Windows/Linux 与离线集成验收通过；未生产部署。",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": "backend",
   "scope": null,
   "package": null,
@@ -11,11 +11,11 @@
   "creator": "codex",
   "assignee": "codex",
   "createdAt": "2026-11-05",
-  "completedAt": null,
+  "completedAt": "2026-11-05",
   "branch": null,
   "base_branch": "master",
   "worktree_path": null,
-  "commit": null,
+  "commit": "dbc08a1",
   "pr_url": null,
   "subtasks": [],
   "children": [],
@@ -30,6 +30,6 @@
     "knowledge/rss-relay-publish/scripts/rss_publish.py",
     ".trellis/spec/backend/rss-relay-publish.md"
   ],
-  "notes": "User authorized implementation. All 8 sources migrated across skills, daily-review (directory has no .git) and stock-info-dingding. Windows: 140 tests; WSL Linux: 22 core + 3 client tests; Ruff F/E9 and skill validation passed. Independent review findings fixed. No real publication, production deployment or git commits performed. Keep in_progress until normal commit/archive workflow; implementation is verified.",
+  "notes": "Implementation verified: all 8 sources migrated; Windows 140 tests and Linux 25 tests passed. User authorized commit and push. skills feature commit dbc08a1; stock-info-dingding commit ba7cd33. daily-review has no Git repository and remains local. No production deployment or real publication.",
   "meta": {}
 }
