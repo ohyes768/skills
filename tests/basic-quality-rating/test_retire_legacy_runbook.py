@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 SCRIPTS = (
-    Path(__file__).resolve().parents[2] / "finance-macro/basic-quality-rating/scripts"
+    Path(__file__).resolve().parents[2] / "investment-analysis/basic-quality-rating/scripts"
 )
 spec = importlib.util.spec_from_file_location(
     "retire_runbook", SCRIPTS / "retire_legacy_runbook.py"

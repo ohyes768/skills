@@ -1,7 +1,7 @@
 # report spec 自动生成
 
 ```bash
-uv run --project finance-macro/financial-statement-analysis python finance-macro/financial-statement-analysis/scripts/build_report_spec.py --run-dir <目录> --out report_spec.json
+uv run --project investment-analysis/financial-statement-analysis python investment-analysis/financial-statement-analysis/scripts/build_report_spec.py --run-dir <目录> --out report_spec.json
 ```
 
 构造器把骨架 FACT_* 换成真实 fact_id，按精确期间选择事实；指标必须 computed。缺少事实的普通行会删除，风险项保留资料不足状态，数据限制会汇总。零是有效披露值，不等于字段缺失。

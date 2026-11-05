@@ -9,7 +9,7 @@ from pathlib import Path
 
 SCRIPT = (
     Path(__file__).resolve().parents[2]
-    / "finance-macro/basic-quality-rating/scripts/rating_math.py"
+    / "investment-analysis/basic-quality-rating/scripts/rating_math.py"
 )
 spec = importlib.util.spec_from_file_location("rating_math", SCRIPT)
 rating = importlib.util.module_from_spec(spec)

@@ -7,8 +7,8 @@
 运行：
 
 ```bash
-uv run --project finance-macro/financial-statement-analysis pytest finance-macro/financial-statement-analysis/tests
-uv run --project finance-macro/financial-statement-analysis ruff check finance-macro/financial-statement-analysis
+uv run --project investment-analysis/financial-statement-analysis pytest investment-analysis/financial-statement-analysis/tests
+uv run --project investment-analysis/financial-statement-analysis ruff check investment-analysis/financial-statement-analysis
 ```
 
 本地离线测试使用 mock HTTP 及真实映射/计算/渲染，不以测试通过宣称实时接口一定可用。不覆盖 Hermes 部署或调用端迁移。新版调用必须传 --code 和 --period。

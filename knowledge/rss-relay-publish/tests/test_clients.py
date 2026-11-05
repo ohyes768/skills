@@ -16,8 +16,8 @@ spec.loader.exec_module(client)
 class ClientTests(unittest.TestCase):
     def test_generated_shims_match_canonical(self):
         consumers = [ROOT / name / 'scripts/rss_relay_client.py' for name in (
-            'bilibili-subtitle-rss', 'hk-ipo-research', 'finance-macro/a-share-macro-impact-skill',
-            'finance-macro/bond-market-macro-impact-skill', 'waytoagi-update-log')]
+            'personal-tools/bilibili-subtitle-rss', 'hk-ipo-research', 'finance-macro/a-share-macro-impact-skill',
+            'finance-macro/bond-market-macro-impact-skill', 'personal-tools/waytoagi-update-log')]
         consumers += [ROOT.parent / name / 'rss_relay_client.py' for name in ('daily-review', 'stock-info-dingding')]
         for path in consumers:
             if path.exists():

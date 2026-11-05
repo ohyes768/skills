@@ -30,7 +30,7 @@ def load(path):
 @unittest.skipUnless((ROOT / 'hk-ipo-research').exists(), 'Requires full source checkout')
 class MigrationTests(unittest.TestCase):
     def test_waytoagi_concurrent_receipt_updates_preserve_all_tokens(self):
-        m = load('waytoagi-update-log/scripts/publish_articles.py')
+        m = load('personal-tools/waytoagi-update-log/scripts/publish_articles.py')
         original = m.read_receipts
         def slow_read(path):
             data = original(path)
@@ -43,9 +43,9 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(len(json.loads(receipt.read_text(encoding='utf-8'))['articles']), 6)
 
     def test_waytoagi_records_each_success_before_next_failure(self):
-        path = ROOT / 'waytoagi-update-log/scripts/publish_articles.py'
+        path = ROOT / 'personal-tools/waytoagi-update-log/scripts/publish_articles.py'
         self.assertTrue(path.exists(), 'WaytoAGI needs a shared-CLI publishing adapter')
-        m = load('waytoagi-update-log/scripts/publish_articles.py')
+        m = load('personal-tools/waytoagi-update-log/scripts/publish_articles.py')
         articles = [{'token': token, 'title': token, 'content': '说明', 'url': 'https://example.test/' + token}
                     for token in ('old', 'first', 'second')]
         with tempfile.TemporaryDirectory(dir=ROOT / '.tmp') as tmp:
@@ -82,7 +82,7 @@ class MigrationTests(unittest.TestCase):
                     self.assertEqual(json.loads(out.getvalue())['report_push'], 'ok')
 
     def test_bilibili_retains_business_receipt(self):
-        m = load('bilibili-subtitle-rss/scripts/subtitle_rss.py')
+        m = load('personal-tools/bilibili-subtitle-rss/scripts/subtitle_rss.py')
         self.assertTrue(hasattr(m, 'relay_publish'), 'subtitle adapter must invoke public CLI')
         post = {'title': '视频', 'content': '字幕', 'url': 'https://www.bilibili.com/video/BV1dnbV6TEMy',
                 'source': 'my-bot', 'channel': 'bilinote'}

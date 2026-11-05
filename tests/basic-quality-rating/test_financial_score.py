@@ -6,7 +6,7 @@ from pathlib import Path
 
 SCRIPT = (
     Path(__file__).resolve().parents[2]
-    / "finance-macro/basic-quality-rating/scripts/financial_score.py"
+    / "investment-analysis/basic-quality-rating/scripts/financial_score.py"
 )
 spec = importlib.util.spec_from_file_location("financial_score", SCRIPT)
 financial = importlib.util.module_from_spec(spec)

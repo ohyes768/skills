@@ -11,7 +11,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 
 SCRIPTS = (
-    Path(__file__).resolve().parents[2] / "finance-macro/basic-quality-rating/scripts"
+    Path(__file__).resolve().parents[2] / "investment-analysis/basic-quality-rating/scripts"
 )
 sys.path.insert(0, str(SCRIPTS))
 import fetch_financial_candidates as api

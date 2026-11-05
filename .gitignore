@@ -52,10 +52,13 @@ finance-macro/cache/
 finance-macro/logs/
 # 各 skill 目录内的历史输出残留（脚本已改写到 output/，此处在过渡期兜底）
 finance-macro/*/data/
+investment-analysis/*/data/
 finance-macro/*/test_output/
+investment-analysis/*/test_output/
 finance-macro/*/macro_signal.json
+investment-analysis/*/macro_signal.json
 # waytoagi-update-log 推送回执（本机状态，不入库）
-waytoagi-update-log/data/
+personal-tools/waytoagi-update-log/data/
 # 备份文件
 *.backup
 

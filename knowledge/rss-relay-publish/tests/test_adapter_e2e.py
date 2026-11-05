@@ -50,7 +50,7 @@ class AdapterEndToEndTests(unittest.TestCase):
         self.assertEqual({p['source'] for p in self.posts}, {'hk-ipo-research', 'hk-ipo-backtest'})
 
     def test_bilibili_business_receipt_and_cli(self):
-        m = load('bilibili-subtitle-rss/scripts/subtitle_rss.py')
+        m = load('personal-tools/bilibili-subtitle-rss/scripts/subtitle_rss.py')
         post = {'title': '视频', 'content': '完整字幕', 'url': 'https://www.bilibili.com/video/BV1dnbV6TEMy',
                 'channel': 'bilinote', 'source': 'my-bot'}
         args = (post, self.base + '/post', self.root / 'subtitles')
@@ -59,7 +59,7 @@ class AdapterEndToEndTests(unittest.TestCase):
         self.assertEqual(self.writes, 1)
 
     def test_waytoagi_business_receipt_and_cli(self):
-        m = load('waytoagi-update-log/scripts/publish_articles.py')
+        m = load('personal-tools/waytoagi-update-log/scripts/publish_articles.py')
         manifest = self.root / 'articles.json'
         manifest.write_text(json.dumps([{'token': 'wiki1', 'title': '文章', 'content': '说明', 'url': 'https://example.test/wiki1'}]), encoding='utf-8')
         args = ['--articles-json', str(manifest), '--receipts', str(self.root / 'tokens.json'), '--endpoint', self.base + '/post']

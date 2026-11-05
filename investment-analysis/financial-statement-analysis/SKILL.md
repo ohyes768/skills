@@ -18,7 +18,7 @@ description: 使用东财 F10 接口分析 A 股公司财务。输入股票代�
 命令从仓库根执行，统一前缀为：
 
 ```bash
-uv run --project finance-macro/financial-statement-analysis python finance-macro/financial-statement-analysis/scripts/
+uv run --project investment-analysis/financial-statement-analysis python investment-analysis/financial-statement-analysis/scripts/
 ```
 
 开工只读[分析框架](references/analysis-framework.md)和[可复用工具](references/reusable-tools.md)。写报告前读[报告模板](references/report-template.md)、[指标目录](references/metric-catalog.md)与[报告输入](references/report-inputs-example.md)。接口与产物合同见[artifact-contracts](references/artifact-contracts.md)，复核规则见[independent-review-contract](references/independent-review-contract.md)。
@@ -27,7 +27,7 @@ uv run --project finance-macro/financial-statement-analysis python finance-macro
 2. `run_pipeline.py compute --run-dir <目录>`：从留档生成事实、指标、风险筛查和紧凑分析包。stdout 与 `pack_context.py` 使用同一层 `packet.next_cursor`。它非空时用下面的命令续读，直到 `packet.next_cursor` 为 null。`pack_context` 没有 `context` 键；`compute` 里的 `context` 只是兼容别名。游标错误返回 `status=failed` 且 `ended=false`，不能当成结束。正常写作使用分析包里的覆盖、利润桥、比率和待办，不读脚本源码，不把原始响应整文件扫一遍。
 
 ```bash
-uv run --project finance-macro/financial-statement-analysis python finance-macro/financial-statement-analysis/scripts/pack_context.py --run-dir <目录> --stage analyze --request-id analyze-next --cursor <packet.next_cursor>
+uv run --project investment-analysis/financial-statement-analysis python investment-analysis/financial-statement-analysis/scripts/pack_context.py --run-dir <目录> --stage analyze --request-id analyze-next --cursor <packet.next_cursor>
 ```
 3. `build_report_spec.py --run-dir <目录> --out report_spec.json`：生成结构与绑定。`_paragraphs_todo` 给出章节、段落位置、核心结论句数余量、可用证据和缺失限制。按这些约束改写对应段落。定性段落禁止数字；数字通过 statement/table 绑定输出。保留四条核心 statement 时，定性段落最多一句。
 4. `run_pipeline.py report --run-dir <目录> --spec <目录>/report_spec.json --independent-review`：预检、同源渲染、接口来源校验和独立复算。调用方需要全文时同次加 `--include-report`。

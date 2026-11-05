@@ -8,7 +8,7 @@ sys.path.insert(
     0,
     str(
         Path(__file__).resolve().parents[2]
-        / "finance-macro/basic-quality-rating/scripts"
+        / "investment-analysis/basic-quality-rating/scripts"
     ),
 )
 from bank_financial import stock_fingerprint

@@ -2,7 +2,7 @@ import sys
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2] / "finance-macro/basic-quality-rating"
+ROOT = Path(__file__).resolve().parents[2] / "investment-analysis/basic-quality-rating"
 sys.path.insert(0, str(ROOT / "scripts"))
 import rating_math
 from validate_rating_json import validate

@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 SCRIPTS = (
-    Path(__file__).resolve().parents[2] / "finance-macro/basic-quality-rating/scripts"
+    Path(__file__).resolve().parents[2] / "investment-analysis/basic-quality-rating/scripts"
 )
 sys.path.insert(0, str(SCRIPTS))
 try:

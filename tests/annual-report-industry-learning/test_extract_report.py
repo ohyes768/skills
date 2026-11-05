@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-SCRIPT = Path(__file__).resolve().parents[2] / 'finance-macro/annual-report-industry-learning/scripts/extract_report.py'
+SCRIPT = Path(__file__).resolve().parents[2] / 'investment-analysis/annual-report-industry-learning/scripts/extract_report.py'
 spec = importlib.util.spec_from_file_location('extract_report', SCRIPT)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)

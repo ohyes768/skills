@@ -101,7 +101,7 @@ description: 自动追踪WaytoAGI知识库近7日更新日志，整理指定日�
 
 **RSS 推送（默认渠道）：**
 
-先安装公共 `rss-relay-publish` skill，并按其 [接入说明](../knowledge/rss-relay-publish/references/integration.md) 配置 `RSS_RELAY_SKILL_DIR`（独立发布包可按同名公共 skill 定位）。不再手写 HTTP POST。
+先安装公共 `rss-relay-publish` skill，并按其 [接入说明](../../knowledge/rss-relay-publish/references/integration.md) 配置 `RSS_RELAY_SKILL_DIR`（独立发布包可按同名公共 skill 定位）。不再手写 HTTP POST。
 
 将 Step 5 的待发布文章准备为 UTF-8 JSON 数组，每项包含 `token`（mention-doc）、`title`、`content`（说明和链接）、`url`（微信原文优先，否则 Wiki）。运行：
 
