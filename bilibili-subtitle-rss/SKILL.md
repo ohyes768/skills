@@ -5,6 +5,8 @@ description: 提取 Bilibili 视频链接或 BV 号对应的完整字幕，合�
 
 # B 站字幕转 RSS
 
+公共 RSS 依赖：投递由独立安装的 `rss-relay-publish` skill 执行。先发布该公共包，按实际安装位置设置 `RSS_RELAY_SKILL_DIR`；公共回执通过 `RSS_RELAY_STATE_DIR` 放在安装目录之外。本文原发布脚本保留业务校验、旧参数及回执，实际 RSS POST 已委托公共 CLI；找不到依赖时明确失败，不回退旧请求。
+
 使用本技能目录下 `scripts/subtitle_rss.py`。需要 Python 3.10+、uvx，以及可访问 GitHub、B 站和目标 RSS 服务的网络。无须修改 `F:\personal-projects\personal-web` 的抖音文字稿服务；结果出现在 `/rss`，不进入 `/douyin`。
 
 ## 执行

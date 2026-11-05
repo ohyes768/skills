@@ -11,11 +11,14 @@ import subprocess
 import sys
 from datetime import date, datetime
 from pathlib import Path
+from runpy import run_path
 from typing import Any
 
 import httpx
 from bs4 import BeautifulSoup
 
+
+relay_publish = run_path(str(Path(__file__).with_name('rss_relay_client.py')))['publish']
 
 SINA_IPO_LIST = "http://vip.stock.finance.sina.com.cn/q/view/hk_IPOList.php"
 DEFAULT_RELAY = "https://web.duomi77.cn:9443/rss/api/rss-relay/post"
@@ -224,12 +227,7 @@ def push_report(
     channel: str = "hkipo",
 ) -> dict[str, Any]:
     payload = {"title": title, "content": content, "channel": channel, "source": source, "url": url}
-    response = httpx.post(endpoint, json=payload, timeout=20, verify=verify_tls)
-    response.raise_for_status()
-    try:
-        return response.json()
-    except json.JSONDecodeError:
-        return {"status_code": response.status_code, "body": response.text[:500]}
+    return relay_publish(payload, "discovery:" + title, endpoint=endpoint, verify=verify_tls)
 
 
 def main() -> int:

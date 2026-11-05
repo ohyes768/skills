@@ -8,12 +8,15 @@ import json
 import math
 import os
 from pathlib import Path
+from runpy import run_path
 import re
 import ssl
 import subprocess
 import sys
 from urllib.parse import parse_qs, urlsplit
 from urllib.request import Request, urlopen
+
+relay_publish = run_path(str(Path(__file__).with_name('rss_relay_client.py')))['publish']
 
 CLI_PACKAGE = 'git+https://github.com/ZeroMarker/bilibili-cli.git@6962d5b'
 DEFAULT_ENDPOINT = 'https://web.duomi77.cn:9443/rss/api/rss-relay/post'
@@ -129,19 +132,11 @@ def extract(bvid, timeout):
         raise ValueError('bili CLI 输出不是有效 JSON；未推送') from exc
 
 
-def request_json(url, *, method='GET', payload=None, ca_file=None, insecure=False):
-    body = json.dumps(payload, ensure_ascii=False).encode('utf-8') if payload is not None else None
-    req = Request(url, data=body, method=method, headers={
-        'Accept': 'application/json', 'Content-Type': 'application/json; charset=utf-8',
-        'User-Agent': 'bilibili-subtitle-rss/1.0',
-    })
-    context = ssl.create_default_context(cafile=ca_file)
-    if insecure:
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
+def request_json(url, *, ca_file=None, insecure=False):
+    """Read-only business duplicate lookup. Publishing belongs to the public CLI."""
+    req = Request(url, headers={'Accept': 'application/json', 'User-Agent': 'bilibili-subtitle-rss/1.0'})
+    context = ssl._create_unverified_context() if insecure else ssl.create_default_context(cafile=ca_file)
     with urlopen(req, timeout=30, context=context) as response:
-        if method == 'POST' and response.status != 201:
-            raise ValueError(f'RSS 接口返回 {response.status}，未确认创建成功；请查远端后再试')
         return json.load(response)
 
 
@@ -168,6 +163,8 @@ def publish(post, endpoint, output, ca_file=None, *, insecure=False):
         if not isinstance(existing, dict):
             raise ValueError('RSS 列表条目格式无效；未推送')
         # Resolve only ordinary video URLs during deduplication, never remote short links.
+        if existing.get('channel', post['channel']) != post['channel'] or existing.get('source', post['source']) != post['source']:
+            continue
         old_url = existing.get('url') or ''
         old = urlsplit(old_url)
         if old.hostname not in VIDEO_HOSTS:
@@ -180,11 +177,8 @@ def publish(post, endpoint, output, ca_file=None, *, insecure=False):
             result = {'status': 'duplicate', 'id': existing['id'], 'matched': 'remote-list'}
             receipt.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
             return result
-    # Exactly one POST. A timeout may mean the server accepted it: never retry automatically.
-    created = request_json(endpoint, method='POST', payload=post, ca_file=ca_file, insecure=insecure)
-    if not isinstance(created, dict) or not isinstance(created.get('id'), str) or not created['id']:
-        raise ValueError('POST 响应缺少有效 id；请检查远端是否已创建，勿直接重试')
-    result = {'status': 'published', 'id': created['id'], 'url': post['url'], 'endpoint': endpoint}
+    created = relay_publish(post, "video:" + bvid, endpoint=endpoint, verify=not insecure, ca_file=ca_file)
+    result = dict(created, url=post['url'], endpoint=endpoint)
     receipt.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
     return result
 

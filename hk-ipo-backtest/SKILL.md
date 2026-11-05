@@ -5,6 +5,8 @@ description: 港股 IPO 无未来数据泄漏的逐日预测回测 skill。用�
 
 # 港股 IPO 严格回测
 
+公共 RSS 依赖：投递由独立安装的 `rss-relay-publish` skill 执行。先发布该公共包，按实际安装位置设置 `RSS_RELAY_SKILL_DIR`；公共回执通过 `RSS_RELAY_STATE_DIR` 放在安装目录之外。本文原发布脚本保留业务校验、旧参数及回执，实际 RSS POST 已委托公共 CLI；找不到依赖时明确失败，不回退旧请求。 `--allow-duplicate` 只绕过旧业务预查并按正文摘要区分修订；相同稿件失败重试保持稳定键，不会无条件重发。研究与回测按来源/报告类型分别查重。
+
 把本 skill 当作回测编排层使用。优先调用同级 `../hk-ipo-research` skill 的抓取、核验和评分能力；找不到该 skill 时，使用公开网页、港交所文件及历史存档执行同一流程。默认中文输出，所有时间使用 `Asia/Hong_Kong`。
 
 ## 核心定义

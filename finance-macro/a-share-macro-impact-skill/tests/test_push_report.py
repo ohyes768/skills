@@ -11,6 +11,9 @@ spec = importlib.util.spec_from_file_location('push_rss', Path(__file__).parents
 push_rss = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(push_rss)
 
+TEST_TEMP = Path(__file__).resolve().parents[3] / '.cache/rss-tests'
+TEST_TEMP.mkdir(parents=True, exist_ok=True)
+
 
 class PushReportTests(unittest.TestCase):
     """push_report 纯逻辑：payload 组装与四种状态映射。"""
@@ -43,76 +46,63 @@ class PushReportTests(unittest.TestCase):
 
 
 class MainFlowTests(unittest.TestCase):
-    """main 流程：RSS 已成功才推 macro；RSS 失败绝不触发 macro 推送；整体返回码不受 macro 结果影响。"""
-
-    def write_report(self, tmp):
+    def run_main(self, tmp, *, status='published', business_duplicate=False, token='', dashboard='ok', fail=False, extra=None):
         md = Path(tmp) / 'report.md'
         md.write_text('正文', encoding='utf-8')
-        return str(md)
+        response = {'schema_version': 1, 'status': status, 'id': 'p1', 'detail_url': 'https://test/view/p1'}
+        stdout = io.StringIO()
+        with patch.object(push_rss, 'relay_publish', return_value=response, side_effect=ValueError('unknown') if fail else None) as relay, \
+             patch.object(push_rss, 'is_duplicate', return_value=business_duplicate), \
+             patch.object(push_rss, 'push_report', return_value=dashboard) as report, \
+             contextlib.redirect_stdout(stdout):
+            code = push_rss.main([str(md), '--title', 'T', '--report-token', token, *(extra or [])])
+        return code, json.loads(stdout.getvalue()), relay, report
 
     def test_macro_relay_contract(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(push_rss, 'http_json', return_value={'posts': []}) as http, contextlib.redirect_stdout(io.StringIO()):
-                code = push_rss.main([self.write_report(tmp), '--title', 'T', '--report-token', ''])
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP) as tmp:
+            code, result, relay, _ = self.run_main(tmp)
         self.assertEqual(code, 0)
-        get_call, post_call = http.call_args_list
-        self.assertIn('channel=macro', get_call.args[0])
-        self.assertEqual(post_call.args[0], push_rss.DEFAULT_ENDPOINT)
-        self.assertEqual(post_call.args[1], {
-            'title': 'T', 'content': '正文', 'channel': 'macro', 'source': 'my-bot', 'url': ''})
-
-    def test_rss_duplicate_blocks_macro_push(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(push_rss, 'http_json', return_value={'posts': [{'title': 'T'}]}), \
-                 patch.object(push_rss, 'push_report') as mock_push:
-                code = push_rss.main([self.write_report(tmp), '--title', 'T'])
-        self.assertEqual(code, 3)
-        mock_push.assert_not_called()
-
-    def test_rss_success_pushes_report_ok(self):
-        def fake_http(url, payload, verify, timeout=20, token=None):
-            if token is None:
-                return {'posts': []}
-            return {'success': True, 'data': {'report_id': 'r1', 'duplicate': False}}
-        with tempfile.TemporaryDirectory() as tmp:
-            stdout = io.StringIO()
-            with patch.object(push_rss, 'http_json', side_effect=fake_http), contextlib.redirect_stdout(stdout):
-                code = push_rss.main([self.write_report(tmp), '--title', 'T', '--report-token', 'tok'])
-        self.assertEqual(code, 0)
-        result = json.loads(stdout.getvalue())
+        self.assertEqual(relay.call_args.args[0], {'title': 'T', 'content': '正文', 'channel': 'macro', 'source': 'my-bot', 'url': ''})
+        self.assertEqual(relay.call_args.kwargs['endpoint'], push_rss.DEFAULT_ENDPOINT)
         self.assertTrue(result['pushed'])
-        self.assertEqual(result['report_push'], 'ok')
+
+    def test_rss_duplicate_still_retries_macro_push(self):
+        for business in (False, True):
+            with self.subTest(business=business), tempfile.TemporaryDirectory(dir=TEST_TEMP) as tmp:
+                code, result, relay, report = self.run_main(tmp, status='duplicate', business_duplicate=business)
+            self.assertEqual(code, 3)
+            report.assert_called_once()
+            self.assertFalse(result['pushed'])
+            self.assertTrue(result['duplicate'])
+            if business:
+                relay.assert_not_called()
+
+    def test_unconfirmed_rss_never_pushes_macro(self):
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP) as tmp:
+            code, result, _, report = self.run_main(tmp, fail=True)
+        self.assertEqual(code, 2)
+        self.assertFalse(result['pushed'])
+        report.assert_not_called()
 
     def test_macro_failure_keeps_exit_code_zero(self):
-        rss_calls = []
-
-        def fake_http(url, payload, verify, timeout=20, token=None):
-            if token is None:
-                rss_calls.append(payload is not None)  # True=POST 推送，False=GET 查重
-                return {'posts': []}
-            raise OSError('connection refused')
-        with tempfile.TemporaryDirectory() as tmp:
-            stdout = io.StringIO()
-            with patch.object(push_rss, 'http_json', side_effect=fake_http), contextlib.redirect_stdout(stdout):
-                code = push_rss.main([self.write_report(tmp), '--title', 'T', '--report-token', 'tok'])
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP) as tmp:
+            code, result, _, _ = self.run_main(tmp, dashboard='failed: connection refused')
         self.assertEqual(code, 0)
-        self.assertTrue(any(rss_calls))  # RSS POST 推送已发生且成功
-        result = json.loads(stdout.getvalue())
-        self.assertTrue(result['pushed'])
-        self.assertTrue(result['report_push'].startswith('failed:'), result['report_push'])
+        self.assertTrue(result['report_push'].startswith('failed:'))
 
     def test_missing_token_reports_skipped_with_warning(self):
-        def fake_http(url, payload, verify, timeout=20, token=None):
-            return {'posts': []}
-        with tempfile.TemporaryDirectory() as tmp:
-            stdout = io.StringIO()
-            with patch.object(push_rss, 'http_json', side_effect=fake_http), contextlib.redirect_stdout(stdout):
-                code = push_rss.main([self.write_report(tmp), '--title', 'T', '--report-token', ''])
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP) as tmp:
+            code, result, _, _ = self.run_main(tmp, dashboard='skipped_no_token')
         self.assertEqual(code, 0)
-        result = json.loads(stdout.getvalue())
-        self.assertTrue(result['pushed'])
-        self.assertEqual(result['report_push'], 'skipped_no_token')
-        self.assertTrue(any('MACRO_SIGNAL_UPLOAD_TOKEN' in w for w in result.get('quality_warnings', [])))
+        self.assertTrue(any('MACRO_SIGNAL_UPLOAD_TOKEN' in w for w in result['quality_warnings']))
+
+    def test_strict_quality_failure_never_publishes(self):
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP) as tmp:
+            code, result, relay, report = self.run_main(tmp, extra=['--strict'])
+        self.assertEqual(code, 2)
+        relay.assert_not_called()
+        report.assert_not_called()
+        self.assertIn('quality_errors', result)
 
 
 if __name__ == '__main__':

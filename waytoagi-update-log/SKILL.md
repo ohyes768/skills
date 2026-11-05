@@ -101,23 +101,17 @@ description: 自动追踪WaytoAGI知识库近7日更新日志，整理指定日�
 
 **RSS 推送（默认渠道）：**
 
-接口：`POST https://web.duomi77.cn:9443/rss/api/rss-relay/post`（与 bilibili-subtitle-rss 同一 RSS Relay）
+先安装公共 `rss-relay-publish` skill，并按其 [接入说明](../knowledge/rss-relay-publish/references/integration.md) 配置 `RSS_RELAY_SKILL_DIR`（独立发布包可按同名公共 skill 定位）。不再手写 HTTP POST。
 
-**每篇文章一条请求**，JSON body：
+将 Step 5 的待发布文章准备为 UTF-8 JSON 数组，每项包含 `token`（mention-doc）、`title`、`content`（说明和链接）、`url`（微信原文优先，否则 Wiki）。运行：
 
-```json
-{
-  "title": "《文章标题》",
-  "content": "📝 说明文字\n\n🔗 微信原文：https://mp.weixin.qq.com/...\n\n🔗 飞书Wiki：https://waytoagi.feishu.cn/wiki/...",
-  "channel": "waytoagi",
-  "source": "waytoagi-daily",
-  "url": "https://mp.weixin.qq.com/..."
-}
+```bash
+python scripts/publish_articles.py --articles-json /path/to/articles.json
 ```
 
-- `channel` 固定 `waytoagi`、`source` 固定 `waytoagi-daily`，不要用其他值
-- `title` 为文章标题；`content` 按 Step 5 条目格式（说明 + 链接）；`url` 按链接策略填微信原文链接或 Wiki 链接
-- 成功判定：HTTP 201 且响应含非空 `id`；没拿到 `id` 不要直接重试，先查远端是否已创建（超时盲重试会造成重复）
+脚本固定 `channel=waytoagi`、`source=waytoagi-daily`，逐篇调用公共 CLI；已存在于 `data/pushed_articles.json` 的 token 跳过，每篇成功/已确认重复后立即追加回执。中途失败时已成功项仍保留，修复后可用同一 JSON 重跑；`unknown` 不盲重发。可用 `--receipts` 指定业务回执位置、`--endpoint` 覆盖旧完整 /post 地址。
+
+`data/pushed_articles.json.lock.sqlite3` 串行化本脚本的回执合并，保留它及原 JSON；其他渠道写回执也应通过同一锁协议，不能并发直接覆写旧 JSON。公共回执与 token 回执职责不同，两者都保留。仅没有新文章时静默，不调用发布脚本。
 
 **钉钉推送（cron 场景必做 / 手动场景可选）：**
 

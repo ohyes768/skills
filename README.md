@@ -77,6 +77,7 @@ README.md
 
 | Skill | 说明 | 状态 |
 |---|---|---|
+| [rss-relay-publish](knowledge/rss-relay-publish) | 公共 RSS 发布 skill 与跨平台 CLI：持久回执、超时核对、稳定 JSON；新功能统一复用 | active |
 | [notes-deal](knowledge/notes-deal) | 浏览器采集知识点的自动分类整理 | active |
 | [bilibili-subtitle-rss](bilibili-subtitle-rss) | 提取 B站完整字幕、按停顿和字数合并分段，并查重推送到 RSS Relay；已安装到 Codex | active |
 

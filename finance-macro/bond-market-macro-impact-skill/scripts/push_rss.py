@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import ssl
 from pathlib import Path
+from runpy import run_path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+relay_publish = run_path(str(Path(__file__).with_name('rss_relay_client.py')))['publish']
 
 DEFAULT_ENDPOINT = "https://web.duomi77.cn:9443/rss/api/rss-relay/post"
 DEFAULT_POSTS_ENDPOINT = "https://web.duomi77.cn:9443/rss/api/rss-relay/posts"
@@ -81,10 +85,10 @@ def validate_title(title: str, content: str) -> list[str]:
     return errors
 
 
-def is_duplicate(posts_endpoint: str, title: str, verify: bool) -> bool:
+def is_duplicate(posts_endpoint: str, title: str, verify: bool, source: str = "my-bot") -> bool:
     payload = http_json(posts_endpoint + "?" + urlencode({"limit": 100, "channel": "macro"}), None, verify)
     posts = payload.get("posts", [])
-    return any(post.get("title") == title for post in posts)
+    return any(post.get("title") == title and post.get("source") == source for post in posts)
 
 
 def push_report(endpoint: str, token: str, title: str, content: str, url: str, source: str, verify: bool) -> str:
@@ -125,16 +129,18 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"pushed": False, "quality_errors": errors, "strict": True}, ensure_ascii=False, indent=2))
         return 2
 
-    if not args.allow_duplicate and is_duplicate(args.posts_endpoint, args.title, not args.insecure):
-        print(json.dumps({"pushed": False, "duplicate": True, "title": args.title}, ensure_ascii=False, indent=2))
-        return 3
-
-    response = http_json(
-        args.endpoint,
-        {"title": args.title, "content": content, "channel": "macro", "source": args.source, "url": args.url},
-        not args.insecure,
-    )
-    result = {"pushed": True, "response": response}
+    payload = {"title": args.title, "content": content, "channel": "macro", "source": args.source, "url": args.url}
+    key = "macro:" + args.title
+    if args.allow_duplicate:
+        key += ":revision:" + hashlib.sha256(content.encode("utf-8")).hexdigest()
+    duplicate = not args.allow_duplicate and is_duplicate(args.posts_endpoint, args.title, not args.insecure, args.source)
+    try:
+        response = relay_publish(payload, key, endpoint=args.endpoint, verify=not args.insecure) if not duplicate else None
+    except (ValueError, OSError) as exc:
+        print(json.dumps({"pushed": False, "error": str(exc)}, ensure_ascii=False))
+        return 2
+    duplicate = duplicate or response["status"] == "duplicate"
+    result = {"pushed": not duplicate, "duplicate": duplicate, "response": response, "title": args.title}
     result["report_push"] = push_report(
         args.report_endpoint, args.report_token, args.title, content, args.url, args.source, not args.insecure
     )
@@ -143,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
     if errors:
         result["quality_warnings"] = errors
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0
+    return 3 if duplicate else 0
 
 
 if __name__ == "__main__":

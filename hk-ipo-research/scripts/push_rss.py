@@ -2,12 +2,16 @@
 """把已经完成研究和质检的 Markdown 推送到 RSS Relay。"""
 
 import argparse
+import hashlib
 import json
 import re
 from pathlib import Path
+from runpy import run_path
 
 import httpx
 
+
+relay_publish = run_path(str(Path(__file__).with_name('rss_relay_client.py')))['publish']
 
 DEFAULT_ENDPOINT = "https://web.duomi77.cn:9443/rss/api/rss-relay/post"
 DEFAULT_POSTS_ENDPOINT = "https://web.duomi77.cn:9443/rss/api/rss-relay/posts"
@@ -169,10 +173,12 @@ def validate_title(title: str, content: str, report_type: str = "research") -> l
     return errors
 
 
-def is_duplicate(posts_endpoint: str, title: str, verify_tls: bool) -> bool:
-    response = httpx.get(posts_endpoint, params={"limit": 100}, timeout=20, verify=verify_tls)
+def is_duplicate(posts_endpoint: str, title: str, verify_tls: bool, channel: str = "hkipo", source: str = "hk-ipo-research", report_type: str = "research") -> bool:
+    response = httpx.get(posts_endpoint, params={"limit": 200, "channel": channel}, timeout=20, verify=verify_tls)
     response.raise_for_status()
-    posts = response.json().get("posts", [])
+    posts = [post for post in response.json().get("posts", [])
+             if post.get("channel") == channel and post.get("source") == source
+             and (("港股IPO回测" in post.get("title", "")) == (report_type == "backtest"))]
     code_match = re.search(r"(\d{5})\.HK", title)
     day = title[:10]
     if not code_match:
@@ -212,22 +218,25 @@ def main() -> int:
         print(json.dumps({"pushed": False, "quality_errors": errors, "strict": True}, ensure_ascii=False, indent=2))
         return 2
 
-    if not args.allow_duplicate and is_duplicate(args.posts_endpoint, args.title, not args.insecure):
+    if not args.allow_duplicate and is_duplicate(args.posts_endpoint, args.title, not args.insecure, args.channel, args.source, args.report_type):
         print(json.dumps({"pushed": False, "duplicate": True, "title": args.title}, ensure_ascii=False, indent=2))
         return 3
 
-    response = httpx.post(
-        args.endpoint,
-        json={"title": args.title, "content": content, "channel": args.channel, "source": args.source, "url": args.url},
-        timeout=20,
-        verify=not args.insecure,
-    )
-    response.raise_for_status()
-    result = {"pushed": True, "response": response.json()}
+    payload = {"title": args.title, "content": content, "channel": args.channel, "source": args.source, "url": args.url}
+    key = args.report_type + ":" + args.title
+    if args.allow_duplicate:
+        key += ":revision:" + hashlib.sha256(content.encode("utf-8")).hexdigest()
+    try:
+        response = relay_publish(payload, key, endpoint=args.endpoint, verify=not args.insecure)
+    except (ValueError, OSError) as exc:
+        print(json.dumps({"pushed": False, "error": str(exc)}, ensure_ascii=False))
+        return 2
+    duplicate = response["status"] == "duplicate"
+    result = {"pushed": not duplicate, "duplicate": duplicate, "response": response}
     if errors:
         result["quality_warnings"] = errors
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0
+    return 3 if duplicate else 0
 
 
 if __name__ == "__main__":

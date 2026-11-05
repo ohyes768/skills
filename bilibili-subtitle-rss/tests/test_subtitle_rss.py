@@ -36,13 +36,13 @@ class SubtitleTests(unittest.TestCase):
             self.assertFalse(insecure.check_hostname)
             self.assertEqual(insecure.verify_mode, ssl.CERT_NONE)
 
-    def test_insecure_applies_to_duplicate_check_and_post(self):
-        with tempfile.TemporaryDirectory(dir=TEST_TEMP) as folder, patch.object(m, 'request_json', side_effect=[
-            {'posts': []}, {'id': 'tls-test'}
-        ]) as request:
+    def test_insecure_applies_to_duplicate_check_and_public_cli(self):
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP) as folder, \
+             patch.object(m, 'request_json', return_value={'posts': []}) as request, \
+             patch.object(m, 'relay_publish', return_value={'status': 'published', 'id': 'tls-test'}) as publish:
             m.publish(m.build_post(fixture(), BV), m.DEFAULT_ENDPOINT, Path(folder), insecure=True)
-            self.assertEqual(request.call_count, 2)
-            self.assertTrue(all(call.kwargs['insecure'] for call in request.call_args_list))
+            self.assertTrue(request.call_args.kwargs['insecure'])
+            self.assertFalse(publish.call_args.kwargs['verify'])
 
     def test_cli_passes_insecure_to_publish(self):
         with tempfile.TemporaryDirectory(dir=TEST_TEMP) as folder, patch.object(m, 'extract', return_value=fixture()), \
@@ -143,26 +143,26 @@ class SubtitleTests(unittest.TestCase):
             self.assertEqual(request.call_count, 1)
 
     def test_success_has_receipt_and_second_run_skips_network(self):
-        with tempfile.TemporaryDirectory(dir=TEST_TEMP) as folder, patch.object(m, 'request_json', side_effect=[
-            {'posts': []}, {'id': 'post-123'}
-        ]) as request:
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP) as folder, \
+             patch.object(m, 'request_json', return_value={'posts': []}) as request, \
+             patch.object(m, 'relay_publish', return_value={'status': 'published', 'id': 'post-123'}) as publish:
             result = m.publish(m.build_post(fixture(), BV), m.DEFAULT_ENDPOINT, Path(folder))
             self.assertEqual(result['status'], 'published')
             again = m.publish(m.build_post(fixture(), BV), m.DEFAULT_ENDPOINT, Path(folder))
             self.assertEqual(again['status'], 'duplicate')
-            self.assertEqual(request.call_count, 2)
-            self.assertEqual(request.call_args_list[1].kwargs['method'], 'POST')
-            payload = request.call_args_list[1].kwargs['payload']
+            request.assert_called_once()
+            publish.assert_called_once()
+            payload = publish.call_args.args[0]
             self.assertEqual(payload['channel'], 'bilinote')
             self.assertEqual(payload['source'], 'my-bot')
 
-    def test_ambiguous_post_failure_not_retried_or_recorded(self):
-        with tempfile.TemporaryDirectory(dir=TEST_TEMP) as folder, patch.object(m, 'request_json', side_effect=[
-            {'posts': []}, TimeoutError('timeout')
-        ]) as request:
-            with self.assertRaises(TimeoutError):
+    def test_ambiguous_public_result_not_retried_or_recorded(self):
+        with tempfile.TemporaryDirectory(dir=TEST_TEMP) as folder, \
+             patch.object(m, 'request_json', return_value={'posts': []}), \
+             patch.object(m, 'relay_publish', side_effect=ValueError('unknown')) as publish:
+            with self.assertRaisesRegex(ValueError, 'unknown'):
                 m.publish(m.build_post(fixture(), BV), m.DEFAULT_ENDPOINT, Path(folder))
-            self.assertEqual(request.call_count, 2)
+            publish.assert_called_once()
             self.assertFalse(list(Path(folder).glob('*.receipt.json')))
 
 
