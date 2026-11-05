@@ -70,3 +70,7 @@ personal-tools/waytoagi-update-log/data/
 
 # Trellis 本地开发者日志与会话状态（保留本地，不入库）
 /.trellis/workspace/
+
+# 港股 IPO 每日自动复盘（本机运行产物；保留已入库历史资料）
+hk-ipo-backtest/references/????-??-??-backtest-audit-lessons.md
+hk-ipo-research/references/????-??-??-batch-lessons.md

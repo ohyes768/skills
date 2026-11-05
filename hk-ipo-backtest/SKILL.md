@@ -9,6 +9,10 @@ description: 港股 IPO 无未来数据泄漏的逐日预测回测 skill。用�
 
 把本 skill 当作回测编排层使用。优先调用同级 `../hk-ipo-research` skill 的抓取、核验和评分能力；找不到该 skill 时，使用公开网页、港交所文件及历史存档执行同一流程。默认中文输出，所有时间使用 `Asia/Hong_Kong`。
 
+## 运行产物与经验维护
+
+每日自动生成的复盘写入 `references/YYYY-MM-DD-batch-lessons.md`（研究）或 `references/YYYY-MM-DD-backtest-audit-lessons.md`（回测），属于本机运行产物，由 `.gitignore` 忽略，不作为 skill 的发布依赖。定时任务不得自动改写 `SKILL.md`、追加日报索引或把当次观察直接升级为通用规则。候选经验先记录在当日复盘中；只有用户明确要求维护 skill 并完成人工审阅后，才将已验证、可复用的经验提炼到受版本管理的文档中，不引用未入库日报。已有入库历史案例与资料保留。
+
 ## 核心定义
 
 - **案例日**：目标 IPO 完成首个交易日的香港交易日。

@@ -9,6 +9,10 @@ description: 港股 IPO 打新数据抓取、交叉验证、评分与复盘 skil
 
 把本 skill 当作数据工具和研究流程使用，不要仅凭模型记忆回答实时问题。默认用中文输出，并注明数据时间（Asia/Hong_Kong）。所有结论仅供研究，不构成投资建议。
 
+## 运行产物与经验维护
+
+每日自动生成的复盘写入 `references/YYYY-MM-DD-batch-lessons.md`（研究）或 `references/YYYY-MM-DD-backtest-audit-lessons.md`（回测），属于本机运行产物，由 `.gitignore` 忽略，不作为 skill 的发布依赖。定时任务不得自动改写 `SKILL.md`、追加日报索引或把当次观察直接升级为通用规则。候选经验先记录在当日复盘中；只有用户明确要求维护 skill 并完成人工审阅后，才将已验证、可复用的经验提炼到受版本管理的文档中，不引用未入库日报。已有入库历史案例与资料保留。
+
 ## 首次运行
 
 从 skill 根目录执行：
