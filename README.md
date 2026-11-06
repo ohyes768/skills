@@ -54,7 +54,7 @@ README.md
 | [basic-quality-rating](investment-analysis/basic-quality-rating) | 自动化五维基本面评级（10 字段 nullable JSON）：企业/银行/保险财务 E 评分、银行保险 API 候选取数、结构化数据与官方网页取证、失败换路与取证预算、统一校验 | active |
 | [financial-statement-analysis](investment-analysis/financial-statement-analysis) | A 股 F10 财务分析：输入股票代码与报告期，输出带接口字段来源的中文报告（合并三表、指标计算、独立复核）；验收见其 [acceptance.md](investment-analysis/financial-statement-analysis/acceptance.md) | active |
 | [annual-report-industry-learning](investment-analysis/annual-report-industry-learning) | 财报行业学习 | active |
-| [csi300-brief](investment-analysis/csi300-brief) | 沪深300简报 | 源码可用 |
+| [csi300-brief](investment-analysis/csi300-brief) | 沪深300简报；可选 `--push` 投递钉钉（关键词 `ETF`） | 源码可用 |
 
 ### 个人工具 `personal-tools/`
 

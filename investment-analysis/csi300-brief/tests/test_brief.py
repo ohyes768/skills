@@ -1,7 +1,7 @@
 import importlib.util
 import io
 import json
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -131,6 +131,83 @@ class BriefTests(unittest.TestCase):
             with self.assertRaises(brief.argparse.ArgumentTypeError):
                 brief.positive_timeout(value)
         self.assertEqual(brief.positive_timeout("2.5"), 2.5)
+
+
+class PushTests(unittest.TestCase):
+    def test_default_title_carries_keyword_and_price_date(self):
+        title = brief.push_title(snapshot())
+        self.assertIn("ETF", title)
+        self.assertIn("2026-11-04", title)
+
+    def test_default_title_falls_back_to_today(self):
+        data = snapshot()
+        data.pop("price_as_of")
+        self.assertRegex(brief.push_title(data), r"沪深300 ETF 简况 · \d{4}-\d{2}-\d{2}")
+
+    def test_missing_keyword_blocks_the_request(self):
+        outcome = brief.push("沪深300概况，不含关键词", "沪深300简况", keyword="ETF")
+        self.assertEqual(outcome["status"], "keyword_missing")
+        self.assertIn("ETF", outcome["errmsg"])
+
+    def test_cli_push_keeps_stdout_text_and_reports_to_stderr(self):
+        output, errors = io.StringIO(), io.StringIO()
+        with patch.object(brief, "fetch", return_value=snapshot()), \
+                patch.object(brief, "push", return_value={"status": "sent"}) as push, \
+                redirect_stdout(output), redirect_stderr(errors):
+            code = brief.main(["--push"])
+        self.assertEqual(code, 0)
+        self.assertIn("沪深300", output.getvalue())
+        self.assertNotIn("status", output.getvalue())
+        self.assertIn("沪深300 ETF 简况 · 2026-11-04", push.call_args.args[1])
+        self.assertIn('"sent"', errors.getvalue())
+
+    def test_cli_without_push_flag_never_sends(self):
+        with patch.object(brief, "fetch", return_value=snapshot()), \
+                patch.object(brief, "push") as push, redirect_stdout(io.StringIO()):
+            self.assertEqual(brief.main([]), 0)
+        push.assert_not_called()
+
+    def test_push_status_maps_to_exit_code(self):
+        for status, code in (("unknown", 3), ("rejected", 4),
+                             ("keyword_missing", 2), ("not_configured", 2)):
+            with self.subTest(status=status), \
+                    patch.object(brief, "fetch", return_value=snapshot()), \
+                    patch.object(brief, "push", return_value={"status": status}), \
+                    redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(brief.main(["--push"]), code)
+
+    def test_push_timeout_rejects_nonpositive_values(self):
+        for value in ("0", "-3", "nan", "inf"):
+            with self.assertRaises(brief.argparse.ArgumentTypeError):
+                brief.positive_timeout(value)
+
+
+class TlsTests(unittest.TestCase):
+    def test_default_context_still_verifies_certificates(self):
+        context = brief.tls_context()
+        self.assertEqual(context.verify_mode, brief.ssl.CERT_REQUIRED)
+        self.assertTrue(context.check_hostname)
+
+    def test_insecure_is_opt_in_only(self):
+        context = brief.tls_context(insecure=True)
+        self.assertEqual(context.verify_mode, brief.ssl.CERT_NONE)
+        self.assertFalse(context.check_hostname)
+
+    @patch.object(brief, "urlopen")
+    def test_fetch_passes_the_context_through(self, urlopen):
+        response = urlopen.return_value.__enter__.return_value
+        response.read.return_value = json.dumps(snapshot()).encode()
+        context = brief.tls_context(insecure=True)
+        brief.fetch(brief.DEFAULT_BASE_URL, "trailing_10y_weekly", 5, context)
+        self.assertIs(urlopen.call_args.kwargs["context"], context)
+
+    def test_unreadable_ca_file_fails_short_without_requesting(self):
+        output = io.StringIO()
+        with patch.object(brief, "fetch") as fetch, redirect_stdout(output):
+            code = brief.main(["--ca-file", str(Path(__file__).with_name("missing-ca.pem"))])
+        self.assertEqual(code, 1)
+        self.assertIn("证书", output.getvalue())
+        fetch.assert_not_called()
 
 
 if __name__ == "__main__":

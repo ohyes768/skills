@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import json
 import math
+from pathlib import Path
+from runpy import run_path
+import ssl
 import sys
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
+
+dingtalk = run_path(str(Path(__file__).with_name("dingtalk_push.py")))
 
 DEFAULT_BASE_URL = "https://web.duomi77.cn:9443/api/index-trends"
 MODELS = {"trailing_10y_weekly": "近10年周线通道",
@@ -84,17 +90,51 @@ def summarize(data):
     return "，".join(market) + "。" + text + "。"
 
 
-def fetch(base_url, model, timeout):
+def tls_context(insecure=False, ca_file=None):
+    """Default strict verification; `--insecure` is opt-in, `--ca-file` pins a CA."""
+    if insecure:
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        return context
+    return ssl.create_default_context(cafile=str(ca_file)) if ca_file else ssl.create_default_context()
+
+
+def fetch(base_url, model, timeout, context=None):
     parts = urlsplit(base_url)
     if parts.scheme not in ("http", "https") or not parts.netloc or parts.query or parts.fragment:
         raise ValueError("invalid API base URL")
     url = base_url.rstrip("/") + "/indices/000300/status?" + urlencode({"model": model})
     request = Request(url, headers={"Accept": "application/json", "User-Agent": "csi300-brief/1.0"})
-    with urlopen(request, timeout=timeout) as response:
+    with urlopen(request, timeout=timeout, context=context) as response:
         data = json.loads(response.read())
     if not isinstance(data, dict) or not isinstance(data.get("available"), bool):
         raise ValueError("invalid snapshot")
     return data
+
+
+def push_title(data):
+    """Title carries the robot keyword so the message never fails `310000`."""
+    date = data.get("price_as_of")
+    if not isinstance(date, str) or not date:
+        date = datetime.now().strftime("%Y-%m-%d")
+    return f"沪深300 ETF 简况 · {date}"
+
+
+def push(text, title, *, env_file=None, keyword=None, timeout=10, dry_run=False):
+    """Return the shared sender's result; delivery failures are classified, not raised."""
+    path = Path(env_file) if env_file else None
+    keyword = dingtalk["resolve_keyword"](keyword, path)
+    if not dingtalk["keyword_present"](title, text, keyword):
+        return dingtalk["result"](dingtalk["KEYWORD_MISSING"],
+                                  errmsg=f"标题或正文未包含关键词「{keyword}」，未发送")
+    try:
+        webhook = dingtalk["resolve_webhook"](None, path)
+    except ValueError as exc:
+        return dingtalk["result"](dingtalk["NOT_CONFIGURED"], errmsg=str(exc))
+    if dry_run:
+        return dict(dingtalk["result"](dingtalk["DRY_RUN"], errmsg="未发送"), title=title)
+    return dingtalk["send"](webhook, title, text, timeout=timeout)
 
 
 def positive_timeout(value):
@@ -112,9 +152,23 @@ def main(argv=None):
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL, help="API前缀，不包含/indices路径")
     parser.add_argument("--model", choices=tuple(MODELS), default="trailing_10y_weekly")
     parser.add_argument("--timeout", type=positive_timeout, default=20, help="请求超时秒数（默认20）")
+    parser.add_argument("--push", action="store_true", help="生成后推送到钉钉群机器人")
+    parser.add_argument("--title", help="钉钉标题，默认「沪深300 ETF 简况 · 价格日期」")
+    parser.add_argument("--env-file", type=Path, help=".env 路径，默认本 skill 目录下的 .env")
+    parser.add_argument("--keyword", help="机器人关键词，默认读 DINGTALK_KEYWORD")
+    parser.add_argument("--push-timeout", type=positive_timeout, default=10, help="推送超时秒数（默认10）")
+    parser.add_argument("--dry-run", action="store_true", help="配合 --push 只校验配置与关键词，不发送")
+    parser.add_argument("--insecure", action="store_true",
+                        help="跳过 TLS 证书校验（仅在本机明确接受该风险时使用，默认严格校验）")
+    parser.add_argument("--ca-file", type=Path, help="把自签证书或内网 CA 指定为信任根，替代 --insecure")
     args = parser.parse_args(argv)
     try:
-        data = fetch(args.base_url, args.model, args.timeout)
+        context = tls_context(args.insecure, args.ca_file)
+    except (OSError, ssl.SSLError):
+        print("沪深300数据暂时获取失败（证书文件无法读取或无效）。")
+        return 1
+    try:
+        data = fetch(args.base_url, args.model, args.timeout, context)
     except HTTPError as exc:
         reason = f"接口HTTP {exc.code}"
     except (URLError, OSError):
@@ -122,8 +176,14 @@ def main(argv=None):
     except (ValueError, UnicodeError):
         reason = "接口地址或响应格式无效"
     else:
-        print(summarize(data))
-        return 0
+        text = summarize(data)
+        print(text)
+        if not args.push:
+            return 0
+        outcome = push(text, args.title or push_title(data), env_file=args.env_file,
+                       keyword=args.keyword, timeout=args.push_timeout, dry_run=args.dry_run)
+        print(json.dumps(outcome, ensure_ascii=False), file=sys.stderr)
+        return dingtalk["EXIT_CODES"][outcome["status"]]
     print(f"沪深300数据暂时获取失败（{reason}）。")
     return 1
 
