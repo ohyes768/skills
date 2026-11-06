@@ -210,5 +210,63 @@ class TlsTests(unittest.TestCase):
         fetch.assert_not_called()
 
 
+class MarkdownTests(unittest.TestCase):
+    def test_markdown_emphasises_the_numbers_that_matter(self):
+        text = brief.render_markdown(snapshot())
+        for value in ("### 沪深300 ETF 简况 · 2026-11-04",
+                      "**近10年周线通道** **中部**",
+                      "通道位置 **38.6%**",
+                      "- 收盘 **4101.34** 点",
+                      "3274.36 / **4346.82** / 5419.29",
+                      "PE-TTM **12.86 倍**",
+                      "近10年分位 **53.1%**",
+                      "（估值 2026-10-30）"):
+            self.assertIn(value, text)
+        self.assertIn("不构成买卖建议", text)
+
+    def test_markdown_keeps_market_warning_on_its_own_line(self):
+        data = snapshot()
+        data["data_status"]["state"] = "stale"
+        text = brief.render_markdown(data)
+        self.assertIn("⚠️ **行情滞后，以上为缓存值**", text)
+        self.assertIn("行情滞后", brief.summarize(data))
+
+    def test_markdown_keeps_stale_valuation_target_date(self):
+        data = snapshot()
+        data["valuation"]["state"] = "stale"
+        data["valuation"]["target_date"] = "2026-11-07"
+        self.assertIn("⚠️ **估值滞后，目标日期2026-11-07**", brief.render_markdown(data))
+
+    def test_markdown_does_not_fabricate_missing_values(self):
+        data = snapshot()
+        data["available"] = False
+        data["reason"] = "model_not_ready"
+        data["valuation"]["pe_ttm"] = None
+        data["valuation"]["percentile_pct"] = None
+        text = brief.render_markdown(data)
+        self.assertIn("**周线通道暂不可用（模型尚未就绪）**", text)
+        self.assertIn("PE-TTM 暂无数据", text)
+        for bad in ("None", "nan", "inf"):
+            self.assertNotIn(bad, text)
+
+    def test_valuation_disabled_and_unavailable_states_are_labelled(self):
+        for state, label in (("disabled", "**估值未启用**"), ("empty", "**估值暂无数据**")):
+            with self.subTest(state=state):
+                data = snapshot()
+                data["valuation"]["state"] = state
+                self.assertIn(label, brief.render_markdown(data))
+
+    def test_cli_pushes_markdown_while_stdout_stays_plain(self):
+        output, errors = io.StringIO(), io.StringIO()
+        with patch.object(brief, "fetch", return_value=snapshot()), \
+                patch.object(brief, "push", return_value={"status": "sent"}) as push, \
+                redirect_stdout(output), redirect_stderr(errors):
+            self.assertEqual(brief.main(["--push"]), 0)
+        sent_markdown = push.call_args.args[0]
+        self.assertIn("### 沪深300 ETF 简况 · 2026-11-04", sent_markdown)
+        self.assertNotIn("###", output.getvalue())
+        self.assertIn("沪深300截至2026-11-04", output.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

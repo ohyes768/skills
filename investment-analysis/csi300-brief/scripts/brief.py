@@ -39,55 +39,126 @@ def mapping(value):
     return value if isinstance(value, dict) else {}
 
 
-def date_label(value, missing):
-    return f"截至{value}" if isinstance(value, str) and value else missing
+MARKET_WARNINGS = {"stale": "行情滞后，以上为缓存值",
+                   "error": "行情更新失败，以上为缓存值",
+                   "empty": "行情暂无数据"}
+VALUATION_WARNINGS = {"stale": "估值滞后", "error": "估值更新失败，以下为缓存值"}
+
+
+def market_warning(state):
+    return None if state == "ok" else MARKET_WARNINGS.get(state, "行情状态未确认")
+
+
+def valuation_warning(state, target_date=None):
+    if state == "ok":
+        return None
+    text = VALUATION_WARNINGS.get(state, "估值状态未确认")
+    return f"{text}，目标日期{target_date}" if state == "stale" and target_date else text
+
+
+def facts(data):
+    """Single source of truth for both renderers; keeps the two dates apart."""
+    market = {
+        "available": data.get("available") is True,
+        "date": data.get("price_as_of") if isinstance(data.get("price_as_of"), str) and data.get("price_as_of") else None,
+        "close": number(data.get("close")),
+        "model": MODELS.get(data.get("model_kind"), "周线通道（模型未确认）"),
+        "region": REGIONS.get(data.get("region")),
+        "position": number(data.get("position_pct"), 1),
+        "rails": [number(data.get(key)) for key in ("lower", "mid", "upper")],
+        "state": mapping(data.get("data_status")).get("state"),
+        "reason": REASONS.get(data.get("reason"), "数据尚未就绪或状态未确认"),
+    }
+    raw = mapping(data.get("valuation"))
+    valuation = {
+        "state": raw.get("state"),
+        "as_of": raw.get("as_of") if isinstance(raw.get("as_of"), str) and raw.get("as_of") else None,
+        "target_date": raw.get("target_date"),
+        "pe": number(raw.get("pe_ttm")),
+        "percentile": number(raw.get("percentile_pct"), 1),
+    }
+    return market, valuation
 
 
 def summarize(data):
-    """Preserve independent market/valuation dates and quality warnings."""
-    market = []
-    if data.get("available") is True:
-        market.append("沪深300" + date_label(data.get("price_as_of"), "（行情日期未提供）"))
-        close = number(data.get("close"))
-        market.append(f"收于{close}点" if close is not None else "收盘价暂无数据")
-        model = MODELS.get(data.get("model_kind"), "周线通道（模型未确认）")
-        region = REGIONS.get(data.get("region"))
-        market.append(f"位于{model}{region}" if region else f"采用{model}，区域未确认")
-        position = number(data.get("position_pct"), 1)
-        market.append(f"通道位置{position}%" if position is not None else "通道位置暂无数据")
-        rails = [number(data.get(key)) for key in ("lower", "mid", "upper")]
-        market.append("下轨/中轨/上轨为" + "/".join(rails) + "点"
-                      if all(item is not None for item in rails) else "轨道数据不完整")
+    """Plain sentence for stdout; every degradation stays visible."""
+    market, valuation = facts(data)
+    parts = []
+    if market["available"]:
+        parts.append("沪深300" + (f"截至{market['date']}" if market["date"] else "（行情日期未提供）"))
+        parts.append(f"收于{market['close']}点" if market["close"] is not None else "收盘价暂无数据")
+        region = market["region"]
+        parts.append(f"位于{market['model']}{region}" if region else f"采用{market['model']}，区域未确认")
+        parts.append(f"通道位置{market['position']}%" if market["position"] is not None else "通道位置暂无数据")
+        rails = market["rails"]
+        parts.append("下轨/中轨/上轨为" + "/".join(rails) + "点" if None not in rails else "轨道数据不完整")
     else:
-        reason = REASONS.get(data.get("reason"), "数据尚未就绪或状态未确认")
-        market.append(f"沪深300周线通道暂不可用（{reason}）")
-    state = mapping(data.get("data_status")).get("state")
-    if state != "ok":
-        warning = {"stale": "行情滞后，以上为缓存值",
-                   "error": "行情更新失败，以上为缓存值",
-                   "empty": "行情暂无数据"}.get(state, "行情状态未确认")
-        market.append(warning)
+        parts.append(f"沪深300周线通道暂不可用（{market['reason']}）")
+    warning = market_warning(market["state"])
+    if warning:
+        parts.append(warning)
 
-    valuation = mapping(data.get("valuation"))
-    state = valuation.get("state")
+    state = valuation["state"]
     if state in ("disabled", "empty"):
         text = "估值未启用" if state == "disabled" else "估值暂无数据"
+    elif state == "error" and valuation["pe"] is None and valuation["percentile"] is None:
+        text = "估值更新失败，估值暂不可用"
     else:
-        pe = number(valuation.get("pe_ttm"))
-        percentile = number(valuation.get("percentile_pct"), 1)
-        if state == "error" and pe is None and percentile is None:
-            text = "估值更新失败，估值暂不可用"
+        pieces = ["估值" + (f"截至{valuation['as_of']}" if valuation["as_of"] else "日期未提供")]
+        warning = valuation_warning(state, valuation["target_date"])
+        if warning:
+            pieces.append(warning)
+        pieces.append(f"PE-TTM为{valuation['pe']}倍" if valuation["pe"] is not None else "PE-TTM暂无数据")
+        pieces.append(f"近10年分位{valuation['percentile']}%" if valuation["percentile"] is not None
+                      else "PE分位暂无数据")
+        text = "，".join(pieces)
+    return "，".join(parts) + "。" + text + "。"
+
+
+def render_markdown(data):
+    """DingTalk markdown: key numbers bold, each warning on its own line, same facts."""
+    market, valuation = facts(data)
+    date = market["date"] or datetime.now().strftime("%Y-%m-%d")
+    lines = [f"### 沪深300 ETF 简况 · {date}", ""]
+    if market["available"]:
+        head = f"**{market['model']}**"
+        if market["region"]:
+            head += f" **{market['region']}**"
+        if market["position"] is not None:
+            head += f" · 通道位置 **{market['position']}%**"
+        lines.append(head)
+        lines.append("")
+        lines.append(f"- 收盘 **{market['close']}** 点" if market["close"] is not None else "- 收盘：暂无数据")
+        rails = market["rails"]
+        if None in rails:
+            lines.append("- 轨道：**数据不完整**")
         else:
-            pieces = ["估值" + date_label(valuation.get("as_of"), "日期未提供")]
-            if state != "ok":
-                pieces.append({"stale": "估值滞后", "error": "估值更新失败，以下为缓存值"}
-                              .get(state, "估值状态未确认"))
-            if state == "stale" and valuation.get("target_date"):
-                pieces.append(f"目标日期{valuation['target_date']}")
-            pieces.append(f"PE-TTM为{pe}倍" if pe is not None else "PE-TTM暂无数据")
-            pieces.append(f"近10年分位{percentile}%" if percentile is not None else "PE分位暂无数据")
-            text = "，".join(pieces)
-    return "，".join(market) + "。" + text + "。"
+            lines.append(f"- 下轨 / 中轨 / 上轨：{rails[0]} / **{rails[1]}** / {rails[2]}")
+    else:
+        lines.append(f"**周线通道暂不可用（{market['reason']}）**")
+    warning = market_warning(market["state"])
+    if warning:
+        lines.extend(["", f"⚠️ **{warning}**"])
+
+    lines.append("")
+    state = valuation["state"]
+    if state in ("disabled", "empty"):
+        lines.append(f"**{'估值未启用' if state == 'disabled' else '估值暂无数据'}**")
+    elif state == "error" and valuation["pe"] is None and valuation["percentile"] is None:
+        lines.append("**估值更新失败，估值暂不可用**")
+    else:
+        pieces = [f"PE-TTM **{valuation['pe']} 倍**" if valuation["pe"] is not None else "PE-TTM 暂无数据",
+                  f"近10年分位 **{valuation['percentile']}%**" if valuation["percentile"] is not None
+                  else "PE 分位暂无数据"]
+        line = " · ".join(pieces)
+        line += f"（估值 {valuation['as_of']}）" if valuation["as_of"] else "（估值日期未提供）"
+        lines.append(line)
+        warning = valuation_warning(state, valuation["target_date"])
+        if warning:
+            lines.extend(["", f"⚠️ **{warning}**"])
+
+    lines.extend(["", "> 通道位置是价格在周线区间里的相对位置，不是涨跌概率，也不构成买卖建议。"])
+    return "\n".join(lines)
 
 
 def tls_context(insecure=False, ca_file=None):
@@ -180,7 +251,7 @@ def main(argv=None):
         print(text)
         if not args.push:
             return 0
-        outcome = push(text, args.title or push_title(data), env_file=args.env_file,
+        outcome = push(render_markdown(data), args.title or push_title(data), env_file=args.env_file,
                        keyword=args.keyword, timeout=args.push_timeout, dry_run=args.dry_run)
         print(json.dumps(outcome, ensure_ascii=False), file=sys.stderr)
         return dingtalk["EXIT_CODES"][outcome["status"]]

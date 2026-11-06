@@ -68,6 +68,7 @@ python "<skill目录>/scripts/brief.py" --push
 | `DINGTALK_WEBHOOK` | 群机器人 Webhook 完整地址（含 access_token）；代码、日志和推送结果都不会打印它 |
 | `DINGTALK_KEYWORD` | 机器人安全设置里的自定义关键词，本群为 `ETF`；默认标题「沪深300 ETF 简况 · {价格日期}」已固定包含它 |
 
+- 推送正文使用 Markdown 版：`###` 标题、关键数字加粗、每条异常独立成 `⚠️` 行、结尾一句口径说明；stdout 仍输出纯文本句子，日志与只读调用方不受影响。
 - 标题默认「沪深300 ETF 简况 · {price_as_of}」，缺价格日期时用当天日期；`--title` 可覆盖，但覆盖后仍须包含 `DINGTALK_KEYWORD`，否则本地直接拒绝、不发起请求。
 - 关键词按原文整串匹配、区分大小写：写成 `etf` 不算命中。
 - stdout 只有概况原文；推送结果是一条 JSON 写到 stderr，只读 stdout 的调用方不受影响。
