@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import json
 import math
 from pathlib import Path
@@ -23,6 +23,17 @@ REGIONS = {"below_channel": "下方", "lower": "低位", "middle": "中部",
            "upper": "高位", "above_channel": "上方"}
 REASONS = {"model_not_ready": "模型尚未就绪", "no_daily_data": "暂无日行情",
            "invalid_channel": "通道计算异常"}
+# 交易日按北京时间判断；服务器可能是 UTC，不能直接用 datetime.now()
+CN_TZ = timezone(timedelta(hours=8))
+
+
+def today_label(now=None):
+    return (now or datetime.now(CN_TZ)).strftime("%Y-%m-%d")
+
+
+def is_today(price_date, now=None):
+    """节假日数据不更新，price_as_of 停在上一个交易日。"""
+    return isinstance(price_date, str) and price_date == today_label(now)
 
 
 def number(value, precision=2):
@@ -188,7 +199,7 @@ def push_title(data):
     """Title carries the robot keyword so the message never fails `310000`."""
     date = data.get("price_as_of")
     if not isinstance(date, str) or not date:
-        date = datetime.now().strftime("%Y-%m-%d")
+        date = today_label()
     return f"沪深300 ETF 简况 · {date}"
 
 
@@ -232,6 +243,8 @@ def main(argv=None):
     parser.add_argument("--insecure", action="store_true",
                         help="跳过 TLS 证书校验（仅在本机明确接受该风险时使用，默认严格校验）")
     parser.add_argument("--ca-file", type=Path, help="把自签证书或内网 CA 指定为信任根，替代 --insecure")
+    parser.add_argument("--only-today", action="store_true",
+                        help="价格日期不是北京时间今天时跳过推送（节假日自动静默）")
     args = parser.parse_args(argv)
     try:
         context = tls_context(args.insecure, args.ca_file)
@@ -250,6 +263,12 @@ def main(argv=None):
         text = summarize(data)
         print(text)
         if not args.push:
+            return 0
+        if args.only_today and not is_today(data.get("price_as_of")):
+            print(json.dumps({"schema_version": 1, "status": "skipped",
+                              "errcode": None,
+                              "errmsg": f"价格日期 {data.get('price_as_of')} 不是今天（{today_label()}），未发送"},
+                             ensure_ascii=False), file=sys.stderr)
             return 0
         outcome = push(render_markdown(data), args.title or push_title(data), env_file=args.env_file,
                        keyword=args.keyword, timeout=args.push_timeout, dry_run=args.dry_run)

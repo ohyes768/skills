@@ -74,3 +74,6 @@ personal-tools/waytoagi-update-log/data/
 # 港股 IPO 每日自动复盘（本机运行产物；保留已入库历史资料）
 hk-ipo-backtest/references/????-??-??-backtest-audit-lessons.md
 hk-ipo-research/references/????-??-??-batch-lessons.md
+
+# csi300-brief 运行日志
+investment-analysis/csi300-brief/logs/

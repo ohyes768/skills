@@ -268,5 +268,34 @@ class MarkdownTests(unittest.TestCase):
         self.assertIn("沪深300截至2026-11-04", output.getvalue())
 
 
+class TradingDayTests(unittest.TestCase):
+    def test_is_today_uses_beijing_date_not_server_utc(self):
+        from datetime import datetime
+        now = datetime(2026, 11, 6, 23, 50, tzinfo=brief.CN_TZ)  # 北京 23:50 = UTC 15:50
+        self.assertEqual(brief.today_label(now), "2026-11-06")
+        self.assertTrue(brief.is_today("2026-11-06", now))
+        self.assertFalse(brief.is_today("2026-11-05", now))
+        self.assertFalse(brief.is_today(None, now))
+
+    def test_holiday_data_is_skipped_silently(self):
+        output, errors = io.StringIO(), io.StringIO()
+        with patch.object(brief, "fetch", return_value=snapshot()), \
+                patch.object(brief, "push") as push, \
+                redirect_stdout(output), redirect_stderr(errors):
+            code = brief.main(["--push", "--only-today"])
+        self.assertEqual(code, 0)
+        push.assert_not_called()
+        self.assertIn('"skipped"', errors.getvalue())
+        self.assertIn("2026-11-04", output.getvalue())
+
+    def test_fresh_trading_day_still_pushes(self):
+        with patch.object(brief, "fetch", return_value=snapshot()), \
+                patch.object(brief, "is_today", return_value=True), \
+                patch.object(brief, "push", return_value={"status": "sent"}) as push, \
+                redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            self.assertEqual(brief.main(["--push", "--only-today"]), 0)
+        push.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

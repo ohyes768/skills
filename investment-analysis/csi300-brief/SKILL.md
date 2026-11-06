@@ -76,5 +76,7 @@ python "<skill目录>/scripts/brief.py" --push
 - `--dry-run` 校验 Webhook 与关键词但不发送，用于首次接线。
 - 不做去重：同一份内容重复推送会重复出现，防重由调用方按其时间粒度负责（例如按 `price_as_of` 或交易日）。
 - 其他参数：`--env-file`、`--keyword`、`--push-timeout`（默认 10 秒）。
+- `--only-today`：价格日期不是北京时间今天时静默跳过，不发消息，stderr 输出 `"status": "skipped"`、退出码 0；节假日与停牌日因此不会重复推送上一交易日的内容。
+- 定时：`scripts/cron_daily.sh` 封装了 `--push --insecure --only-today`，日志写本 skill 的 `logs/csi300-brief.log`。数据管线北京时间 16:30 入库，所以按 16:35 跑；服务器时区是 UTC 时 crontab 写 `35 8 * * 1-5`。
 - 服务器不信任 `web.duomi77.cn:9443` 的自签证书时取数会失败（`curl` 校验得 0、`-k` 得 200 即属此情况），此时显式加 `--insecure`，或改用 `--ca-file <证书路径>`；默认仍然严格校验。
 - 线上定时示例：`python3 scripts/brief.py --push --insecure >> logs/csi300.log 2>> logs/csi300.err`。
