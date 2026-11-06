@@ -509,11 +509,28 @@ def _red_flags(facts: FactSelection) -> list[dict]:
     return flags
 
 
+_YOY_METRICS = (
+    ("revenue", "revenue_yoy"),
+    ("cost_of_sales", "cost_of_sales_yoy"),
+    ("selling_expenses", "selling_expenses_yoy"),
+    ("admin_expenses", "admin_expenses_yoy"),
+    ("r_and_d_expense", "r_and_d_expense_yoy"),
+    ("finance_costs", "finance_costs_yoy"),
+    ("operating_profit", "operating_profit_yoy"),
+    ("net_profit_before_tax", "net_profit_before_tax_yoy"),
+    ("net_profit_group", "net_profit_group_yoy"),
+    ("net_profit_owners", "net_profit_owners_yoy"),
+    ("cfo", "cfo_yoy"),
+    ("cfi", "cfi_yoy"),
+    ("cff", "cff_yoy"),
+    ("capex_purchase_fixed_assets", "capex_purchase_fixed_assets_yoy"),
+)
+
+
 def calculate_metrics(document: dict) -> dict:
     facts = FactSelection(document)
-    metrics: list[dict] = [        _yoy(facts, "revenue", "revenue_yoy"),
-        _yoy(facts, "net_profit_group", "net_profit_group_yoy"),
-        _yoy(facts, "net_profit_owners", "net_profit_owners_yoy"),
+    metrics: list[dict] = [_yoy(facts, metric, metric_id) for metric, metric_id in _YOY_METRICS]
+    metrics.extend([
         _simple_ratio(
             facts, "net_margin_group",
             ("net_profit_group", "group"), ("revenue", "group"),
@@ -526,7 +543,7 @@ def calculate_metrics(document: dict) -> dict:
         ),
         _simplified_fcf(facts),
         _roe_simple(facts),
-    ]
+    ])
     metrics.extend(_dupont(facts))
     metrics.append(_turnover(facts, "receivable_turnover", "revenue", "accounts_receivable"))
     metrics.append(_turnover(facts, "inventory_turnover", "cost_of_sales", "inventory"))

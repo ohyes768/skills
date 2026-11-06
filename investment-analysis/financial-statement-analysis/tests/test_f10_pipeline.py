@@ -263,3 +263,98 @@ def test_changing_risk_state_cannot_pass(f10_run):
     result, code = deliver(f10_run)
     assert code != 0
     assert result["quality_status"] != "verified"
+
+
+def _deliver_spec(f10_run, spec):
+    path = f10_run / "report_spec.json"
+    write_json(path, spec)
+    return run_pipeline.cmd_report(f10_run, spec_path=path, independent_review=True,
+                                   include_report=True)
+
+
+def test_spec_level_cite_sources_off_hides_inline_provenance(f10_run):
+    spec = report_spec(f10_run)
+    spec["cite_sources"] = False
+    result, code = _deliver_spec(f10_run, spec)
+    assert code == 0, result
+    assert result["quality_status"] == "verified"
+    body = result["report_markdown"]
+    assert "（来源：" not in body
+    assert "TOTAL_OPERATE_INCOME" not in body
+    assert "2024-06-30" not in body
+    # 来源链仍完整留在 claim 台账，关掉的只是正文展示。
+    claims = read_json(f10_run / "report_claims.json")["claims"]
+    assert claims and all(c["source_refs"] for c in claims)
+
+
+def test_spec_level_cite_sources_true_keeps_inline_provenance(f10_run):
+    spec = report_spec(f10_run)
+    spec["cite_sources"] = True
+    result, code = _deliver_spec(f10_run, spec)
+    assert code == 0, result
+    assert "TOTAL_OPERATE_INCOME" in result["report_markdown"]
+
+
+def test_statement_level_override_beats_spec_default(f10_run):
+    spec = report_spec(f10_run)
+    spec["cite_sources"] = False
+    spec["sections"][0]["statements"][0]["cite_sources"] = True
+    result, code = _deliver_spec(f10_run, spec)
+    assert code == 0, result
+    body = result["report_markdown"]
+    assert body.count("（来源：") == 1
+    assert "TOTAL_OPERATE_INCOME" in body
+
+
+def test_auto_citation_column_is_dropped_when_sources_off(f10_run):
+    from report_inputs_builder import build_report_inputs
+
+    spec = report_spec(f10_run)
+    spec["cite_sources"] = False
+    inputs = build_report_inputs(f10_run, spec)
+    table = next(s for s in inputs["sections"] if s["anchor"] == "## 三张报表")["table"]
+    assert table["columns"] == ["科目", "本期"]
+    assert len(table["rows"][0]["cells"]) == 1
+    assert "（来源：" not in json.dumps(inputs, ensure_ascii=False)
+
+
+def test_skeleton_defaults_to_a_quiet_report(f10_run):
+    from build_report_spec import build_spec
+    from report_inputs_builder import build_report_inputs
+
+    skeleton = read_json(__import__("pathlib").Path(__file__).resolve().parents[1]
+                         / "references/report-spec-skeleton.json")
+    spec, _ = build_spec(f10_run, skeleton)
+    assert spec["cite_sources"] is False
+    table = next(s for s in spec["sections"] if s["anchor"] == "## 主要报表数据")["table"]
+    assert "来源" not in table["columns"]
+    for row in table["rows"]:
+        assert len(row["cells"]) + 1 == len(table["columns"])
+
+    inputs = build_report_inputs(f10_run, spec)
+    for section in inputs["sections"]:
+        for statement in section.get("statements") or []:
+            assert statement["cite_sources"] is False
+
+
+def test_skeleton_report_renders_yoy_column(f10_run):
+    from build_report_spec import build_spec
+
+    skeleton = read_json(__import__("pathlib").Path(__file__).resolve().parents[1]
+                         / "references/report-spec-skeleton.json")
+    spec, _ = build_spec(f10_run, skeleton)
+    for section in spec["sections"]:
+        section["paragraphs"] = ["本段为示意文字，用于检查版式。"] * len(
+            section.get("paragraphs") or [])
+    path = f10_run / "report_spec.json"
+    write_json(path, spec)
+    result, code = run_pipeline.cmd_report(f10_run, spec_path=path, independent_review=True,
+                                           include_report=True)
+    assert code == 0, result
+    lines = result["report_markdown"].splitlines()
+    assert "| 指标 | 本期 | 上年同期 | 同比 |" in lines
+    revenue = next(line for line in lines if line.startswith("| 营业收入"))
+    assert revenue.rstrip().endswith("% |")
+    # 投资活动现金流量净额基期为负，同比写作「不可比」且整行保留
+    investing = next(line for line in lines if line.startswith("| 投资活动现金流量净额"))
+    assert investing.rstrip().endswith("| 不可比 |")

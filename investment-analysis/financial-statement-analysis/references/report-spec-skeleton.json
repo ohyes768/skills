@@ -1,5 +1,6 @@
 {
-  "_note": "F10 报告骨架：程序映射事实与指标，缺失不填零；风险状态从本次筛查生成。数字只用绑定，定性提示语由 agent 改写，来源由渲染器生成。",
+  "_note": "F10 报告骨架：程序映射事实与指标，缺失不填零；风险状态从本次筛查生成。数字只用绑定，定性提示语由 agent 改写。cite_sources 默认 false：正文不逐项标注来源，字段与报告期留在 report_claims.json。",
+  "cite_sources": false,
   "sections": [
     {
       "anchor": "## 核心结论",
@@ -63,14 +64,14 @@
     {
       "anchor": "## 主要报表数据",
       "paragraphs": [
-        "利润表与现金流量表均为合并累计口径，比较期为上年同期，各数值明确标注展示单位。"
+        "利润表与现金流量表均为合并累计口径，比较期为上年同期，各数值明确标注展示单位。同比为对上年同期的变化率，基期为零或为负时不算比率，写作不可比。"
       ],
       "table": {
         "columns": [
           "指标",
           "本期",
           "上年同期",
-          "来源"
+          "同比"
         ],
         "rows": [
           {
@@ -84,7 +85,11 @@
                 "fact_id": "FACT_REVENUE_PREV",
                 "format": "amount_wan"
               },
-              ""
+              {
+                "metric_id": "revenue_yoy",
+                "format": "percent2",
+                "on_unavailable": "不可比"
+              }
             ]
           },
           {
@@ -98,7 +103,11 @@
                 "fact_id": "FACT_COST_OF_SALES_PREV",
                 "format": "amount_wan"
               },
-              ""
+              {
+                "metric_id": "cost_of_sales_yoy",
+                "format": "percent2",
+                "on_unavailable": "不可比"
+              }
             ]
           },
           {
@@ -112,7 +121,11 @@
                 "fact_id": "FACT_SELLING_EXPENSES_PREV",
                 "format": "amount_wan"
               },
-              ""
+              {
+                "metric_id": "selling_expenses_yoy",
+                "format": "percent2",
+                "on_unavailable": "不可比"
+              }
             ]
           },
           {
@@ -126,7 +139,11 @@
                 "fact_id": "FACT_ADMIN_EXPENSES_PREV",
                 "format": "amount_wan"
               },
-              ""
+              {
+                "metric_id": "admin_expenses_yoy",
+                "format": "percent2",
+                "on_unavailable": "不可比"
+              }
             ]
           },
           {
@@ -140,7 +157,11 @@
                 "fact_id": "FACT_RD_EXPENSE_PREV",
                 "format": "amount_wan"
               },
-              ""
+              {
+                "metric_id": "r_and_d_expense_yoy",
+                "format": "percent2",
+                "on_unavailable": "不可比"
+              }
             ]
           },
           {
@@ -154,7 +175,11 @@
                 "fact_id": "FACT_FINANCE_COSTS_PREV",
                 "format": "amount_wan"
               },
-              ""
+              {
+                "metric_id": "finance_costs_yoy",
+                "format": "percent2",
+                "on_unavailable": "不可比"
+              }
             ]
           },
           {
@@ -168,7 +193,11 @@
                 "fact_id": "FACT_OPERATING_PROFIT_PREV",
                 "format": "amount_wan"
               },
-              ""
+              {
+                "metric_id": "operating_profit_yoy",
+                "format": "percent2",
+                "on_unavailable": "不可比"
+              }
             ]
           },
           {
@@ -182,7 +211,11 @@
                 "fact_id": "FACT_PROFIT_BEFORE_TAX_PREV",
                 "format": "amount_wan"
               },
-              ""
+              {
+                "metric_id": "net_profit_before_tax_yoy",
+                "format": "percent2",
+                "on_unavailable": "不可比"
+              }
             ]
           },
           {
@@ -196,7 +229,11 @@
                 "fact_id": "FACT_NET_PROFIT_GROUP_PREV",
                 "format": "amount_wan"
               },
-              ""
+              {
+                "metric_id": "net_profit_group_yoy",
+                "format": "percent2",
+                "on_unavailable": "不可比"
+              }
             ]
           },
           {
@@ -210,7 +247,11 @@
                 "fact_id": "FACT_NET_PROFIT_OWNERS_PREV",
                 "format": "amount_wan"
               },
-              ""
+              {
+                "metric_id": "net_profit_owners_yoy",
+                "format": "percent2",
+                "on_unavailable": "不可比"
+              }
             ]
           },
           {
@@ -224,7 +265,11 @@
                 "fact_id": "FACT_CFO_PREV",
                 "format": "amount_wan"
               },
-              ""
+              {
+                "metric_id": "cfo_yoy",
+                "format": "percent2",
+                "on_unavailable": "不可比"
+              }
             ]
           },
           {
@@ -238,7 +283,11 @@
                 "fact_id": "FACT_CFI_PREV",
                 "format": "amount_wan"
               },
-              ""
+              {
+                "metric_id": "cfi_yoy",
+                "format": "percent2",
+                "on_unavailable": "不可比"
+              }
             ]
           },
           {
@@ -252,7 +301,11 @@
                 "fact_id": "FACT_CFF_PREV",
                 "format": "amount_wan"
               },
-              ""
+              {
+                "metric_id": "cff_yoy",
+                "format": "percent2",
+                "on_unavailable": "不可比"
+              }
             ]
           },
           {
@@ -266,7 +319,11 @@
                 "fact_id": "FACT_CAPEX_PREV",
                 "format": "amount_wan"
               },
-              ""
+              {
+                "metric_id": "capex_purchase_fixed_assets_yoy",
+                "format": "percent2",
+                "on_unavailable": "不可比"
+              }
             ]
           }
         ]
@@ -890,7 +947,7 @@
     {
       "anchor": "## 来源与计算说明",
       "paragraphs": [
-        "财务金额来自东财合并资产负债表、合并利润表与合并现金流量表接口；引用标明字段和报告期。",
+        "财务金额来自东财合并资产负债表、合并利润表与合并现金流量表接口；正文不逐项标注来源，本次使用的字段与报告期记录在运行目录的 report_claims.json，可按编号逐项回溯。",
         "毛利润等于营业收入减营业成本；简化自由现金流等于经营现金流净额减购建长期资产支付的现金。",
         "杜邦收益率等于净利率、总资产周转率与权益乘数之积，平均余额取目标期间期初与期末算术平均。",
         "原因推断属于本次分析判断，不能表述为接口未提供的公司解释。"

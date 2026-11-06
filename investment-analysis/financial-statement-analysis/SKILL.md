@@ -1,6 +1,6 @@
 ---
 name: financial-statement-analysis
-description: 使用东财 F10 接口分析 A 股公司财务。输入股票代码与报告期，获取合并三表，生成带接口字段和期间来源的中文 Markdown 报告，覆盖盈利质量、现金负债、杜邦分解和风险信号。适用于分析上市公司年报业绩、季度或半年度财务变化与财务风险；不用于估值定价、目标价或交易建议。
+description: 使用东财 F10 接口分析 A 股公司财务。输入股票代码与报告期，获取合并三表，生成中文 Markdown 报告（正文默认不逐项标注来源，字段与报告期留在来源台账），覆盖盈利质量、现金负债、杜邦分解和风险信号。适用于分析上市公司年报业绩、季度或半年度财务变化与财务风险；不用于估值定价、目标价或交易建议。
 ---
 
 # A 股 F10 财务分析
@@ -29,7 +29,7 @@ uv run --project investment-analysis/financial-statement-analysis python investm
 ```bash
 uv run --project investment-analysis/financial-statement-analysis python investment-analysis/financial-statement-analysis/scripts/pack_context.py --run-dir <目录> --stage analyze --request-id analyze-next --cursor <packet.next_cursor>
 ```
-3. `build_report_spec.py --run-dir <目录> --out report_spec.json`：生成结构与绑定。`_paragraphs_todo` 给出章节、段落位置、核心结论句数余量、可用证据和缺失限制。按这些约束改写对应段落。定性段落禁止数字；数字通过 statement/table 绑定输出。保留四条核心 statement 时，定性段落最多一句。
+3. `build_report_spec.py --run-dir <目录> --out report_spec.json`：生成结构与绑定。`_paragraphs_todo` 给出章节、段落位置、核心结论句数余量、可用证据和缺失限制。按这些约束改写对应段落。定性段落禁止数字；数字通过 statement/table 绑定输出。保留四条核心 statement 时，定性段落最多一句。骨架顶层带 `cite_sources: false`：正文不逐项标注来源，逐条字段与报告期留在 `report_claims.json`；需要正文逐项显示时改为 `true`。
 4. `run_pipeline.py report --run-dir <目录> --spec <目录>/report_spec.json --independent-review`：预检、同源渲染、接口来源校验和独立复算。调用方需要全文时同次加 `--include-report`。
 5. 返回 `quality_status=verified`、`terminal=true` 后立即输出完成状态和 `analysis.md` 位置；要求全文时交付该次返回的 `report_markdown`。`partial` 只能作为不完整分析，不包装为完整结果。终态之后是否停止工具循环由宿主执行；本 skill 只给出 `terminal=true` 和 `next_action=null`，不能代替 Hermes 或调用端的权限控制。
 
@@ -37,8 +37,9 @@ uv run --project investment-analysis/financial-statement-analysis python investm
 
 - `no_data` 是该代码/报表/日期无记录；`fetch_failed` 是请求或响应故障；字段为空、未映射、未计算、未纳入分析包是另外四层。比较期资产负债表已留档时，不得写成报表未取得。没有本期数据时停止；比较期缺失时不编同比或平均余额故事。
 - 利润主要来源必须有完整差额。投资收益未映射或桥接项缺失时，不能写成主要来自投资收益。固定资产增加、在建工程减少不能写成确认转固。缺少可比杜邦因子时，不能指定 ROE 同比改善的主要驱动。这些拦截不替代人工语义复核。
+- 主要报表数据的同比只取同口径上年同期：基期为零或为负时计算器返回 not_applicable，表里写作“不可比”，不省略该行、不用绝对值或正负号编增长率；流量科目同比不年化。
 - F10 三表不覆盖完整业务叙述、会计政策、审计意见、受限资金、关联交易等披露。相关结论写“资料不足”；金融企业只做适用的基础分析，不套用一般企业周转率风险解释。
-- 每个数值必须可追溯到留档接口、字段和报告期；毛利润等派生事实必须标出计算输入。程序 verified 仅表示结构、来源与计算校验通过，不代表独立数据源确认或投资判断正确。
+- 每个数值必须可追溯到留档接口、字段和报告期；毛利润等派生事实必须标出计算输入。程序 verified 仅表示结构、来源与计算校验通过，不代表独立数据源确认或投资判断正确。正文默认不复述来源（`cite_sources=false`），追溯信息在 claim 台账里，关闭展示不降低校验强度，也不能据此认为数字没有来源。
 - 分析任务只编辑 `report_spec.json`；不改接口留档、标准事实、指标、脚本或验收结果。遇到映射或源码问题，记录命令与报错作为维护问题。
 - 报告正式修复预算为初检加两次，保存在 `run_state.json`。相同输入重跑不消耗预算，不删除或改写账本重置预算。耗尽后返回 `maintenance_required`。
 - `review --run-dir <目录>` 只用于恢复诊断。Skill 不负责发布消息、修改 Hermes 或调用端配置。

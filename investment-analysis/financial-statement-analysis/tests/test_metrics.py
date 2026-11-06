@@ -133,3 +133,27 @@ def test_receivable_turnover(make_fact):
     metric = metrics_by_id(result)["receivable_turnover"]
     assert metric["status"] == "computed"
     assert metric["value"] == (Decimal(1200) / Decimal(170))
+
+
+def test_statement_yoy_family_covers_flow_lines(make_fact):
+    doc = build_core_document(make_fact)
+    doc["facts"].extend([
+        make_fact("f-020", "cost_of_sales", "700"),
+        make_fact("f-021", "cost_of_sales", "600", end="2023-12-31", start="2023-01-01"),
+        make_fact("f-022", "selling_expenses", "80"),
+        make_fact("f-023", "selling_expenses", "100", end="2023-12-31", start="2023-01-01"),
+    ])
+    metrics = metrics_by_id(calculate_metrics(doc))
+    assert metrics["cost_of_sales_yoy"]["value"] == Decimal(100) / Decimal(600)
+    assert metrics["selling_expenses_yoy"]["value"] == Decimal(-20) / Decimal(100)
+
+
+def test_negative_base_flow_yoy_not_applicable(make_fact):
+    doc = build_core_document(make_fact)
+    doc["facts"].extend([
+        make_fact("f-030", "cfi", "-40"),
+        make_fact("f-031", "cfi", "-50", end="2023-12-31", start="2023-01-01"),
+    ])
+    metric = metrics_by_id(calculate_metrics(doc))["cfi_yoy"]
+    assert metric["status"] == "not_applicable"
+    assert "negative" in (metric["reason"] or "").lower()

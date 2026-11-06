@@ -2,9 +2,12 @@
 
 Spec sections mirror the report_inputs.json contract, with one construction-time
 expansion: a trailing "" cell in a table row is replaced by the united F10 field
-citation of that row's bound cells. Every statement, row and paragraph is validated
-against the ledger while building, and the full input preflight runs before writing;
-a failed spec writes nothing and spends no report budget.
+citation of that row's bound cells. A spec-level `cite_sources` applies to every
+statement that does not set it, and when it is false the trailing auto-citation
+column of a table is dropped instead of expanded. Every statement, row and
+paragraph is validated against the ledger while building, and the full input
+preflight runs before writing; a failed spec writes nothing and spends no report
+budget.
 CLI: --run-dir RUN --spec SPEC [--out report_inputs.json]
 """
 
@@ -25,6 +28,29 @@ from render_report import (
 )
 
 ReportInputError = RenderIssue
+
+
+def _cite_default(spec: dict) -> bool | None:
+    """spec 顶层 cite_sources：只接受布尔值；缺省时沿用逐条 statement 的默认值。"""
+    value = spec.get("cite_sources")
+    return value if isinstance(value, bool) else None
+
+
+def _strip_auto_citation(table: dict) -> None:
+    """cite_sources 关闭时整列去掉自动来源：行尾 "" 是来源占位，不是空单元格。
+
+    只处理每一行都以 "" 结尾的表——那正是自动来源列的形状；混排的表保持原样，
+    由预检按列数报错，不做猜测。
+    """
+    rows = [row for row in table.get("rows") or [] if row.get("cells")]
+    columns = table.get("columns") or []
+    if not rows or not columns:
+        return
+    if not all(row["cells"][-1] == "" for row in rows):
+        return
+    for row in rows:
+        row["cells"] = row["cells"][:-1]
+    table["columns"] = columns[:-1]
 
 
 def _expand_row_cells(ledger: _Ledger, anchor: str, row: dict) -> dict:
@@ -48,6 +74,7 @@ def build_report_inputs(run_dir: Path | str, spec: dict) -> dict:
     """Validate against the ledger, expand auto citations, preflight, return inputs."""
     run_dir = Path(run_dir)
     ledger = _Ledger(run_dir)
+    cite_default = _cite_default(spec)
     sections_out: list[dict] = []
     for s_index, section in enumerate(spec.get("sections", []), 1):
         anchor = section.get("anchor")
@@ -56,6 +83,8 @@ def build_report_inputs(run_dir: Path | str, spec: dict) -> dict:
         out: dict = {"anchor": anchor}
         statements = []
         for index, item in enumerate(section.get("statements", []), 1):
+            if cite_default is not None and "cite_sources" not in item:
+                item = {**item, "cite_sources": cite_default}
             _render_statement(ledger, anchor, item, index, index)
             statements.append(item)
         if statements:
@@ -68,6 +97,9 @@ def build_report_inputs(run_dir: Path | str, spec: dict) -> dict:
             out["paragraphs"] = paragraphs
         table = section.get("table")
         if table:
+            table = json.loads(json.dumps(table))
+            if cite_default is False:
+                _strip_auto_citation(table)
             rows = []
             for index, row in enumerate(table.get("rows", []), 1):
                 item = _expand_row_cells(ledger, anchor, row)

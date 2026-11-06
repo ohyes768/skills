@@ -132,7 +132,7 @@ def test_duration_prev_is_prior_year_same_period(run_dir):
     for section in spec["sections"]:
         for row in section.get("table", {}).get("rows", []):
             if row.get("label") == "营业收入":
-                revenue_bindings = {c["fact_id"] for c in row["cells"] if isinstance(c, dict)}
+                revenue_bindings = {c["fact_id"] for c in row["cells"] if isinstance(c, dict) and "fact_id" in c}
     assert "f-prev-rev" in revenue_bindings
     assert facts["f-prev-rev"]["period"]["end"] == "2025-06-30"
 
@@ -147,7 +147,7 @@ def test_instant_prev_is_prior_year_end(run_dir):
     for section in spec["sections"]:
         for row in section.get("table", {}).get("rows", []):
             if row.get("label") == "资产总计":
-                asset_bindings = {c["fact_id"] for c in row["cells"] if isinstance(c, dict)}
+                asset_bindings = {c["fact_id"] for c in row["cells"] if isinstance(c, dict) and "fact_id" in c}
     assert "f-prev-ta" in asset_bindings
     assert facts["f-prev-ta"]["period"]["end"] == "2025-12-31"
 
@@ -209,3 +209,19 @@ def test_todo_list_is_top_level_not_inside_sections(run_dir):
     spec, _ = build_spec(run_dir, skeleton)
     for section in spec["sections"]:
         assert "_paragraphs_todo" not in section
+
+
+def test_unavailable_yoy_keeps_row_with_not_comparable_marker(run_dir):
+    """同比不可用时只降级这一格，整行保留；回退文案不能泄进 report_inputs。"""
+    skeleton = json.loads(SKELETON.read_text(encoding="utf-8"))
+    spec, notes = build_spec(run_dir, skeleton)
+    table = next(s for s in spec["sections"] if s["anchor"] == "## 主要报表数据")["table"]
+    assert table["columns"] == ["指标", "本期", "上年同期", "同比"]
+    rows = {row["label"]: row for row in table["rows"]}
+    assert len(rows["营业收入"]["cells"]) == 3
+    assert rows["营业收入"]["cells"][-1]["metric_id"] == "revenue_yoy"
+    assert rows["净利润"]["cells"][-1] == "不可比"
+    assert any("不可比" in note for note in notes)
+    for row in table["rows"]:
+        assert len(row["cells"]) + 1 == len(table["columns"])
+        assert all(not (isinstance(c, dict) and "on_unavailable" in c) for c in row["cells"])

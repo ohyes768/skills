@@ -1,6 +1,6 @@
 # metrics.json 指标目录
 
-写 report spec 前读取。以下是计算器支持的全部 14 个 `metric_id`；本次能否绑定仍以
+写 report spec 前读取。以下是计算器支持的全部 25 个 `metric_id`；本次能否绑定仍以
 compute 的 analyze 包为准：仅 `status == "computed"` 且 `value != null` 可数值引用。
 `fact_id` 指披露事实，`metric_id` 指计算结果；事实字段 `metric` 不是 `metric_id`。
 
@@ -26,6 +26,28 @@ compute 的 analyze 包为准：仅 `status == "computed"` 且 `value != null` �
 | `receivable_turnover` | 应收账款周转率 | `revenue / average accounts_receivable` | 当前格式器用百分比，未年化 |
 | `inventory_turnover` | 存货周转率 | `cost_of_sales / average inventory` | 当前格式器用百分比，未年化 |
 | `accrual_ratio` | 应计比率 | `(net_profit_group - cfo) / average total_assets` | 百分比 |
+
+### 同比族（除上表三项外，其余流量科目同规则）
+
+每个流量科目都有一个 `(<metric>_cur - <metric>_prev) / <metric>_prev` 的同比指标，
+用于「主要报表数据」表的同比列。公式相同，只是科目不同：
+
+| metric_id | 对应科目 |
+|---|---|
+| `cost_of_sales_yoy` | 营业成本 |
+| `selling_expenses_yoy` | 销售费用 |
+| `admin_expenses_yoy` | 管理费用 |
+| `r_and_d_expense_yoy` | 研发费用 |
+| `finance_costs_yoy` | 财务费用 |
+| `operating_profit_yoy` | 营业利润 |
+| `net_profit_before_tax_yoy` | 利润总额 |
+| `cfo_yoy` | 经营活动现金流量净额 |
+| `cfi_yoy` | 投资活动现金流量净额 |
+| `cff_yoy` | 筹资活动现金流量净额 |
+| `capex_purchase_fixed_assets_yoy` | 购建长期资产支付的现金 |
+
+同比只在基期为正时计算。基期为零或为负（如上年亏损、投资/筹资现金净流出）返回
+`not_applicable`，报告里写作「不可比」，不编增长率，也不省略该行。
 
 没有 `net_margin`、`gross_margin`、`debt_ratio` 这些计算指标 ID，不要猜别名。
 analysis_pack.json 里的 `gross_margin` 等名称只用于分析包，不能当作 `metric_id` 绑定。

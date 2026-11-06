@@ -17,10 +17,10 @@
 }
 ```
 
-表格 columns 包括科目与各 cells；一行 cells 数等于 columns 数减一。末尾空字符串自动生成该行完整 F10 来源，不能自己填来源数字或日期。
+表格 columns 包括科目与各 cells；一行 cells 数等于 columns 数减一。末尾空字符串自动生成该行完整 F10 来源，不能自己填来源数字或日期；`cite_sources` 为 false 时这列会被整列去掉，不需要它就不要画这列。
 
 格式：amount_yuan、amount_wan、amount_yi；percent0/1/2；pp0/1/2。decline_ 前缀仅用于非正值的下降幅度。普通金额和比率保留实际符号。claim_type 可为 fact、calculation、inference；不把自行推断标为公司解释。
 
-statements 通过绑定引用数值；paragraphs 严格不含任何数字。cite_sources 默认开启。预检只检查输入不消耗正式预算；正式 report 执行独立复核。
+statements 通过绑定引用数值；paragraphs 严格不含任何数字。`cite_sources` 可写在 spec 顶层（作用于全部 statement，可被单条覆盖），也可逐条写；骨架默认 false，即正文不逐项标注来源。预检只检查输入不消耗正式预算；正式 report 执行独立复核。
 
 毛利润等派生事实仍通过 fact_id 绑定并使用 claim_type=fact；claim_type=calculation 专用于 metric_id 指标绑定，派生事实的计算输入由来源链自动追溯。

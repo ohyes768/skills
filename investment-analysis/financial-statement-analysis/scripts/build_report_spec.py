@@ -302,8 +302,21 @@ def build_spec(run_dir: Path, skeleton: dict) -> tuple[dict, list[str]]:
                     if status not in {"flagged", "clear"}:
                         row["cells"][1] = "不可用"
                 cells = row.get("cells", [])
-                metric_cells = [c for c in cells if isinstance(c, dict) and "metric_id" in c]
-                if metric_cells and not all(_metric_ok(metrics, c["metric_id"]) for c in metric_cells):
+                missing = False
+                for position, cell in enumerate(cells):
+                    if not (isinstance(cell, dict) and "metric_id" in cell):
+                        continue
+                    if _metric_ok(metrics, cell["metric_id"]):
+                        cell.pop("on_unavailable", None)
+                        continue
+                    # 单元格自带回退文案时只降级这一格，不丢整行（如基期为负的同比）。
+                    fallback = cell.get("on_unavailable")
+                    if isinstance(fallback, str) and fallback.strip():
+                        notes.append(f"{anchor}/{row.get('label')}: metric 不可用，{position + 1} 列改为「{fallback}」")
+                        cells[position] = fallback
+                    else:
+                        missing = True
+                if missing:
                     notes.append(f"{anchor}/{row.get('label')}: 丢弃行（metric 不可用）")
                     continue
                 if not _rewrite_binding(row, index, target_end):
@@ -328,6 +341,10 @@ def build_spec(run_dir: Path, skeleton: dict) -> tuple[dict, list[str]]:
         if unavailable:
             quality.setdefault("paragraphs", []).append("接口部分科目或期间不可用，相关比率及风险判断已保留为资料不足。")
     spec = {"schema_version": 1, "sections": out_sections, "_data_limitations": limitations}
+
+    # 展示偏好随骨架传递：cite_sources=false 时 report_inputs_builder 关闭正文来源。
+    if isinstance(skeleton.get("cite_sources"), bool):
+        spec["cite_sources"] = skeleton["cite_sources"]
 
     # decline_* 格式符按指标实际方向自适应
     _fix_decline_formats(spec["sections"], metrics)
