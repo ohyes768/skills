@@ -74,7 +74,8 @@ python "<skill目录>/scripts/brief.py" --push
 - stdout 只有概况原文；推送结果是一条 JSON 写到 stderr，只读 stdout 的调用方不受影响。
 - 退出码：`0` 已发送或 `--dry-run` 通过；`1` 取数失败；`2` 关键词不匹配或未配置 Webhook；`3` 网络异常/超时（可能已送达，先核对再重发）；`4` 钉钉拒绝（token 无效、限流等）。
 - `--dry-run` 校验 Webhook 与关键词但不发送，用于首次接线。
-- 不做去重：同一份内容重复推送会重复出现，防重由调用方按其时间粒度负责（例如按 `price_as_of` 或交易日）。
+- 实际发送经公共 skill `dingtalk-push`（`scripts/dingtalk_push.py` 只是委托层，无自带 HTTP；公共包可用 `DINGTALK_PUSH_SKILL_DIR` 指定，否则按父目录与常用安装根探测）。webhook 经环境变量传给公共 CLI，不进 argv。
+- 去重由公共回执承担：同一标题日期（键 `csi300:{标题中的日期}`）同内容重复运行返回 `duplicate`、不重发；确需重发请换标题日期或内容。
 - 其他参数：`--env-file`、`--keyword`、`--push-timeout`（默认 10 秒）。
 - `--only-today`：价格日期不是北京时间今天时静默跳过，不发消息，stderr 输出 `"status": "skipped"`、退出码 0；节假日与停牌日因此不会重复推送上一交易日的内容。
 - 定时：`scripts/cron_daily.sh` 封装了 `--push --insecure --only-today`，日志写本 skill 的 `logs/csi300-brief.log`。数据管线北京时间 16:30 入库，所以按 16:35 跑；服务器时区是 UTC 时 crontab 写 `35 8 * * 1-5`。

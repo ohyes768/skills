@@ -244,7 +244,7 @@ class DingTalkSendTests(unittest.TestCase):
 
     def test_keyword_errcode_is_flagged_distinctly(self):
         self.stub.responses = [{'errcode': 310000, 'errmsg': '关键词不匹配'}]
-        rc, data, _, _ = self.send('正文', extra=('--keyword', 'WaytoAGI'))
+        rc, data, _, _ = self.send('正文含 WaytoAGI 关键词', extra=('--keyword', 'WaytoAGI'))
         self.assertEqual(rc, 2, data)
         self.assertEqual(data['status'], 'failed')
         self.assertEqual(data['errcode'], 310000)

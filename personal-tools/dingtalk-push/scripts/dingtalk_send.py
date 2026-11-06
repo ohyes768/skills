@@ -24,6 +24,9 @@ from urllib.request import Request, urlopen
 
 DEFAULT_TIMEOUT = 20
 EXIT_CODES = {'sent': 0, 'duplicate': 0, 'preview': 0, 'failed': 2, 'unknown': 3, 'conflict': 4}
+# 310000: the robot's keyword security rejected the message; resending the same
+# content can never succeed, other errcodes usually mean webhook/config problems.
+KEYWORD_ERRCODES = {310000}
 
 
 def result(status, *, errcode=None, errmsg=None, dedupe_key=None, verification='none', code=None, message=None):
@@ -140,11 +143,16 @@ def send_message(title, text, webhook, state_dir, *, keyword=None, key=None, tim
             except (ValueError, UnicodeDecodeError, OSError):
                 robot = None
             if robot is not None and isinstance(robot.get('errcode'), int):
+                errcode = robot['errcode']
+                keyword_issue = errcode in KEYWORD_ERRCODES
                 with conn:
                     conn.execute('DELETE FROM receipts WHERE identity=?', (identity,))
-                return result('failed', errcode=robot['errcode'], errmsg=robot.get('errmsg'),
-                              dedupe_key=dedupe_key, code='robot_rejected',
-                              message='robot rejected the message; fix content or configuration before retrying')
+                return result('failed', errcode=errcode, errmsg=robot.get('errmsg'),
+                              dedupe_key=dedupe_key,
+                              code='keyword_rejected' if keyword_issue else 'robot_rejected',
+                              message='keyword security rejected the message; add the keyword to title or text, then retry once'
+                              if keyword_issue else
+                              'robot rejected the message; fix content or configuration before retrying')
             if exc.code < 500:
                 with conn:
                     conn.execute('DELETE FROM receipts WHERE identity=?', (identity,))
@@ -172,11 +180,14 @@ def send_message(title, text, webhook, state_dir, *, keyword=None, key=None, tim
                              ('confirmed', identity))
             return result('sent', errcode=0, errmsg=body.get('errmsg'), dedupe_key=dedupe_key)
         if isinstance(errcode, int):
+            keyword_issue = errcode in KEYWORD_ERRCODES
             with conn:
                 conn.execute('DELETE FROM receipts WHERE identity=?', (identity,))
             return result('failed', errcode=errcode, errmsg=body.get('errmsg'), dedupe_key=dedupe_key,
-                          code='robot_rejected',
-                          message='robot rejected the message; fix content or configuration before retrying')
+                          code='keyword_rejected' if keyword_issue else 'robot_rejected',
+                          message='keyword security rejected the message; add the keyword to title or text, then retry once'
+                          if keyword_issue else
+                          'robot rejected the message; fix content or configuration before retrying')
         return result('unknown', dedupe_key=dedupe_key, code='malformed_response',
                       message='robot response had no usable errcode; delivery unconfirmed')
 
@@ -213,10 +224,12 @@ def main(argv=None):
         if args.env_file:
             webhook = webhook or load_env_file(args.env_file).get('DINGTALK_WEBHOOK')
         if not webhook:
-            raise ValueError('no webhook: pass --webhook, set DINGTALK_WEBHOOK or provide --env-file')
-        response = send_message(args.title, text, webhook, args.state_dir or default_state_dir(),
-                                keyword=args.keyword, key=args.dedupe_key,
-                                timeout=args.timeout, dry_run=args.dry_run)
+            response = result('failed', code='not_configured',
+                              message='DINGTALK_WEBHOOK missing: pass --webhook, set the environment variable or provide --env-file')
+        else:
+            response = send_message(args.title, text, webhook, args.state_dir or default_state_dir(),
+                                    keyword=args.keyword, key=args.dedupe_key,
+                                    timeout=args.timeout, dry_run=args.dry_run)
     except (OSError, ValueError, HTTPException, sqlite3.Error) as exc:
         response = result('failed', code='invalid_input_or_state',
                           message=type(exc).__name__ + ': check input, configuration and state directory')
