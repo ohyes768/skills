@@ -123,7 +123,7 @@ python scripts/publish_articles.py --articles-json /path/to/articles.json
 > {"errcode":310000,"errmsg":"错误描述:关键词不匹配;解决方案:请联系群管理员查看此机器人的关键词，并在发送的消息中包含此关键词;"}
 > ```
 > 实测：标题含 `WaytoAGI` → `errcode:0` 通过；标题含 `AI` / `更新` / `日报` / 无关词 → 全部 `310000` 拒绝。
-> `scripts/send_dingtalk.js` 的 markdown title 硬编码为 `WaytoAGI 更新日报`，**标题已满足要求**；正文首行仍建议写 `## 📅 WaytoAGI 更新日志 · X月X日 更新 N 篇` 双重保险。
+> 实际发送由公共 skill `dingtalk-push` 执行，调用时固定 `--title "WaytoAGI 更新日报"` + `--keyword WaytoAGI`，**标题已满足要求**；正文首行仍建议写 `## 📅 WaytoAGI 更新日志 · X月X日 更新 N 篇` 双重保险。
 > 报 `关键词不匹配` 时**补上关键词重试一次**即可，不要反复重试。
 
 **钉钉 Webhook 地址**（从 skill 目录下的 `.env` 读取 `DINGTALK_WEBHOOK`，不要硬编码到调用方）：
@@ -135,19 +135,20 @@ set -a; . "$(dirname $(readlink -f $0))/.env" 2>/dev/null; set +a
 WEBHOOK=$(grep ^DINGTALK_WEBHOOK .env | cut -d= -f2-)
 ```
 
-**调用脚本**（在 skill 目录下执行）：
+**调用脚本**（在 skill 目录下执行；`scripts/send_dingtalk.js` 现在只是兼容 shim，实际经公共 `dingtalk-push` 发送，webhook 参数可省略）：
 ```bash
 node scripts/send_dingtalk.js \
   "$DINGTALK_WEBHOOK" \
   "<完整markdown内容>"
 ```
 
-> `DINGTALK_WEBHOOK` 从 skill 目录下的 `.env` 文件加载（`.env` 已被 `.gitignore` 排除）。
+> `DINGTALK_WEBHOOK` 从 skill 目录下的 `.env` 文件加载（`.env` 已被 `.gitignore` 排除）；省略 webhook 参数时 shim 会经 `--env-file` 交给公共 CLI 读取。
 
 **注意：**
-- 脚本会自动将 Markdown 包装为钉钉 `msgtype: markdown` 格式
+- 公共 CLI 输出单个 JSON（`status: sent/duplicate/failed/unknown/conflict`），`sent=0` 已送达；`unknown`（超时等）**不要自动重发**，先到群里人工核对；`duplicate` 表示同内容已发过，不再刷屏
 - 标题自动渲染，链接 `[]()` 格式可点击
-- 图片行（`![]()`）钉钉不支持自动忽略
+- 图片行（`![]()`）钉钉不支持，发送前过滤
+- cron 路径 `scripts/cron_runner.js` 仍内联自己的钉钉 POST，尚未迁移到公共 CLI；改动它之前先看 `dingtalk-push/references/integration.md` 的迁移约定
 
 ### Step 7：推送成功后记录回执（必做，防重复的核心）
 

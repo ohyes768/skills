@@ -62,6 +62,7 @@ README.md
 |---|---|---|
 | [bilibili-subtitle-rss](personal-tools/bilibili-subtitle-rss) | 提取 B站完整字幕、按停顿和字数合并分段，并查重推送到 RSS Relay；已安装到 Codex | active |
 | [waytoagi-update-log](personal-tools/waytoagi-update-log) | 追踪 WaytoAGI 更新日志并整理文章 | active |
+| [dingtalk-push](personal-tools/dingtalk-push) | 公共钉钉发送：关键词预检、回执去重、unknown 不盲重、token 不入日志 | active |
 
 ### 开发工程 `dev-workflow/`
 
