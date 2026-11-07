@@ -25,7 +25,34 @@ from pathlib import Path
 
 import pandas as pd
 
-from dingtalk_push import DingTalkPusher
+def _import_dingtalk_push():
+    """加载正本 dingtalk_push.py（skills 仓库 personal-tools/dingtalk-push），不持有副本。"""
+    import importlib.util
+
+    configured = os.environ.get("DINGTALK_PUSH_SKILL_DIR")
+    candidates = []
+    if configured:
+        candidates.append(Path(configured).expanduser() / "scripts" / "dingtalk_push.py")
+    for parent in Path(__file__).resolve().parents:
+        for relative in ("personal-tools/dingtalk-push/scripts/dingtalk_push.py",
+                         "skills/personal-tools/dingtalk-push/scripts/dingtalk_push.py"):
+            candidates.append(parent / relative)
+    home = Path.home()
+    for root in (home / ".hermes" / "skills", home / ".codex" / "skills",
+                 home / ".agents" / "skills"):
+        candidates.append(root / "personal-tools" / "dingtalk-push" / "scripts" / "dingtalk_push.py")
+    for path in candidates:
+        if path.is_file():
+            spec = importlib.util.spec_from_file_location("dingtalk_push_canonical", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+    raise ImportError(
+        "未找到正本 dingtalk_push.py（skills 仓库 personal-tools/dingtalk-push/scripts/）；"
+        "安装 dingtalk-push skill，或把 DINGTALK_PUSH_SKILL_DIR 指向其包目录")
+
+
+DingTalkPusher = _import_dingtalk_push().DingTalkPusher
 
 # 自动加载 .env（与 a_stock_push.py 同款做法）
 _dotenv_path = Path(__file__).resolve().parent / ".env"
