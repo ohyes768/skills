@@ -24,6 +24,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
+import requests
 
 def _import_dingtalk_push():
     """加载正本 dingtalk_push.py（skills 仓库 personal-tools/dingtalk-push），不持有副本。"""
@@ -55,7 +56,9 @@ def _import_dingtalk_push():
 DingTalkPusher = _import_dingtalk_push().DingTalkPusher
 
 # 自动加载 .env（与 a_stock_push.py 同款做法）
-_dotenv_path = Path(__file__).resolve().parent / ".env"
+# skill 目录契约：.env / data/ 在 skill 根目录，scripts/ 下只有脚本与 CSV。
+_skill_dir = Path(__file__).resolve().parent.parent
+_dotenv_path = _skill_dir / ".env"
 if _dotenv_path.exists():
     with open(_dotenv_path, encoding="utf-8") as f:
         for _line in f:
@@ -67,7 +70,7 @@ if _dotenv_path.exists():
 LOGGER = logging.getLogger(__name__)
 
 HISTORY_VERSION = 1
-HISTORY_PATH = Path(__file__).resolve().parent / "data" / "daily_pick_history.json"
+HISTORY_PATH = _skill_dir / "data" / "daily_pick_history.json"
 SW_INDUSTRY_CSV = Path(__file__).resolve().parent / "sw_industry_mapping.csv"
 EMAPP_HOT_URL = "https://emappdata.eastmoney.com/stockrank/getAllCurrentList"
 TENCENT_QUOTE_URL = "https://qt.gtimg.cn/q="
