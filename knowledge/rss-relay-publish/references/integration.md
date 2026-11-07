@@ -55,7 +55,7 @@ unknown 表示 POST 可能成功或已有 pending。重跑完全相同的命令�
 | A 股/利率债 | macro:标题；保留同频道/source 标题防重、validator/strict 和看板同步；duplicate 仍补试看板 |
 | 港股研究/回测 | 报告类型:标题；保留日/code/类型/来源防重、质量检查；--allow-duplicate 绕过旧业务预查，使用正文摘要版本键，仍不绕过公共安全回执 |
 | WaytoAGI | article:token；prepared JSON 数组交 scripts/publish_articles.py，每篇成功即写旧 JSON 回执；失败保留前面成功项 |
-| 每日复盘 | review:标题:正文摘要；保留 --push、无会话不发及原钉钉流程，正文变化视为重生成版本 |
+| 每日复盘 | review:标题:正文摘要；保留 --push、无会话不发，正文变化视为重生成版本；其钉钉投递已改经公共 dingtalk-push CLI（daily-review/dingtalk_relay_client.py 定位） |
 | 新闻联播 | news:标题；保留昨日摘要、RSS_DRY_RUN、URL 转换及 bool 返回，不再盲重试 POST |
 
 宏观 --allow-duplicate 同样只允许以内容摘要区分修订，不会把相同稿件无条件发第二遍；失败重试用同一标题和正文。旧业务预查及旧回执保留，所以升级不会因公共库为空而自动重发历史稿件。

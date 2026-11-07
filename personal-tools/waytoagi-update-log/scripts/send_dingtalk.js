@@ -4,9 +4,12 @@
  *
  * Canonical source: personal-tools/dingtalk-push/scripts/dingtalk_send.py.
  * Old usage kept: node send_dingtalk.js "<webhook_url>" "<markdown>"
- * The webhook argument is optional now; without it the CLI falls back to this
- * skill's .env (DINGTALK_WEBHOOK). Markdown arrives via stdin, dedupe uses the
- * CLI's automatic content key, and the robot keyword is asserted before POST.
+ * Markdown may also arrive via stdin (used by cron_runner.js): when the text
+ * argument is empty and stdin is piped, stdin is forwarded to --file -.
+ * The webhook argument is optional; without it the CLI falls back to this
+ * skill's .env (DINGTALK_WEBHOOK), which is passed only when the file exists.
+ * Dedupe uses the CLI's automatic content key, and the robot keyword is
+ * asserted before POST.
  */
 
 const { spawnSync } = require('child_process');
@@ -50,23 +53,30 @@ function locateScript() {
   process.exit(2);
 }
 
+function cliArgs(webhook) {
+  const args = ['send', '--title', TITLE, '--keyword', KEYWORD, '--file', '-'];
+  const envFile = path.join(__dirname, '..', '.env');
+  if (fs.existsSync(envFile)) args.push('--env-file', envFile);
+  if (webhook && webhook.trim()) args.push('--webhook', webhook.trim());
+  return args;
+}
+
+// One bounded POST inside the CLI; do not kill this child at a parent timeout.
+function sendViaStdin(markdown, webhook) {
+  const python = process.env.DINGTALK_PYTHON || 'python';
+  return spawnSync(python, [locateScript()].concat(cliArgs(webhook)), { input: markdown, encoding: 'utf8' });
+}
+
 if (require.main === module) {
-  const markdown = process.argv.slice(3).join(' ');
+  let markdown = process.argv.slice(3).join(' ');
+  if (!markdown.trim() && !process.stdin.isTTY) {
+    markdown = fs.readFileSync(0, 'utf8');
+  }
   if (!markdown.trim()) {
-    console.error('用法: node send_dingtalk.js "<webhook_url可选>" "<markdown_text>"');
+    console.error('用法: node send_dingtalk.js "<webhook_url可选>" "<markdown_text>"；正文也可经 stdin 传入');
     process.exit(1);
   }
-  const args = [
-    'send',
-    '--title', TITLE,
-    '--keyword', KEYWORD,
-    '--env-file', path.join(__dirname, '..', '.env'),
-    '--file', '-',
-  ];
-  const webhook = process.argv[2] || '';
-  if (webhook.trim()) args.push('--webhook', webhook.trim());
-  const python = process.env.DINGTALK_PYTHON || 'python';
-  const child = spawnSync(python, [locateScript()].concat(args), { input: markdown, encoding: 'utf8' });
+  const child = sendViaStdin(markdown, process.argv[2] || '');
   if (child.error) {
     console.error('无法启动公共 dingtalk-push CLI: ' + child.error.message);
     process.exit(2);
@@ -76,4 +86,4 @@ if (require.main === module) {
   process.exit(child.status === null ? 1 : child.status);
 }
 
-module.exports = { TITLE, KEYWORD, locateScript };
+module.exports = { TITLE, KEYWORD, locateScript, sendViaStdin };

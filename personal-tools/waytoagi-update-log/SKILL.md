@@ -140,6 +140,8 @@ WEBHOOK=$(grep ^DINGTALK_WEBHOOK .env | cut -d= -f2-)
 node scripts/send_dingtalk.js \
   "$DINGTALK_WEBHOOK" \
   "<完整markdown内容>"
+# 或正文经 stdin 传入（cron_runner.js 即此方式）：
+node scripts/send_dingtalk.js < "<正文.md>"
 ```
 
 > `DINGTALK_WEBHOOK` 从 skill 目录下的 `.env` 文件加载（`.env` 已被 `.gitignore` 排除）；省略 webhook 参数时 shim 会经 `--env-file` 交给公共 CLI 读取。
@@ -148,7 +150,7 @@ node scripts/send_dingtalk.js \
 - 公共 CLI 输出单个 JSON（`status: sent/duplicate/failed/unknown/conflict`），`sent=0` 已送达；`unknown`（超时等）**不要自动重发**，先到群里人工核对；`duplicate` 表示同内容已发过，不再刷屏
 - 标题自动渲染，链接 `[]()` 格式可点击
 - 图片行（`![]()`）钉钉不支持，发送前过滤
-- cron 路径 `scripts/cron_runner.js` 仍内联自己的钉钉 POST，尚未迁移到公共 CLI；改动它之前先看 `dingtalk-push/references/integration.md` 的迁移约定
+- cron 路径 `scripts/cron_runner.js` 已同样经公共 CLI 投递（正文走 stdin），`sent`/`duplicate` 都会记录 `data/pushed_articles.json` 回执；改动它之前先看 `dingtalk-push/references/integration.md` 的迁移约定
 
 ### Step 7：推送成功后记录回执（必做，防重复的核心）
 

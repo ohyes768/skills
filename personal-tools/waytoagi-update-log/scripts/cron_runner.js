@@ -6,6 +6,9 @@
  * 1. 抓取 WaytoAGI 近7日更新日志
  * 2. 判断指定日期（昨天）是否有文章
  * 3. 有文章 → 发送钉钉；无文章 → 静默退出
+ *
+ * 钉钉投递经公共 skill `dingtalk-push`（scripts/send_dingtalk.js 委托），
+ * 本脚本不自带 HTTP POST；sent/duplicate 都记录 data/pushed_articles.json 回执。
  * 
  * 用法（供 openclaw cron 调用）：
  *   node cron_runner.js <日期，如"5月6日"> <webhook_url>
@@ -14,6 +17,7 @@
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const { sendViaStdin } = require('./send_dingtalk');
 
 // ===== 配置 =====
 // 加载 .env 中的 DINGTALK_WEBHOOK（git 仓库已排除 .env）
@@ -109,34 +113,21 @@ function loadUserToken() {
   } catch(e) { return null; }
 }
 
-// ===== 钉钉发送 =====
+// ===== 钉钉发送（经公共 dingtalk-push CLI 委托，见 send_dingtalk.js） =====
 
 function sendDingTalk(markdown) {
-  return new Promise((resolve, reject) => {
-    const parsedUrl = new URL(WEBHOOK);
-    const postData = JSON.stringify({
-      msgtype: 'markdown',
-      markdown: { title: 'WaytoAGI 更新日报', text: markdown }
-    });
-
-    const options = {
-      hostname: parsedUrl.hostname,
-      path: parsedUrl.pathname + parsedUrl.search,
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(postData) }
-    };
-
-    const req = (parsedUrl.protocol === 'https:' ? https : http).request(options, (res) => {
-      let data = '';
-      res.on('data', c => data += c);
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); } catch(e) { reject(e); }
-      });
-    });
-    req.on('error', reject);
-    req.write(postData);
-    req.end();
-  });
+  const child = sendViaStdin(markdown, WEBHOOK);
+  if (child.error) {
+    throw new Error('无法启动公共 dingtalk-push CLI: ' + child.error.message);
+  }
+  if (child.stderr) process.stderr.write(child.stderr);
+  let data;
+  try {
+    data = JSON.parse(child.stdout || '');
+  } catch (e) {
+    throw new Error('公共 dingtalk-push CLI 未返回有效 JSON；先核对回执再决定是否重试');
+  }
+  return data;
 }
 
 // ===== 核心逻辑 =====
@@ -210,17 +201,19 @@ async function main() {
     });
     const report = `## 📅 WaytoAGI 更新日志 · 更新${pending.length}篇\n\n---\n\n${groups.join('\n\n---\n\n')}`;
 
-    // 6. 发送钉钉
+    // 6. 发送钉钉（公共 CLI 负责 POST 与幂等回执；sent/duplicate 都说明内容已送达）
     const result = await sendDingTalk(report);
-    if (result.errcode === 0) {
+    if (result.status === 'sent' || result.status === 'duplicate') {
       // 7. 记录回执（漏记 = 下次必然重复推送）
       const now = new Date().toISOString();
       const articles = { ...pushed };
       for (const a of pending) articles[a.token] = now;
       saveReceipt({ ...receipt, articles });
-      console.log(`钉钉推送成功，已记录 ${pending.length} 篇回执`);
+      const suffix = result.status === 'duplicate' ? '（重复，跳过重发）' : '成功';
+      console.log(`钉钉推送${suffix}，已记录 ${pending.length} 篇回执`);
     } else {
-      console.error('钉钉推送失败:', result.errmsg);
+      const detail = result.errmsg || (result.error && result.error.message) || result.status;
+      console.error('钉钉推送失败:', detail);
     }
 
   } catch (err) {

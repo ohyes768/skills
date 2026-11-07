@@ -48,17 +48,18 @@ unknown 表示 POST 可能已送达：超时、响应被截断/损坏、HTTP 5xx
 
 | 来源 | 接入方式 | 状态 |
 |---|---|---|
-| csi300-brief | `brief.py --push` 经公共 CLI 发送，键 `csi300:{price_as_of}` | 已接入 |
-| waytoagi-update-log（手动路径） | `scripts/send_dingtalk.js` 是定位 shim：仅 subprocess 调公共 CLI，自带 HTTP 已移除；title 固定「WaytoAGI 更新日报」+ `--keyword WaytoAGI` | 已接入 |
-| waytoagi-update-log（cron 路径） | `scripts/cron_runner.js` 仍内联自己的钉钉 POST | 待迁移，迁移前不得改动其回执协议 |
-| 其他 RSS 类业务 | 它们的钉钉投递属于「每日复盘」等旧流程，接入时逐个迁移 | 未开始 |
+| csi300-brief | `brief.py --push` 经公共 CLI 发送，键 `csi300:{price_as_of}`；委托 shim `scripts/dingtalk_push.py` 在 skills 仓库与 stock-info-dingding 各留一份逐字节相同副本 | 已接入 |
+| waytoagi-update-log（手动路径） | `scripts/send_dingtalk.js` 是定位 shim：仅 subprocess 调公共 CLI，自带 HTTP 已移除；title 固定「WaytoAGI 更新日报」+ `--keyword WaytoAGI`，正文可走 argv 或 stdin | 已接入 |
+| waytoagi-update-log（cron 路径） | `scripts/cron_runner.js` 经 `send_dingtalk.js` 的 stdin 入口委托公共 CLI，本文件不再含 POST；`sent`/`duplicate` 都记录 `data/pushed_articles.json` 业务回执，failed/unknown 只报错不记 | 已接入 |
+| daily-review（每日复盘） | 根目录 `dingtalk_relay_client.py` 定位 shim（探测含同级 `skills` 仓库），`daily_review.py` 键 `review:标题:正文摘要`，与 RSS 侧同约定；`sent`/`duplicate` 返回成功，webhook 缺失沿用原「跳过」语义 | 已接入 |
+| 其他旧流程（stock-info-dingding 老项目等） | 独立脚本各自发送（gold/pusher、damai、natgeo），接入时逐个迁移 | 未开始 |
 
 兼容 shim 定位顺序：`DINGTALK_PUSH_SKILL_DIR` > 逐级父目录探测（`dingtalk-push/scripts/dingtalk_send.py` 或 `personal-tools/dingtalk-push/scripts/dingtalk_send.py`）> `~/.hermes/skills`、`~/.codex/skills`、`~/.agents/skills`。找不到公共包时报错退出，不得回退内联 POST。
 
 ## 发布顺序与回滚
 
 1. 发布公共包，配置外置 state 目录，先 dry-run 验证载荷与键。
-2. 更新消费方（csi300-brief、waytoagi shim）；waytoagi 的 `data/pushed_articles.json` 业务回执不变。
+2. 更新消费方（csi300-brief、waytoagi 手动与 cron 路径、daily-review）；waytoagi 的 `data/pushed_articles.json` 业务回执不变，daily-review 的 `.env` 只需原有 `DINGTALK_WEBHOOK`。
 3. 用群机器人做一次真实小消息冒烟（需群管理员确认关键词配置），再挂到既有授权任务。
 
 回滚时恢复业务旧调用入口，保留公共回执用于查证。加签机器人、多 webhook 路由、发送频率限制处理均需另行实施。
