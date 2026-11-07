@@ -48,7 +48,7 @@ unknown 表示 POST 可能已送达：超时、响应被截断/损坏、HTTP 5xx
 
 | 来源 | 接入方式 | 状态 |
 |---|---|---|
-| csi300-brief | `brief.py --push` 经公共 CLI 发送，键 `csi300:{price_as_of}`；委托 shim `scripts/dingtalk_push.py` 在 skills 仓库与 stock-info-dingding 各留一份逐字节相同副本 | 已接入 |
+| csi300-brief | `brief.py --push` 经公共 CLI 发送，键 `csi300:{price_as_of}`；skill 已于 2026-11-07 迁出至 stock-info-dingding 仓库 `csi300_brief/`（纯脚本，task-web 调度），委托 shim 随迁 | 已接入 |
 | waytoagi-update-log（手动路径） | `scripts/send_dingtalk.js` 是定位 shim：仅 subprocess 调公共 CLI，自带 HTTP 已移除；title 固定「WaytoAGI 更新日报」+ `--keyword WaytoAGI`，正文可走 argv 或 stdin | 已接入 |
 | waytoagi-update-log（cron 路径） | `scripts/cron_runner.js` 经 `send_dingtalk.js` 的 stdin 入口委托公共 CLI，本文件不再含 POST；`sent`/`duplicate` 都记录 `data/pushed_articles.json` 业务回执，failed/unknown 只报错不记 | 已接入 |
 | daily-review（每日复盘） | 根目录 `dingtalk_relay_client.py` 定位 shim（探测含同级 `skills` 仓库），`daily_review.py` 键 `review:标题:正文摘要`，与 RSS 侧同约定；`sent`/`duplicate` 返回成功，webhook 缺失沿用原「跳过」语义 | 已接入 |
