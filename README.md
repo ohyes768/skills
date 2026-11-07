@@ -55,6 +55,7 @@ README.md
 | [financial-statement-analysis](investment-analysis/financial-statement-analysis) | A 股 F10 财务分析：输入股票代码与报告期，输出中文报告（合并三表、指标计算、独立复核；正文默认不逐项标注来源，字段级来源留在 claim 台账，spec 顶层 `cite_sources` 可打开）；验收见其 [acceptance.md](investment-analysis/financial-statement-analysis/acceptance.md) | active |
 | [annual-report-industry-learning](investment-analysis/annual-report-industry-learning) | 财报行业学习 | active |
 | [csi300-brief](investment-analysis/csi300-brief) | 沪深300简报；可选 `--push` 投递钉钉（关键词 `ETF`） | 源码可用 |
+| [gold-price-brief](investment-analysis/gold-price-brief) | 黄金走势研判播报：实时取数（金价/伦敦金/SPDR/美联储利率预期/RSI）→ 模型研判 → 钉钉推送（加签）；task-web 调度 | active |
 
 ### 个人工具 `personal-tools/`
 
