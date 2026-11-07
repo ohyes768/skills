@@ -27,10 +27,19 @@ DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 DEEPSEEK_MODEL = "deepseek-chat"
 PAGE_URL = "https://www.nationalgeographic.com/photo-of-the-day/"
 DINGTALK_KEYWORD = "国家地理"
-DEFAULT_WEBHOOK = os.environ.get(
-    "NATGEO_DINGTALK_WEBHOOK",
-    "https://oapi.dingtalk.com/robot/send?access_token=b9053bb9dae6c8f2c74d8f70cab2ef663f224751ab0b7bac281b2d370f521063",
-)
+
+
+def load_skill_env() -> None:
+    """加载 skill 目录 .env（不覆盖已有环境变量）；webhook 等机密只进 .env/调度环境，不进代码。"""
+    env_file = Path(__file__).resolve().parent.parent / ".env"
+    if not env_file.is_file():
+        return
+    for raw in env_file.read_text(encoding="utf-8-sig").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, _, value = line.partition("=")
+        os.environ.setdefault(name.strip(), value.strip().strip('"').strip("'"))
 
 
 def translate_to_chinese(text: str, api_key: Optional[str] = None) -> Optional[str]:
@@ -123,7 +132,10 @@ def extract_from_page(html: str, page_url: str) -> Optional[PhotoItem]:
 
 
 def push_to_dingtalk(message: str) -> bool:
-    webhook = DEFAULT_WEBHOOK
+    webhook = os.environ.get("NATGEO_DINGTALK_WEBHOOK", "")
+    if not webhook:
+        print("钉钉推送失败: 未设置 NATGEO_DINGTALK_WEBHOOK（写入 skill 目录 .env 或调度环境后重试）")
+        return False
     secret = os.environ.get("NATGEO_DINGTALK_SECRET", "")
     if secret:
         ts, sign = get_sign(secret)
@@ -155,6 +167,7 @@ def build_dingtalk_markdown(photo: PhotoItem) -> str:
 
 
 def main() -> int:
+    load_skill_env()
     print(">>> 国家地理每日精选")
     data_dir = Path(__file__).resolve().parent.parent / "data"
     output_file = data_dir / f"natgeo_photo_{datetime.now().strftime('%Y%m%d')}.json"

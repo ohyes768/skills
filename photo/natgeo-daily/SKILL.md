@@ -16,6 +16,6 @@ python3 /home/ohyes768/skills/photo/natgeo-daily/scripts/natgeo_daily.py
 ## 说明
 
 - 翻译：优先脚本内置 DeepSeek（env `DEEPSEEK_API_KEY`）；Hermes 会话内运行时若无 key，直接由你翻译描述后写入即可——但**不要**为翻译重跑脚本。
-- 钉钉 webhook：env `NATGEO_DINGTALK_WEBHOOK`（含默认值）/ `NATGEO_DINGTALK_SECRET`。
+- 钉钉 webhook：env `NATGEO_DINGTALK_WEBHOOK` / `NATGEO_DINGTALK_SECRET`，只从环境变量读取（可写入本 skill 目录 `.env`，脚本启动时自动加载、不覆盖已有环境变量），参照 `.env.example`；未配置时推送失败（退出码 3）。
 - 无按日去重：同日重跑会重复推送，属于已知行为（与原 stock-info 脚本一致）。
 - 调度：由 task-web（personal-web）统一触发；本 skill 不自带 cron。
