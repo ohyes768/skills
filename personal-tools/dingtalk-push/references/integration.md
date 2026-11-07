@@ -52,7 +52,8 @@ unknown 表示 POST 可能已送达：超时、响应被截断/损坏、HTTP 5xx
 | waytoagi-update-log（手动路径） | `scripts/send_dingtalk.js` 是定位 shim：仅 subprocess 调公共 CLI，自带 HTTP 已移除；title 固定「WaytoAGI 更新日报」+ `--keyword WaytoAGI`，正文可走 argv 或 stdin | 已接入 |
 | waytoagi-update-log（cron 路径） | `scripts/cron_runner.js` 经 `send_dingtalk.js` 的 stdin 入口委托公共 CLI，本文件不再含 POST；`sent`/`duplicate` 都记录 `data/pushed_articles.json` 业务回执，failed/unknown 只报错不记 | 已接入 |
 | daily-review（每日复盘） | 根目录 `dingtalk_relay_client.py` 定位 shim（探测含同级 `skills` 仓库），`daily_review.py` 键 `review:标题:正文摘要`，与 RSS 侧同约定；`sent`/`duplicate` 返回成功，webhook 缺失沿用原「跳过」语义 | 已接入 |
-| 其他旧流程（stock-info-dingding 老项目等） | 独立脚本各自发送（gold/pusher、damai、natgeo），接入时逐个迁移 | 未开始 |
+| gold-price-brief（黄金走势研判） | `scripts/gold_price_push.py` 内置定位（探测父级 `personal-tools/dingtalk-push`），`PUSH_MODE=1` 闸门保留，自动内容键，`--keyword 黄金`（机器人关键词 黄金/金价）；2026-11-07 自 stock-info 迁入并弃用加签 pusher | 已接入 |
+| 其他旧流程（stock-info-dingding 老项目等） | 独立脚本各自发送（gold 旧入口 pusher、damai、natgeo），接入时逐个迁移 | 未开始 |
 
 兼容 shim 定位顺序：`DINGTALK_PUSH_SKILL_DIR` > 逐级父目录探测（`dingtalk-push/scripts/dingtalk_send.py` 或 `personal-tools/dingtalk-push/scripts/dingtalk_send.py`）> `~/.hermes/skills`、`~/.codex/skills`、`~/.agents/skills`。找不到公共包时报错退出，不得回退内联 POST。
 

@@ -43,11 +43,10 @@ webhook 是群机器人唯一凭据，只放 `.env`（已被 gitignore 排除）
 | 变量 | 说明 |
 |---|---|
 | `GOLD_DINGTALK_WEBHOOK` | 群机器人 Webhook 完整地址（含 access_token），缺失时推送失败 |
-| `GOLD_DINGTALK_SECRET` | 加签密钥；机器人开启「加签」时必填，脚本自行 HMAC 加签 |
 | `GOLD_FED_CACHE_PATH` | 金十利率预期缓存位置，默认 `<skill>/data/gold_fed_expectations.json` |
 | `DEEPSEEK_API_KEY` | 仅旧版一条龙模式使用；现行两段式无需 |
 
-发送实现保留在本包 `scripts/gold/pusher.py`（含加签）。公共 `dingtalk-push` CLI 目前不支持加签，故暂不接入；待公共 CLI 支持加签后再统一切换。
+发送已统一接入公共 `dingtalk-push` CLI（personal-tools/dingtalk-push）：回执去重、unknown 不盲重、关键词预检、token 不落日志；本包不含任何钉钉 HTTP 发送。机器人安全设置用「自定义关键词」（黄金 / 金价，标题「黄金走势研判」恒含「黄金」，预检关键词固定 `黄金`），**不再使用加签**；`GOLD_DINGTALK_SECRET` 已废弃，从 `.env` 移除。同键同内容重跑按回执跳过（duplicate，退出码 0）；同日重写研判属新内容，正常发送。
 
 ## 边界
 

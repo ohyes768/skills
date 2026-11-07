@@ -1,5 +1,6 @@
 """黄金消息数据流、离线预览和官方GLD持仓回归测试。"""
 from io import BytesIO
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -191,7 +192,90 @@ def test_dry_run_prints_full_message_without_sending(monkeypatch, capsys):
     monkeypatch.setenv("PUSH_MODE", "0")
     monkeypatch.setattr(main, "get_merged_gold_data", gold_data)
     monkeypatch.setattr(main, "GoldAnalyzer", lambda: type("FakeAnalyzer", (), {"analyze": lambda self, data: "分析正文"})())
-    monkeypatch.setattr(main, "DingTalkPusher", lambda **kw: pytest.fail("must not initialize a real pusher"))
+    monkeypatch.setattr(main, "send_via_dingtalk_cli", lambda content: pytest.fail("must not send in dry-run mode"))
     main.main()
     output = capsys.readouterr().out
     assert "70.9%" in output and "分析正文" in output and "国际现货" in output
+
+
+def test_push_delegates_to_public_cli(monkeypatch, tmp_path):
+    import json
+
+    import gold_price_push as main
+    recorded = {}
+
+    def fake_send(content):
+        recorded["content"] = content
+        return 0, "sent"
+
+    monkeypatch.setattr(main, "send_via_dingtalk_cli", fake_send)
+    data_file = tmp_path / "data.json"
+    analysis_file = tmp_path / "analysis.md"
+    data_file.write_text(json.dumps(gold_data()), encoding="utf-8")
+    analysis_file.write_text("研判正文", encoding="utf-8")
+    monkeypatch.setenv("PUSH_MODE", "1")
+    assert main.cmd_push(str(data_file), str(analysis_file)) == 0
+    assert "黄金走势研判" in recorded["content"]
+    assert "研判正文" in recorded["content"]
+
+
+def test_send_via_cli_passes_title_keyword_and_env_webhook(monkeypatch):
+    import gold_price_push as main
+
+    captured = {}
+
+    class FakeProc:
+        stdout = b'{"schema_version":1,"status":"sent"}'
+        returncode = 0
+        stderr = b""
+
+    def fake_run(args, input=None, capture_output=True):
+        captured["args"] = args
+        captured["input"] = input
+        return FakeProc()
+
+    monkeypatch.setenv("GOLD_DINGTALK_WEBHOOK", "https://example.invalid/robot/send?access_token=x")
+    monkeypatch.setattr(main, "locate_dingtalk_cli", lambda: Path("cli.py"))
+    monkeypatch.setattr(main.subprocess, "run", fake_run)
+    code, status = main.send_via_dingtalk_cli("正文内容")
+    assert (code, status) == (0, "sent")
+    args = captured["args"]
+    assert args[args.index("--title") + 1] == "黄金走势研判"
+    assert args[args.index("--keyword") + 1] == "黄金"
+    assert args[args.index("--webhook") + 1].endswith("access_token=x")
+    assert args[args.index("--file") + 1] == "-"
+    assert captured["input"] == "正文内容".encode("utf-8")
+
+
+def test_send_via_cli_maps_cli_exit_codes(monkeypatch):
+    import gold_price_push as main
+
+    def proc_with(status):
+        class FakeProc:
+            stdout = f'{{"schema_version":1,"status":"{status}"}}'.encode()
+            returncode = 9
+            stderr = b""
+
+        return FakeProc()
+
+    monkeypatch.setenv("GOLD_DINGTALK_WEBHOOK", "https://example.invalid/w")
+    monkeypatch.setattr(main, "locate_dingtalk_cli", lambda: Path("cli.py"))
+    for status, expected in (("unknown", 3), ("failed", 2), ("conflict", 4)):
+        def fake_run(*args, _status=status, **kwargs):
+            return proc_with(_status)
+        monkeypatch.setattr(main.subprocess, "run", fake_run)
+        assert main.send_via_dingtalk_cli("x")[0] == expected
+
+
+def test_send_requires_webhook_and_cli_without_fallback(monkeypatch):
+    import gold_price_push as main
+
+    monkeypatch.delenv("GOLD_DINGTALK_WEBHOOK", raising=False)
+    assert main.send_via_dingtalk_cli("x") == (1, "missing_webhook")
+    monkeypatch.setenv("GOLD_DINGTALK_WEBHOOK", "https://example.invalid/w")
+
+    def boom():
+        raise ValueError("no cli")
+
+    monkeypatch.setattr(main, "locate_dingtalk_cli", boom)
+    assert main.send_via_dingtalk_cli("x") == (1, "cli_not_found")

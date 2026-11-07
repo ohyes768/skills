@@ -8,10 +8,12 @@ REPO = PACKAGE.parents[1]  # skills 仓库根
 
 # csi300-brief 已随 2026-11-07 迁出（skills 副本删除），canonical shim 只剩业务仓库一份
 CSI300_SHIM = REPO.parent / 'stock-info-dingding/csi300_brief/dingtalk_push.py'
+GOLD_ENTRY = REPO / 'investment-analysis/gold-price-brief/scripts/gold_price_push.py'
 NO_INLINE_POST_FILES = [
     REPO / 'personal-tools/waytoagi-update-log/scripts/cron_runner.js',
     REPO.parent / 'daily-review/daily_review.py',
     CSI300_SHIM,
+    GOLD_ENTRY,
 ]
 WAYTOAGI_SHIM = REPO / 'personal-tools/waytoagi-update-log/scripts/send_dingtalk.js'
 

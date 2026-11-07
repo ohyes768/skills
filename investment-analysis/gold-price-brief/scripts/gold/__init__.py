@@ -13,7 +13,6 @@ from .data_fetcher import (
 )
 from .rsi_calculator import calculate_rsi, calculate_simple_rsi
 from .analyzer import GoldAnalyzer
-from .pusher import DingTalkPusher
 
 __all__ = [
     "get_gold_price_now",
@@ -25,5 +24,4 @@ __all__ = [
     "calculate_rsi",
     "calculate_simple_rsi",
     "GoldAnalyzer",
-    "DingTalkPusher",
 ]
