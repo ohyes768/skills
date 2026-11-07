@@ -13,6 +13,25 @@ import tempfile
 relay_publish = run_path(str(Path(__file__).with_name('rss_relay_client.py')))['publish']
 
 
+def resolve_ca_file():
+    """Return a CA bundle for the relay's self-signed certificate, or None.
+
+    The relay host serves a self-signed certificate, so the public CLI's TLS
+    verification against the system trust store fails with
+    "preflight_failed: Could not read remote posts; nothing published".
+    Read the environment on every call so a late export still applies.
+    """
+    candidates = (
+        os.environ.get('RSS_RELAY_CA_FILE'),
+        os.path.expanduser('~/.local/state/rss-relay-publish/relay_ca.pem'),
+        os.path.expanduser('~/.config/rss-relay-publish/ca.pem'),
+    )
+    for candidate in candidates:
+        if candidate and Path(candidate).is_file():
+            return str(candidate)
+    return None
+
+
 def read_receipts(path):
     data = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {'articles': {}}
     if not isinstance(data, dict) or not isinstance(data.get('articles'), dict):
@@ -57,7 +76,8 @@ def main(argv=None):
                 continue
             payload = {k: article[k] for k in ('title', 'content', 'url')}
             payload.update(channel='waytoagi', source='waytoagi-daily')
-            response = relay_publish(payload, 'article:' + token, endpoint=args.endpoint)
+            response = relay_publish(payload, 'article:' + token, endpoint=args.endpoint,
+                                     ca_file=resolve_ca_file())
             record(args.receipts, token)
             results.append(dict(response, token=token))
     except (ValueError, OSError, sqlite3.Error) as exc:
