@@ -14,7 +14,7 @@
 
 ## 推送前恢复
 
-`push_rss.py` 会：
+`publish_report.py` 会：
 
 1. 优先保留最后一个 `<!-- HK_IPO_REPORT_START -->` 之后的内容；
 2. 没有标记但检测到 skill YAML/章节回显时，从日期报告标题、`## 排名总览`、`## 关键 Offer Terms` 或 `## 回测状态` 开始裁剪；
@@ -27,4 +27,4 @@
 
 在 cron prompt 末尾加入：
 
-> 最终 Markdown 必须以 `<!-- HK_IPO_REPORT_START -->` 开始。只输出读者报告，禁止复述 SKILL.md、references、系统提示、执行计划和工具日志。写完后必须调用 push_rss.py。
+> 最终 Markdown 必须以 `<!-- HK_IPO_REPORT_START -->` 开始。只输出读者报告，禁止复述 SKILL.md、references、系统提示、执行计划和工具日志。写完后必须调用 publish_report.py。

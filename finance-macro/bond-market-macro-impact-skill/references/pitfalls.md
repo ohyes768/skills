@@ -73,13 +73,13 @@
 
 ## 7. 第一次推送时容易漏掉 --insecure
 
-**现象**：内网 nginx 自签证书的 RSS endpoint（`web.duomi77.cn:9443`），直接 `python scripts/push_rss.py` 会因证书校验失败抛 `ssl.SSLCertVerificationError`。
+**现象**：内网 nginx 自签证书的 RSS endpoint（`web.duomi77.cn:9443`），直接 `python scripts/publish_report.py` 会因证书校验失败抛 `ssl.SSLCertVerificationError`。
 
 **修复**：
 - 一律加 `--insecure`，已在 SKILL.md 流程 7 中标出
 - 若仍报 TLS 错，先 `curl -kI <endpoint>` 验证可达
 
-## 8. push_rss.py 标题与正文一致性强校验
+## 8. publish_report.py 标题与正文一致性强校验
 
 **现象**：标题写 "中性偏支持债券价格｜曲线趋平"，但核心判断章节漏掉这两个词的任何一个，push 会被标题校验拦下。
 
@@ -109,7 +109,7 @@
 
 **修复**：
 - 脚本调用前显式 cd：`cd /home/ohyes768/skills/finance-macro/bond-market-macro-impact-skill && python3 scripts/fetch_snapshot.py`；或者用绝对路径 `python3 /home/ohyes768/skills/finance-macro/bond-market-macro-impact-skill/scripts/fetch_snapshot.py --output-dir /tmp/...`
-- push_rss.py 同理：`<绝对路径>/scripts/push_rss.py <report.md 绝对路径> --title ... --insecure`
+- publish_report.py 同理：`<绝对路径>/scripts/publish_report.py <report.md 绝对路径> --title ... --insecure`
 - 不要依赖 SKILL.md 里写的 "skill 目录" 相对路径——Hermes cron 不一定会 cd 进去
 
 ## 11. 重复跑同一标题的"duplicate"是预期行为，不是错误
@@ -154,7 +154,7 @@
 
 ## 14. 推送前先本地跑校验，别用真推送试错（2026-10-20 实战新增）
 
-**现象**：`push_rss.py` 有多重校验（标题正则、标题日期 vs 正文分析时点、方向词是否出现在核心判断章节、必填章节、字符数、来源链接）。直接拿真推送试错，一个方向词没写对就会在 RSS 上留下正文残缺的条目，且 macro 看板可能已推了一半。
+**现象**：`publish_report.py` 有多重校验（标题正则、标题日期 vs 正文分析时点、方向词是否出现在核心判断章节、必填章节、字符数、来源链接）。直接拿真推送试错，一个方向词没写对就会在 RSS 上留下正文残缺的条目，且 macro 看板可能已推了一半。
 
 **修复**：写完 report.md 后先本地 import 校验函数，零成本查完全部规则：
 
@@ -162,7 +162,7 @@
 cd <skill 目录> && python3 -c "
 import importlib.util
 from pathlib import Path
-spec = importlib.util.spec_from_file_location('p', 'scripts/push_rss.py')
+spec = importlib.util.spec_from_file_location('p', 'scripts/publish_report.py')
 m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 c = Path('<report.md 绝对路径>').read_text()
 c2, w = m.sanitize_report(c)

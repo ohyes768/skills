@@ -64,7 +64,7 @@ class MigrationTests(unittest.TestCase):
 
     def test_macro_uses_public_cli_and_duplicate_retries_dashboard(self):
         for skill in ('a-share-macro-impact-skill', 'bond-market-macro-impact-skill'):
-            m = load(f'finance-macro/{skill}/scripts/push_rss.py')
+            m = load(f'finance-macro/{skill}/scripts/publish_report.py')
             self.assertTrue(hasattr(m, 'relay_publish'), 'macro adapter must invoke public CLI')
             with tempfile.TemporaryDirectory(dir=ROOT / '.tmp') as tmp:
                 report = Path(tmp) / 'report.md'
@@ -96,14 +96,14 @@ class MigrationTests(unittest.TestCase):
         self.assertFalse(publish.call_args.kwargs['verify'])
 
     def test_hkipo_preserves_type_and_channel(self):
-        m = load('hk-ipo-research/scripts/push_rss.py')
+        m = load('hk-ipo-research/scripts/publish_report.py')
         self.assertTrue(hasattr(m, 'relay_publish'), 'IPO adapter must invoke public CLI')
         with tempfile.TemporaryDirectory(dir=ROOT / '.tmp') as tmp:
             report = Path(tmp) / 'report.md'
             report.write_text(m.REPORT_START_MARKER + '\n正文', encoding='utf-8')
             keys = []
             for kind, source in [('research', 'hk-ipo-research'), ('backtest', 'hk-ipo-backtest')]:
-                argv = ['push_rss.py', str(report), '--title', '2026-11-05 T（00001.HK）',
+                argv = ['publish_report.py', str(report), '--title', '2026-11-05 T（00001.HK）',
                         '--report-type', kind, '--source', source, '--allow-duplicate']
                 with patch.object(sys, 'argv', argv), patch.object(m, 'relay_publish', return_value=SENT) as publish, \
                      contextlib.redirect_stdout(io.StringIO()):
@@ -113,7 +113,7 @@ class MigrationTests(unittest.TestCase):
             self.assertNotEqual(*keys)
 
     def test_ipo_precheck_separates_research_and_backtest(self):
-        m = load('hk-ipo-research/scripts/push_rss.py')
+        m = load('hk-ipo-research/scripts/publish_report.py')
         response = unittest.mock.Mock()
         response.json.return_value = {'posts': [{'title': '2026-11-05 港股IPO回测｜公司（00001.HK）',
                                                 'content': '00001.HK', 'created_at': '2026-11-05',

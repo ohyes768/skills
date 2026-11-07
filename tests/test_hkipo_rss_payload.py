@@ -19,7 +19,7 @@ def load(name):
 
 class RelayPayloadTests(unittest.TestCase):
     def test_final_report_defaults_and_overrides(self):
-        module = load("push_rss")
+        module = load("publish_report")
         with tempfile.TemporaryDirectory(dir=SCRIPTS.parent.parent / ".tmp") as directory:
             report = Path(directory) / "report.md"
             report.write_text(module.REPORT_START_MARKER + "\n# 今日内容\n\n正文 markdown", encoding="utf-8")
@@ -28,7 +28,7 @@ class RelayPayloadTests(unittest.TestCase):
                 (["--report-type", "backtest", "--source", "hk-ipo-backtest"], "hkipo", "hk-ipo-backtest"),
                 (["--channel", "custom", "--source", "my-bot", "--url", "https://example.com"], "custom", "my-bot"),
             ]:
-                with self.subTest(extra=extra), patch.object(sys, "argv", ["push_rss.py", str(report), "--title", "今日内容", "--allow-duplicate", *extra]), patch.object(module, "relay_publish", return_value={"status": "published", "id": "test-id"}) as post, patch("builtins.print"):
+                with self.subTest(extra=extra), patch.object(sys, "argv", ["publish_report.py", str(report), "--title", "今日内容", "--allow-duplicate", *extra]), patch.object(module, "relay_publish", return_value={"status": "published", "id": "test-id"}) as post, patch("builtins.print"):
                     self.assertEqual(module.main(), 0)
                     self.assertEqual(post.call_args.args[0], {
                         "title": "今日内容", "content": "# 今日内容\n\n正文 markdown",

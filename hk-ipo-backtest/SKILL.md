@@ -153,7 +153,7 @@ TradeSmart 实时 API 返回的孖展快照 `observed_at` 时间戳是**当前�
 RSS Relay 使用 JSON 五字段：`title`（报告标题）、`content`（完整 Markdown 正文）、`channel`（`hkipo`）、`source`（`hk-ipo-backtest`）、`url`（来源/原文链接，无链接时传空字符串）。研究和回测进入同一频道，通过 `source` 区分来源；示例中的 `my-bot` 可通过 `--source` 自定义。共享脚本默认发送 `channel=hkipo`，可用 `--channel` 覆盖，原文链接用 `--url` 指定。
 
 ```bash
-python3 ../hk-ipo-research/scripts/push_rss.py /tmp/hk-ipo-backtest-final.md \
+python3 ../hk-ipo-research/scripts/publish_report.py /tmp/hk-ipo-backtest-final.md \
   --report-type backtest \
   --title "YYYY-MM-DD 港股IPO回测｜公司名（00000.HK）｜预测命中" \
   --endpoint https://web.duomi77.cn:9443/rss/api/rss-relay/post \
@@ -203,11 +203,11 @@ python3 ../hk-ipo-research/scripts/push_rss.py /tmp/hk-ipo-backtest-final.md \
 
 8a. **`push2.eastmoney.com` 抓首次后立刻被 IP 屏蔽（实测 2026-09-01）**。一个成功响应后，紧接着的请求持续返回 `curl: (52) Empty reply from server`，即使 sleep 60s / 180s 仍 52。**不要**反复重试该 endpoint；把首次成功的响应作为交叉参考即可。同一会话内第 N 个标的的 push2 永远拿不到 —— 直接走 8. 的 `sina hq` 主源。
 
-8b. **回测验证阶段工具调用预算硬上限 ≤ 6 次抓取 / 单标的**。本次会话（2026-09-01）原本 30 次预算，验证阶段就消耗了 ~13 次（push2 09615 × 5 次失败、xueqiu × 1 WAF、sina hkstock × 1 JS-only、aaStocks quote × 2 空文件、各种 web_search 收评尝试 × 4），最终因预算耗尽未能生成最终 Markdown 并 push_rss。**应对**：验证阶段严格按 8. 的顺序，每个 endpoint **最多 2 次重试**，3 次失败立即接受"sina hq 15:58 + web_search snippet 可见的盘中数字"为主源，**不要进入"无限找 EOD 收评"的死循环**。**首日收盘价精度损失 0.1-0.2 港元对回测结论（破发/上涨/持平）无实质影响**，但耗尽预算导致无法生成报告是致命失败。
+8b. **回测验证阶段工具调用预算硬上限 ≤ 6 次抓取 / 单标的**。本次会话（2026-09-01）原本 30 次预算，验证阶段就消耗了 ~13 次（push2 09615 × 5 次失败、xueqiu × 1 WAF、sina hkstock × 1 JS-only、aaStocks quote × 2 空文件、各种 web_search 收评尝试 × 4），最终因预算耗尽未能生成最终 Markdown 并 publish_report。**应对**：验证阶段严格按 8. 的顺序，每个 endpoint **最多 2 次重试**，3 次失败立即接受"sina hq 15:58 + web_search snippet 可见的盘中数字"为主源，**不要进入"无限找 EOD 收评"的死循环**。**首日收盘价精度损失 0.1-0.2 港元对回测结论（破发/上涨/持平）无实质影响**，但耗尽预算导致无法生成报告是致命失败。
 
-9. **`push_rss.py` 章节检查器对 backtest 类型仍用未编号子串匹配**。`hk-ipo-research/scripts/push_rss.py::validate_ownership_section` 与章节缺失检查走的是 hk-ipo-research 的子串匹配（找 `## 回测状态` 等不带前缀的字符串），但 `report-contract.md` 明确要求 backtest 报告用 `## 1. 回测状态` 等带编号二级标题。结果：`pushed == true` 但 `quality_warnings` 把 7 个章节全部列为"缺少章节"（实测 2026-08-25 03223 推送即触发）。**应对**：
+9. **`publish_report.py` 章节检查器对 backtest 类型仍用未编号子串匹配**。`hk-ipo-research/scripts/publish_report.py::validate_ownership_section` 与章节缺失检查走的是 hk-ipo-research 的子串匹配（找 `## 回测状态` 等不带前缀的字符串），但 `report-contract.md` 明确要求 backtest 报告用 `## 1. 回测状态` 等带编号二级标题。结果：`pushed == true` 但 `quality_warnings` 把 7 个章节全部列为"缺少章节"（实测 2026-08-25 03223 推送即触发）。**应对**：
    - 当前已知是**误报**，无 `--strict` 时不阻断推送（与 hk-ipo-research PITFALL #16 同根因）；不要因为这条误报重推。
-   - 写 backtest Markdown 时仍按 `report-contract.md` 用 `## 1. 回测状态` 等带编号标题（这是契约硬要求），不要因为 checker 误报就改回不带编号——会破坏与 `report-contract.md` 的一致性，未来真要消除误报要在 `push_rss.py` 章节正则里加 `^## (?:\\d+\\.\\s+)?(?P<name>...)$` 可选编号前缀。
+   - 写 backtest Markdown 时仍按 `report-contract.md` 用 `## 1. 回测状态` 等带编号标题（这是契约硬要求），不要因为 checker 误报就改回不带编号——会破坏与 `report-contract.md` 的一致性，未来真要消除误报要在 `publish_report.py` 章节正则里加 `^## (?:\\d+\\.\\s+)?(?P<name>...)$` 可选编号前缀。
    - 推送时不要传 `--strict`，避免误报阻断；硬门禁留给用户显式要求时再用。
 10. **"单标的成熟日"回测模式（候选全集 ≥ 2 但今日仅 1 只 `listing_date == today`）**。当截止点前的候选全集包含 ≥ 2 只港股 IPO，但今日仅 1 只完成首日交易（其余昨日已完成或明日才上市），回测报告主体仍以"今日成熟的那只"为核心，其余候选**仅在 §2 历史候选全集中列名 + 评分，**不参与 §5 命中率统计**。**实战案例**：2026-09-08 截止点前候选全集 = {09976 江波龙, 02041 麦科田, 03231 优地机器人}；今日仅 09976 `listing_date == 2026-09-08`（02041 已于 9/7 完成首日，03231 9/9 才上市）。报告 §5 命中表只填 09976 一行；02041 + 03231 在 §2 列出作为候选全集参照但不参与命中率统计。**严禁**：把"昨日已完成首日"的票（如 02041）当作"今日案例"——那是时间泄漏 + 选择偏差；也**严禁**：把"明日才上市"的票（如 03231）的预测当作"待验证项"塞进 §5——明日上市后由该日的 cron 独立生成 backtest 报告。
 11. **截止点前快照的可复用验证规则（无本地快照存档时的兜底流程）**。主流程假设存在截止点前的预测快照存档。若本地 cron 输出目录（`~/.hermes/cron/output/`）不存在目标 code 在截止点前的 hk-ipo-daily 报告，不要直接判为 `回测无效`。可走"快照回溯"路径：

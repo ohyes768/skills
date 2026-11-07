@@ -29,7 +29,7 @@ class AdapterEndToEndTests(unittest.TestCase):
 
     def test_both_macro_reports_and_retry(self):
         for kind in ('a-share', 'bond-market'):
-            m = load(f'finance-macro/{kind}-macro-impact-skill/scripts/push_rss.py')
+            m = load(f'finance-macro/{kind}-macro-impact-skill/scripts/publish_report.py')
             args = [str(self.file), '--title', '2026-11-05 ' + kind, '--allow-duplicate',
                     '--endpoint', self.base + '/post', '--report-token', '']
             with contextlib.redirect_stdout(io.StringIO()):
@@ -39,9 +39,9 @@ class AdapterEndToEndTests(unittest.TestCase):
         self.assertTrue(all(p['channel'] == 'macro' for p in self.posts))
 
     def test_both_ipo_report_types(self):
-        m = load('hk-ipo-research/scripts/push_rss.py')
+        m = load('hk-ipo-research/scripts/publish_report.py')
         for kind in ('research', 'backtest'):
-            args = ['push_rss.py', str(self.file), '--title', '2026-11-05 ' + kind + ' 00001.HK',
+            args = ['publish_report.py', str(self.file), '--title', '2026-11-05 ' + kind + ' 00001.HK',
                     '--report-type', kind, '--source', 'hk-ipo-' + kind, '--allow-duplicate', '--endpoint', self.base + '/post']
             with patch.object(sys, 'argv', args), contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(m.main(), 0)

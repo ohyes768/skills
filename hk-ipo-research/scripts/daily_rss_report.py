@@ -254,7 +254,7 @@ def main() -> int:
         if not args.allow_incomplete:
             raise SystemExit(
                 "已阻止推送：daily_rss_report.py 只生成采集骨架。请由 agent 完成招股书/网页研究后，"
-                "使用 scripts/push_rss.py 推送最终 Markdown。"
+                "使用 scripts/publish_report.py 推送最终 Markdown。"
             )
         title = f"{as_of.isoformat()} 港股打新研究（{len(stocks)}只）"
         result = push_report(args.endpoint, title, markdown, args.source, verify_tls=not args.insecure, channel=args.channel)

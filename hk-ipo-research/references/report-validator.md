@@ -1,6 +1,6 @@
-# `push_rss.py` 校验器实战速查
+# `publish_report.py` 校验器实战速查
 
-适用场景：写完 Markdown 后准备 `python3 scripts/push_rss.py <md> --title ...` 推送，看到 `quality_warnings` 想快速定位根因。
+适用场景：写完 Markdown 后准备 `python3 scripts/publish_report.py <md> --title ...` 推送，看到 `quality_warnings` 想快速定位根因。
 
 ## 速查表
 
@@ -18,7 +18,7 @@
 ## 数字行匹配秘诀（`field_has_number`）
 
 ```python
-# 实现（scripts/push_rss.py）
+# 实现（scripts/publish_report.py）
 def field_has_number(section, labels):
     for line in section.splitlines():
         if any(label in line for label in labels):
@@ -36,7 +36,7 @@ def field_has_number(section, labels):
 ## 文本字段匹配秘诀（`field_has_text`）
 
 ```python
-# 实现（scripts/push_rss.py）
+# 实现（scripts/publish_report.py）
 def field_has_text(section, labels):
     for line in section.splitlines():
         if not any(label in line for label in labels):
@@ -70,18 +70,18 @@ margin_total_hkd_yi ≈ 公开发售金额 × 超购倍数
 
 ## 推送前 dry-run 流程
 
-不要等 `quality_warnings` 反复出现再修。`push_rss.py` 可以 inline 调用 validator 跳过 HTTP POST：
+不要等 `quality_warnings` 反复出现再修。`publish_report.py` 可以 inline 调用 validator 跳过 HTTP POST：
 
 ```bash
 # 方法 1：拿 RSS id 占位（不带 --allow-duplicate 会得到 duplicate=true 提前退）
-python3 scripts/push_rss.py <md> --title "X" --endpoint https://no-op.example.com \
+python3 scripts/publish_report.py <md> --title "X" --endpoint https://no-op.example.com \
   --source hk-ipo-research --insecure --allow-duplicate 2>&1 | jq .quality_warnings
 
 # 方法 2：直接 import validator
 python3 -c "
 import sys
 sys.path.insert(0, 'scripts')
-from push_rss import validate_report
+from publish_report import validate_report
 content = open('path/to/md').read()
 print(validate_report(content))
 "

@@ -28,12 +28,12 @@ python3 ~/.hermes/skills/hk-ipo-research/scripts/daily_rss_report.py \
 | 6 | `web_search` × 1（保荐人历史）| 港股评级汇总 / 国泰海通历史战绩 | jisilu `--sponsor <X>` 兜底 |
 | 7 | `curl + search_files`（本地 HTML）| 落本地 + grep 关键数字 | 文件已存在 grep 仍失败 → 改用 meta description |
 | 8 | `write_file`（最终 Markdown）| 一只一篇，`<!-- HK_IPO_REPORT_START -->` 起 | — |
-| 9 | `push_rss.py` | RSS 推送（必须执行） | 见 SKILL.md PITFALLS #10 |
+| 9 | `publish_report.py` | RSS 推送（必须执行） | 见 SKILL.md PITFALLS #10 |
 
 ## 阶段 2：推送
 
 ```bash
-python3 ~/.hermes/skills/hk-ipo-research/scripts/push_rss.py \
+python3 ~/.hermes/skills/hk-ipo-research/scripts/publish_report.py \
   ~/.hermes/cron/output/hk-ipo-daily-YYYY-MM-DD-<CODE>.md \
   --title "YYYY-MM-DD 港股打新｜公司名（00000.HK）｜66分 B" \
   --endpoint https://web.duomi77.cn:9443/rss/api/rss-relay/post \
@@ -47,7 +47,7 @@ python3 ~/.hermes/skills/hk-ipo-research/scripts/push_rss.py \
 - **不要**用 `web_extract` 抓 SearXNG-only 源（返回 `cannot extract URL content`）；直接落本地 HTML 后 grep。
 - **不要**抓 HKEX 招股书 PDF（反爬 + 2KB 错误页）；用招股章程 URL 仅作"读者链接"展示，财务/股东数据全部走实时全网搜索。
 - **不要**为同一只 IPO 重复跑同一个失败的源（参见 SKILL.md PITFALLS #6）；超时 30 秒切下一源。
-- **不要**在没有 `<!-- HK_IPO_REPORT_START -->` 标记的情况下写报告 — `push_rss.py` 会按 cron-recovery.md 裁剪但计入 `quality_warnings`。
+- **不要**在没有 `<!-- HK_IPO_REPORT_START -->` 标记的情况下写报告 — `publish_report.py` 会按 cron-recovery.md 裁剪但计入 `quality_warnings`。
 
 ## 预算
 
@@ -69,7 +69,7 @@ python3 ~/.hermes/skills/hk-ipo-research/scripts/push_rss.py \
 
 ## 报告标题命名约定（实测 2026-08-18）
 
-为避免 `push_rss.py` 章节检查的子串误报，二级标题**不要加编号前缀**：
+为避免 `publish_report.py` 章节检查的子串误报，二级标题**不要加编号前缀**：
 
 ```markdown
 ## 关键 Offer Terms
@@ -82,7 +82,7 @@ python3 ~/.hermes/skills/hk-ipo-research/scripts/push_rss.py \
 ## 数据来源
 ```
 
-章节内子结构用三级或四级编号（如 `### 阶段 1：…`、`#### 估值对比`）即可保留层次。`## 1. 关键 Offer Terms` 这种带 `N. ` 前缀的写法会导致 `push_rss.py` 把整组章节报为"缺少"，虽然 `pushed == true` 仍成功，但质量分会被压低。详见 SKILL.md PITFALLS #16。
+章节内子结构用三级或四级编号（如 `### 阶段 1：…`、`#### 估值对比`）即可保留层次。`## 1. 关键 Offer Terms` 这种带 `N. ` 前缀的写法会导致 `publish_report.py` 把整组章节报为"缺少"，虽然 `pushed == true` 仍成功，但质量分会被压低。详见 SKILL.md PITFALLS #16。
 
 ## 实测调用序列（2026-08-18 君正股份 03223）
 

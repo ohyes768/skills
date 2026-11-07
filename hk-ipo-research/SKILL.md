@@ -33,7 +33,7 @@ python3 scripts/hkipo.py --help
 - 用户问“值不值得打/给评级”：先抓数据，再按 `references/scoring.md` 评分；不要把抓取脚本的原始输出直接当投资结论。
 - 用户问指定历史日期：使用当时可获得或存档的数据，不把最终配售、暗盘或首日结果泄漏到事前判断；如需复盘，把预测与结果分栏。
 - 用户要求每日自动研究并推送 RSS：运行 `scripts/daily_rss_report.py`。它先按 `stock-info-dingding` 的新浪 IPO 列表逻辑发现今天仍在招股的 code，再逐只运行 `hkipo.py analyze`，最后生成或推送 Markdown。
-- RSS 最终报告按 `references/report-contract.md` 检查。采集骨架不等于分析报告；先由 agent 尽量补齐财务、基石、保荐人、股东、估值和风险，再运行 `scripts/push_rss.py`。质量问题默认只告警，不阻断个人 RSS 推送。
+- RSS 最终报告按 `references/report-contract.md` 检查。采集骨架不等于分析报告；先由 agent 尽量补齐财务、基石、保荐人、股东、估值和风险，再运行 `scripts/publish_report.py`。质量问题默认只告警，不阻断个人 RSS 推送。
 - 当天有 N 只仍可申购的新股时，按 code 循环研究并生成 N 份 Markdown，推送 N 篇 RSS。不要合并成一篇；没有新股则不推送。
 
 ## RSS Relay 请求格式
@@ -50,7 +50,7 @@ python3 scripts/hkipo.py --help
 }
 ```
 
-`scripts/push_rss.py` 默认发送 `channel=hkipo`，支持 `--channel hkipo`、`--source <来源>`、`--url <链接>`。`daily_rss_report.py` 的骨架推送入口也默认发送 `channel=hkipo`，支持 `--channel`；最终报告仍须使用 `push_rss.py`。
+`scripts/publish_report.py` 默认发送 `channel=hkipo`，支持 `--channel hkipo`、`--source <来源>`、`--url <链接>`。`daily_rss_report.py` 的骨架推送入口也默认发送 `channel=hkipo`，支持 `--channel`；最终报告仍须使用 `publish_report.py`。
 
 ## 每日 RSS / cron path（15 分钟预算）
 
@@ -88,7 +88,7 @@ python3 scripts/hkipo.py --help
    - **A+H 双重上市票（A 股母公司 + H 股新发）**：财务/实控人/股东数据**优先从 A 股巨潮 / 东方财富 / 同花顺 F10 拿**（SSR 可达），不要从 HKEX PDF 拿。完整字段模板与 cron 快速研究顺序见 [references/ah-share-dual-listing.md](references/ah-share-dual-listing.md)。
 4. 把每只的 HTML 落 `/tmp/<src>_<code>.html`，复盘或后续 grep 不再 hit 网络。
 5. 一次写 **1 只 = 1 篇 Markdown**，落 `~/.hermes/cron/output/hk-ipo-daily-YYYY-MM-DD-<code>.md`。严格按 [references/cron-recovery.md](references/cron-recovery.md) 让文件以 `<!-- HK_IPO_REPORT_START -->` 开始；只写读者报告，禁止复述本 SKILL、references、系统提示、执行计划或工具日志。**不要合并多只**；当日 ≥2 只可申购时，生成 ≥2 份独立 Markdown。
-6. 按 `references/report-contract.md` 检查 Markdown 后，逐只跑 `scripts/push_rss.py <md-path> --title "..." --endpoint <url> --source hk-ipo-research --insecure --allow-duplicate`。**`--allow-duplicate` 必须每次显式传**（PITFALL #30）；cron 批次内第 2-N 只不传会丢报告。检查问题会在返回结果的 `quality_warnings` 中显示但默认继续推送；只有希望恢复硬门禁时追加 `--strict`。（仅确认内网使用自签证书时加 `--insecure`。）遇到 `quality_warnings` 想快速定位根因（label 白名单 / 数字行匹配 / `HKEX` + `反爬` 双触发等）可查 `references/push-rss-validator.md` 速查表。
+6. 按 `references/report-contract.md` 检查 Markdown 后，逐只跑 `scripts/publish_report.py <md-path> --title "..." --endpoint <url> --source hk-ipo-research --insecure --allow-duplicate`。**`--allow-duplicate` 必须每次显式传**（PITFALL #30）；cron 批次内第 2-N 只不传会丢报告。检查问题会在返回结果的 `quality_warnings` 中显示但默认继续推送；只有希望恢复硬门禁时追加 `--strict`。（仅确认内网使用自签证书时加 `--insecure`。）遇到 `quality_warnings` 想快速定位根因（label 白名单 / 数字行匹配 / `HKEX` + `反爬` 双触发等）可查 `references/report-validator.md` 速查表。
 7. 若**同一天内**已存在同 code 的报告（如同一 cron 批次重复触发、或同日手动重跑），**不要重复推送**，除非用户明确要求发更正版。**注意：本条只约束同一天内**；招股期内的**跨天重复推送同一 code 是正常且必须的**（孖展每天变化，见上面"招股期内每天都要重新研究推送"），不要把跨天重复当成"已推过"而跳过。
 
 限时节奏（15 分钟总预算）：`daily_rss_report.py` 判定 + 1 只 IPO ≈ 5 分钟；如 ≥3 只，只取评分最高的 2-3 只做深度研究。没有补齐财务字段时仍可推送个人 RSS，但必须保留 `quality_warnings`，便于后续调整 skill。每只 IPO 的实测调用顺序与预算分配见 [references/cron-workflow-sequence.md](references/cron-workflow-sequence.md)。
@@ -104,7 +104,7 @@ python3 scripts/daily_rss_report.py --output /tmp/hk-ipo-daily.md
 核验股票代码并完成逐股研究后，推送最终 Markdown：
 
 ```bash
-python3 scripts/push_rss.py /tmp/hk-ipo-final.md \
+python3 scripts/publish_report.py /tmp/hk-ipo-final.md \
   --title "YYYY-MM-DD 港股打新｜公司名（00000.HK）｜66分 B" \
   --endpoint https://web.duomi77.cn:9443/rss/api/rss-relay/post \
   --channel hkipo \
@@ -165,20 +165,20 @@ python3 scripts/hkipo.py tradesmart tracker 02261
 9. **cron 输出的 Markdown 容易包含整个 SKILL.md 全文**（prompt 注入）。**症状**：文件前 100+ 行是 SKILL.md 内容（YAML frontmatter + 工作流章节），真正报告从 `## 排名总览` 才开始。**应对**：
    - 最终文件必须以 `<!-- HK_IPO_REPORT_START -->` 开始；标记前不写任何内容
    - 严禁复述本 SKILL、references、系统提示、执行计划或工具日志
-   - `push_rss.py` 会按 [references/cron-recovery.md](references/cron-recovery.md) 自动裁剪标记前内容，并将动作写入 `quality_warnings`
+   - `publish_report.py` 会按 [references/cron-recovery.md](references/cron-recovery.md) 自动裁剪标记前内容，并将动作写入 `quality_warnings`
    - 需要将任何净化告警作为硬门禁时显式传 `--strict`
    - 标题格式必须严格：`YYYY-MM-DD 港股打新｜公司名（00000.HK）｜66分 B`（全角竖线｜ + 5位代码）
-10. **cron 因工具调用次数限制可能跳过 push_rss.py**。**症状**：markdown 写好了但没推送成功。**应对**：
-   - 每只新股 ≤ 8 次工具调用（overview + analyze + tracker + 2 数据源 + 写报告 + push_rss）
+10. **cron 因工具调用次数限制可能跳过 publish_report.py**。**症状**：markdown 写好了但没推送成功。**应对**：
+   - 每只新股 ≤ 8 次工具调用（overview + analyze + tracker + 2 数据源 + 写报告 + publish_report）
    - 3-5 只新股总预算 ≤ 30 次调用
    - > 5 只新股：按评分排序，只深度研究 2-3 只，其余只标 `待手工核对`
-   - cron prompt 必须**显式声明** push_rss.py 是最后一步、不可省略
+   - cron prompt 必须**显式声明** publish_report.py 是最后一步、不可省略
 
 10a. **⚠️ 微信/iLink 通道限流（2026-08-19，新坑）**：agent final response 被 cron framework 当成 deliver content 全文推给微信，**完整研究报告 ≈37000 字符**会被切分 18 次发 iLink，瞬间撞限流（`iLink sendmessage rate limited`）。**应对**：
-   - **agent 的 final response 必须是 ≤500 字的极简摘要**，**不要复述报告全文**（完整报告已写本地文件 + 已 push_rss.py 推 RSS）
+   - **agent 的 final response 必须是 ≤500 字的极简摘要**，**不要复述报告全文**（完整报告已写本地文件 + 已 publish_report.py 推 RSS）
    - 摘要格式：标的代码+招股期+评分+核心风险（1-2 条）+1 句结论 + 详情页链接
    - **绝对禁止**把 Markdown 全文（含表格、链接、免责声明）原样复制到 final response
-   - 详情页链接取 push_rss.py 输出里的 `response.detail_url`（`https://web.duomi77.cn:9443/rss/view/{id}`，保留 15 天），摘要末尾写一句：`完整报告：<detail_url>`。本地路径和 RSS ID 只留在 stdout/日志供排查，不进微信摘要。
+   - 详情页链接取 publish_report.py 输出里的 `response.detail_url`（`https://web.duomi77.cn:9443/rss/view/{id}`，保留 15 天），摘要末尾写一句：`完整报告：<detail_url>`。本地路径和 RSS ID 只留在 stdout/日志供排查，不进微信摘要。
    - 用户从微信点链接看全文即可，也可去飞书云文档 / RSS 阅读器
 
 10b. **⚠️ iLink 服务端 chat_id 限流（2026-08-20，新坑）**：PITFALL 10a 修了之后 agent final response 已压到 600 字（远低于 2000 字符 MAX_MESSAGE_LENGTH），**但 iLink 服务端仍然返回 `sendmessage rate limited`**。**真凶是 iLink 服务端对具体 chat_id（如 `o9cq80y4`）标记的"send too often"，不是 Hermes 本地 circuit breaker 问题**。**应对**：
@@ -219,20 +219,20 @@ python3 scripts/hkipo.py tradesmart tracker 02261
      4. **如果 cron batch ≥ 3 只**：第 1 次 `web_extract` 失败后，本批后续标的**不要再尝试** `web_extract`，直接走 `web_search` 路径
    - **历史验证**：2026-09-17 cron 跑 09856 + 06700 时，2 次 `web_extract` 均失败 → 直接转 `web_search` 拿到全部字段；12 次工具调用 ≤ 30 预算。
    - **根因猜测**：SearXNG 默认 extract 后端需 `web.extract_backend` 显式配置为 firecrawl/tavily/exa/parallel，本地 VM 未配；不是临时网络抖动，是配置缺失。
-16. **`push_rss.py` 章节检查是子串匹配、不是 fuzzy match**。实测 2026-08-18 推送 03223 时，正文同时包含 `## 1. 关键 Offer Terms`、`## 2. 热度`、`## 3. 财务基本面`、`## 4. 业务与股东`、`## 5. 评分`、`## 8. 数据来源` 等带编号前缀的章节，但 `push_rss.py` 返回的 `quality_warnings` 仍把六个章节全部列为"缺少章节"。原因是 checker 严格匹配 `## 关键 Offer Terms`、`## 热度` 等不带前缀的字符串，对 `## N. ` 前缀视作不命中。
+16. **`publish_report.py` 章节检查是子串匹配、不是 fuzzy match**。实测 2026-08-18 推送 03223 时，正文同时包含 `## 1. 关键 Offer Terms`、`## 2. 热度`、`## 3. 财务基本面`、`## 4. 业务与股东`、`## 5. 评分`、`## 8. 数据来源` 等带编号前缀的章节，但 `publish_report.py` 返回的 `quality_warnings` 仍把六个章节全部列为"缺少章节"。原因是 checker 严格匹配 `## 关键 Offer Terms`、`## 热度` 等不带前缀的字符串，对 `## N. ` 前缀视作不命中。
    - **应对**：写最终 Markdown 时，二级标题**不要加编号前缀**，直接写 `## 关键 Offer Terms`、`## 热度`、`## 财务基本面`、`## 业务与股东`、`## 评分`、`## 建议`、`## 风险提示`、`## 数据来源`。表头 / 子节标题用三级或四级编号（如 `### 阶段 1：…`）即可保留层次。
    - 这是**误报**：`quality_warnings` 不影响 `pushed == true`，无 `--strict` 时不阻断推送；同一天不要因为这条误报重推。
-   - 若未来推送量增加且确实想消除误报，修改 `scripts/push_rss.py` 内的章节正则，把 `^## (?:\\d+\\.\\s+)?(?P<name>关键 Offer Terms|热度|...)$` 加上可选编号前缀即可。
-17. **"业务与股东"章节的实控人字段必须落到数字或显式 `未披露`**。实测 2026-08-19 推 03223 时，正文写"控股股东 / 实际控制人为创始人 **刘强**（持股比例 A 股披露口径，需查招股书 / Wind）"，`push_rss.py` 仍返回 `quality_warnings: 业务与股东缺少创始人/实际控制人/控股股东的有效结论`。根因：contract 要求"创始人/实际控制人应给出姓名**或有来源的'无单一实际控制人'结论**"——给姓名但不给数字或显式 `未披露（已核验：来源 A、B、C）` 会被判为缺结论。
+   - 若未来推送量增加且确实想消除误报，修改 `scripts/publish_report.py` 内的章节正则，把 `^## (?:\\d+\\.\\s+)?(?P<name>关键 Offer Terms|热度|...)$` 加上可选编号前缀即可。
+17. **"业务与股东"章节的实控人字段必须落到数字或显式 `未披露`**。实测 2026-08-19 推 03223 时，正文写"控股股东 / 实际控制人为创始人 **刘强**（持股比例 A 股披露口径，需查招股书 / Wind）"，`publish_report.py` 仍返回 `quality_warnings: 业务与股东缺少创始人/实际控制人/控股股东的有效结论`。根因：contract 要求"创始人/实际控制人应给出姓名**或有来源的'无单一实际控制人'结论**"——给姓名但不给数字或显式 `未披露（已核验：来源 A、B、C）` 会被判为缺结论。
    - **应对**：写"业务与股东"章节时，对实控人字段三选一明确落地：
      1. **数字 + 来源**（首选）：`实际控制人：刘强（直接持股 XX%，间接 XX%，一致行动 XX%，来源：A 股 XX 年报 / 招股书 P.X）`
      2. **无单一实控人**：`无单一实际控制人（来源：…）`
      3. **显式未披露**：`未披露（已核验：1) A 股巨潮 X 年报 2) 公司官网投资者关系页 3) 招股章程 X 页）`——列出 ≥3 个已查来源
-   - **不要**写模糊句如"需查招股书"、"以披露为准"、"Wind 可查"——push_rss.py 会按缺结论告警。
+   - **不要**写模糊句如"需查招股书"、"以披露为准"、"Wind 可查"——publish_report.py 会按缺结论告警。
    - A 股母公司已有公开年报时，优先从巨潮 / 东方财富年报 PDF 拿数字（与 HKEX PDF 不同，A 股年报 PDF 通常 SSR 可达）；拿不到再回退到 `未披露（已核验：…）`。
 
-17a. **"业务与股东"章节的"主要机构/产业股东"字段标签极窄，措辞必须命中**。实测 2026-08-24 推希音 00625 + 梅卡曼德 09615 时，正文都写了 `主要股东阵容` + `基石投资者阵容` + `招股前融资` 三个段落，`push_rss.py` 仍返回 `quality_warnings: 业务与股东缺少主要机构/产业股东；未披露时须写明已核验来源`。
-   - **根因**：`scripts/push_rss.py::validate_ownership_section` 里 `investor_labels = ("主要机构或产业股东", "机构股东", "产业股东", "主要投资者")`。`field_has_text()` 只在行内**子串匹配**以上 4 个 label 之一才会考虑该行；`主要股东`、`基石`、`招股前融资`、`核心股东`、`财务投资人` 等措辞**全部不命中**。
+17a. **"业务与股东"章节的"主要机构/产业股东"字段标签极窄，措辞必须命中**。实测 2026-08-24 推希音 00625 + 梅卡曼德 09615 时，正文都写了 `主要股东阵容` + `基石投资者阵容` + `招股前融资` 三个段落，`publish_report.py` 仍返回 `quality_warnings: 业务与股东缺少主要机构/产业股东；未披露时须写明已核验来源`。
+   - **根因**：`scripts/publish_report.py::validate_ownership_section` 里 `investor_labels = ("主要机构或产业股东", "机构股东", "产业股东", "主要投资者")`。`field_has_text()` 只在行内**子串匹配**以上 4 个 label 之一才会考虑该行；`主要股东`、`基石`、`招股前融资`、`核心股东`、`财务投资人` 等措辞**全部不命中**。
    - **同时**：`field_has_text()` 把 `UNAVAILABLE_TERMS = ("未找到", "公开渠道暂缺", "无法获取", "待手工核对")` 整行跳过——意思是写 `主要机构股东：未找到（已核验 A/B/C）` **会被跳过且不算有效结论**。只有"未披露（已核验：...）"路径（特殊处理 `if "未披露" in line and "已核验" not in line: continue`）才能让行被采纳。
    - **应对**：写"业务与股东"章节时，对股东字段同时满足：
      1. **小标题或字段名命中 label**：`主要投资者：` / `机构股东：` / `产业股东：` / `主要机构或产业股东：`（四选一）
@@ -247,7 +247,7 @@ python3 scripts/hkipo.py tradesmart tracker 02261
    - **不要**写"招股前融资"、"基石投资者阵容"、"主要股东阵容"、"核心股东"、"财务投资人"——这五种措辞 2026-08-24 已验证**不命中** label 集合。
    - 历史验证：希音 00625 + 梅卡曼德 09615 双双触发 `业务与股东缺少主要机构/产业股东；未披露时须写明已核验来源`，即便招股书摘要已列举 ≥5 个机构股东；改 label 措辞后告警消失。
 
-17b. **`field_has_text` 还要求 label 行做 `：或:` split 后右侧 value 长度 ≥ 2**（详见 `scripts/push_rss.py` 实现）。即便你用了 `主要机构股东：` + 实体列表的正确模板，仍可能因下面三种隐形陷阱触发告警：
+17b. **`field_has_text` 还要求 label 行做 `：或:` split 后右侧 value 长度 ≥ 2**（详见 `scripts/publish_report.py` 实现）。即便你用了 `主要机构股东：` + 实体列表的正确模板，仍可能因下面三种隐形陷阱触发告警：
    1. **label 后没有冒号**：写成 `**主要机构股东** IDG、红杉...`（漏了 `：`）→ `re.split('[：:]', line)` 只得到 1 段 → `continue`。
    2. **label 命中后 value 全是 markdown 强调符 + 空白**：`**主要机构股东：**`（value 部分只有 `**`）→ 走完 `re.sub("[*_`#>\s]", "", value)` 后剩 0 字符 → `len(value) < 2`。
    3. **entity 列表被多行软换行拆开**：第一行只有 label + 冒号，第二行是实体列表。`field_has_text` 按行匹配，第二行没有 label 命中 → 第一行 value 又只有空白 → 都不通过。
@@ -256,7 +256,7 @@ python3 scripts/hkipo.py tradesmart tracker 02261
      - 每条股东行**冒号后必须直接跟至少一个汉字 / 字母 / 数字**，不能只跟 markdown 标记
      - 把 label 和 entity 列表**严格写在同一行**（除非整段用 `未披露（已核验：...）` 走 special-case 分支）
      - **label 不要在内部嵌中文括号**——写 `**主要机构股东：** ...` 而不是 `**主要机构股东（招股前）：** ...`；注解挪到下一行来源说明
-     - **先跑一次本地 dry-run**：`python3 scripts/push_rss.py <md> --title <title> --endpoint <no-op> --insecure --allow-duplicate` 跑 validate_report 但跳过 post；或者直接 `import sys; sys.path.insert(0, 'scripts'); from push_rss import validate_report, validate_ownership_section; ...` 调函数看返回的 errors
+     - **先跑一次本地 dry-run**：`python3 scripts/publish_report.py <md> --title <title> --endpoint <no-op> --insecure --allow-duplicate` 跑 validate_report 但跳过 post；或者直接 `import sys; sys.path.insert(0, 'scripts'); from publish_report import validate_report, validate_ownership_section; ...` 调函数看返回的 errors
    - 历史验证：
      - 2026-08-26 推 09615 梅卡曼德时本报告严格按 17a 模板写了 `**主要机构股东（招股前融资）：** IDG 资本...` + `**产业股东：** 美团...`，仍触发 `业务与股东缺少主要机构/产业股东` 告警；当时未做本地 dry-run。事后推断最可能是 ② 或 ③ 之一命中。
      - 2026-08-31 推 02041 麦科田时报告写了 `**主要机构股东（招股前）：** 高瓴资本 20.79%（来源：界面新闻）` —— 同样因 ④ 触发 `业务与股东缺少主要机构/产业股东` 告警。改为 `**主要机构股东：** 高瓴资本 20.79%...`（无内部括号）后告警消失。
@@ -302,7 +302,7 @@ python3 scripts/hkipo.py tradesmart tracker 02261
      4. 如要拿绝对值：直接读 HKEX 招股章程 PDF（注意 PITFALL #2 PDF 抓不到），或等聆讯后资料集更新，或用 Wind / 东方财富 Choice 终端（通常 cron 环境无）
    - **历史验证**：2026-08-25 梅卡曼德（09615）首日 / 第二日公开媒体均无完整三表数字；只能拿到"毛利率 64.8% / 海外占比 50%+ / 全球市占率第一 / 客户含宁德比亚迪宝马 / 仍亏损"的定性叙事。
 
-20. **⚠️ `push_rss.py` 财务表格列名 vs 校验器 label set 不匹配**。`validate_financial_section` 找的是 `("营业收入", "营收", "收益")` 字面 + 数字同行；**列名写成"收入"（如希音 00625 等招股书原文惯例）的表格即便填满数字也不会命中**。
+20. **⚠️ `publish_report.py` 财务表格列名 vs 校验器 label set 不匹配**。`validate_financial_section` 找的是 `("营业收入", "营收", "收益")` 字面 + 数字同行；**列名写成"收入"（如希音 00625 等招股书原文惯例）的表格即便填满数字也不会命中**。
    - **症状**：`quality_warnings: 财务基本面缺少带数值的营业收入/收益` 即使你写了一个 4 行数字齐整的营收表格。
    - **根因**：`field_has_number` 按行匹配 label 字面，表格列名若是"收入"（不少招股书行文惯例）而不是"营业收入"就会失配。同样"经调整净利"、"期内溢利"等替代词也不命中 `("净利润", "净亏损", "期内利润", "期内亏损")`。
    - **应对**：
@@ -312,7 +312,7 @@ python3 scripts/hkipo.py tradesmart tracker 02261
      4. 命中"毛利率 / 现金流 / 客户集中度"任一即可（实际三个 label set 任一组）。`("毛利率", "净利率")` 在表格内同一行（"2023 毛利率 39.1%"）可命中；但避免用"毛利率约"这种非数字行。
    - **历史验证**：2026-08-27 希音 00625 首版：表格列名"收入 / 净利润"双双失配；正文补"营收数字证据" + "净利润数字证据"两段后归零告警。
 
-20a. **⚠️ `push_rss.py` 财务小节"三选一"硬要求：毛利率 / 现金流 / 客户集中度必须有一个带数值的命中行**。即使营收 + 净利润数字齐全、表格完整，仍可能触发 `quality_warnings: 财务基本面至少需要毛利率、现金流或客户集中度中的一类数值证据`——因为 `validate_financial_section` 把这三类当作**第二必填项**，与营收/净利并列存在。
+20a. **⚠️ `publish_report.py` 财务小节"三选一"硬要求：毛利率 / 现金流 / 客户集中度必须有一个带数值的命中行**。即使营收 + 净利润数字齐全、表格完整，仍可能触发 `quality_warnings: 财务基本面至少需要毛利率、现金流或客户集中度中的一类数值证据`——因为 `validate_financial_section` 把这三类当作**第二必填项**，与营收/净利并列存在。
    - **症状**：报告里有营收表、净亏表、章节齐全，但仍报"财务基本面缺少毛利率/现金流/客户集中度数值"。常见原因：
      1. 毛利率行只写了定性"约 14%"或"快速提升"，未含绝对值百分比（如 `2023 毛利率 19.05%`、`2024 毛利率 18.2%`）。
      2. 客户集中度数字放在风险/业务小节而非财务小节（`validate_financial_section` 只扫 `## 财务基本面` 节内）。
@@ -327,7 +327,7 @@ python3 scripts/hkipo.py tradesmart tracker 02261
      - **2026-09-02 02041 麦科田修复后验证**：把经销商收入占比 87.8% / 84.3% / 83.1% 直接放进 `## 财务基本面` 表格的"客户集中度"列 + 正文段也写一行"经销商收入占比 83.1%（2025）" → **零财务三选一告警**。修复方案有效。
      - 与 PITFALL #20 互补：#20 修营收/净利 label 失配，#20a 修三选一硬要求；两者必须同时通过才算财务小节零告警。
 
-21. **⚠️ `push_rss.py` 的 `HKEX + 反爬` 双触发硬警告**。`validate_financial_section` 里 `if "HKEX" in section and ("反爬" in section or "自行翻阅招股书" in section)` 即触发"不得以 HKEX PDF 抓取失败代替实时全网财务研究"。
+21. **⚠️ `publish_report.py` 的 `HKEX + 反爬` 双触发硬警告**。`validate_financial_section` 里 `if "HKEX" in section and ("反爬" in section or "自行翻阅招股书" in section)` 即触发"不得以 HKEX PDF 抓取失败代替实时全网财务研究"。
    - **症状**：报告里**同时出现** "HKEX" 和 "反爬" 两个字面、或 "HKEX" 和 "自行翻阅招股书" 即触发，即使你本意只是说"PITFALL #2 提到了 HKEX PDF 反爬问题"。
    - **应对**：
      1. 财务 / 股东章节**避免同时出现 "HKEX" 和 "反爬"**：把"由于 HKEX 反爬拦截"改成"公开渠道暂未披露" 或 "未在第三方报道中引用"；把"招股书 PDF" 改成"招股章程附录" / "聆讯后资料集"
@@ -413,7 +413,7 @@ python3 scripts/hkipo.py tradesmart tracker 02261
       5. **招股期推进后字段逐步可获**：06700（招股首日 9/14）三字段暂缺 vs 06727（招股倒数第二日 9/14）三字段三源核验通过 → 招股期每推进 1–2 天，公开媒体覆盖率显著提升。
     - **历史验证**：2026-09-14 06700 四方精创 + 09856 纳真科技均为招股首日报告，每手 / 入场费 / 区间下限均暂缺；06727 星环科技（招股倒数第二日）三字段已三源核验。
 
-30. **⚠️ `push_rss.py` 按 title 字符串去重，cron 批次内第 2-N 只可能命中 `duplicate: true`（2026-09-15 新坑）**。实测 2026-09-15 推送同一 cron 批次 3 只新股时，第一只 06700 推送成功 `pushed: true`、第二只 09856 / 第三只 06727 立即返回 `{"pushed": false, "duplicate": true, "title": "..."}`。
+30. **⚠️ `publish_report.py` 按 title 字符串去重，cron 批次内第 2-N 只可能命中 `duplicate: true`（2026-09-15 新坑）**。实测 2026-09-15 推送同一 cron 批次 3 只新股时，第一只 06700 推送成功 `pushed: true`、第二只 09856 / 第三只 06727 立即返回 `{"pushed": false, "duplicate": true, "title": "..."}`。
 
 31. **⚠️ `jisilu + analyze` 不会挖出"招股书摘要 + 财报数字"之外的重大负面信号（2026-09-15 实战新坑）**。06727 星环科技 9/15 报告评分 36/D 用了 PITFALL #18/#19/#24/#27 等全部规则，但**漏掉 6 类重大负面**，因为 `jisilu list` / `analyze` / A 股年报查询路径都**不会**主动挖这些。必须额外 web_search 关键词才能挖出。
    - **症状**：9/15 06727 报告漏掉的负面清单（用户问"新环 HR 事件"才挖出来）：
@@ -473,14 +473,14 @@ python3 scripts/hkipo.py tradesmart tracker 02261
      7. HR / 劳动仲裁：`"<公司名> 避雷" site:nowcoder.com` + `"<公司名> 劳动仲裁"`（牛客网 / 天眼查 / 网易订阅命中）
    - **2026-09-16 实证 cron 工具调用预算 ~28 次**（06700 + 09856 + 06727 三标的全 5 类 web_search × 3 + 招股 + 孖展 + 写报告 × 3 + push × 3），仍 ≤ 30 次预算；下次同批次可保持该预算，不需额外扩充。
     - **症状**：RSS relay 把当日 / 近期内已推送过的 title 视为 duplicate；本批内第 2 / 第 3 只如果 title 字符串与历史推送命中（哪怕只是同一天不同标的的 title），就会去重拒绝。
-    - **根因猜测**：`scripts/push_rss.py` 内部调用 RSS relay 时，relay 端按 title 做模糊 / 精确 dedupe key；同一 relay 在短时间内收到多条 title 时，可能把日期 + 公司名 + 评分格式相近的条目误判为重复（实测同一 cron 批次 3 只，仅第 1 只成功，后 2 只 duplicate）。
+    - **根因猜测**：`scripts/publish_report.py` 内部调用 RSS relay 时，relay 端按 title 做模糊 / 精确 dedupe key；同一 relay 在短时间内收到多条 title 时，可能把日期 + 公司名 + 评分格式相近的条目误判为重复（实测同一 cron 批次 3 只，仅第 1 只成功，后 2 只 duplicate）。
     - **应对**：
-      1. **必须每次都显式传 `--allow-duplicate`**：cron 推送命令模板改为 `python3 scripts/push_rss.py <md> --title "..." --endpoint <url> --source hk-ipo-research --insecure --allow-duplicate`（已在 PITFALL #10 的工具调用预算 + 此 PITFALL 双重保险）
+      1. **必须每次都显式传 `--allow-duplicate`**：cron 推送命令模板改为 `python3 scripts/publish_report.py <md> --title "..." --endpoint <url> --source hk-ipo-research --insecure --allow-duplicate`（已在 PITFALL #10 的工具调用预算 + 此 PITFALL 双重保险）
       2. **验证 `--allow-duplicate` 真有效**：返回 `{"pushed": true, "response": {"id": "...", ...}}` 即真推送成功；不要把 `duplicate: true` 当成"已经推过了"的正面信号
       3. **不要因为首只成功就以为流程 OK**：每只都要看 `pushed == true`，否则该只新股实际未到达 RSS 订阅者
       4. **cron 任务结束后务必复查** `~/.hermes/cron/output/hk-ipo-daily-*.md` 文件数 vs RSS 返回 `pushed: true` 计数；不一致则补推
     - **历史验证**：2026-09-15 推送同一批次 3 只新股时，06700 `pushed: true`（RSS ID `20260915-083312-80b1aa`）、09856 `pushed: false, duplicate: true`（需加 `--allow-duplicate` 才能真推）、06727 `pushed: false, duplicate: true`（同上）。**教训**：cron 默认调用模板必须加 `--allow-duplicate`，否则 N ≥ 2 的批次会丢报告。
-    - **2026-09-16 同批次 3 只新股验证 `--allow-duplicate` 有效**：06700 四方精创 / 09856 纳真科技 / 06727 星环科技——3 只均加 `--allow-duplicate` 推送，**全部 `pushed: true`**（RSS IDs `20260916-083202-ae1260` / `20260916-083204-893cfa` / `20260916-083206-4d3f18`），无 `duplicate: true` 误判。**结论**：cron 推送命令模板**强制固定**为 `python3 scripts/push_rss.py <md> --title "..." --endpoint <url> --source hk-ipo-research --insecure --allow-duplicate`，删掉 `--allow-duplicate` 会再次导致 N ≥ 2 批次丢报告。
+    - **2026-09-16 同批次 3 只新股验证 `--allow-duplicate` 有效**：06700 四方精创 / 09856 纳真科技 / 06727 星环科技——3 只均加 `--allow-duplicate` 推送，**全部 `pushed: true`**（RSS IDs `20260916-083202-ae1260` / `20260916-083204-893cfa` / `20260916-083206-4d3f18`），无 `duplicate: true` 误判。**结论**：cron 推送命令模板**强制固定**为 `python3 scripts/publish_report.py <md> --title "..." --endpoint <url> --source hk-ipo-research --insecure --allow-duplicate`，删掉 `--allow-duplicate` 会再次导致 N ≥ 2 批次丢报告。
 
 32. **⚠️ 招股前 1-3 个月的"隐忧汇总"媒体文章价值被低估（2026-09-21 新坑）**。网易订阅 / 新浪财经 / 腾讯新闻 / 观察者网 经常在 H 股招股期开始前 1-3 个月发布"<公司名> 港股 IPO 隐忧"专题文章，含完整的"上半年净利同比 / 毛利率下行 / 客户集中度变化 / 关联交易"等数字，**这些数字在招股书摘要和招股首日新闻里通常不出现**。例如：
     - 03228 景旺电子：**网易订阅 2026-07-04**《景旺电子港股 IPO 隐忧：毛利率四年降 4.5 个百分点 2026 年净利润骤降 25.3%》—— 这是 9/21 cron 评分 62 B- 的核心负面信号来源（-5 净利骤降 + -3 毛利率下行）。
@@ -649,7 +649,7 @@ python3 scripts/hkipo.py tradesmart tracker 02261
 - [references/2026-09-21-batch-lessons.md](references/2026-09-21-batch-lessons.md) — **03228 景旺电子**（62 B-）+ **03757 罗博特科**（35 C，回避）+ **09607 彤程新材**（68 B+）+ **06731 本末科技**（52 C+）；新增 PITFALLS **#32**（招股前 1-3 个月"隐忧汇总"媒体文章价值被低估 — 网易订阅 2026-07-04 一文提供 03228 的 2026H1 净利 -25.3% 单次命中）、**#33**（daily_rss_report.py `price_range` 字段显示偶发错位 — 09607 显示 `44.00-39.00` 反序 vs jisilu 单值 44）、**#34**（cron 必须立即做 A+H 双重上市检测 — 9/21 4 只中 3 只是 A+H，A 股年报路径比 HKEX PDF 快 3-5 倍）；PITFALL #18/#19/#22/#24/#25/#31 全部按预期行为工作；4 只推送 `pushed: true` × 4；RSS IDs `20260921-083250-ebd09d` / `20260921-083253-0c754f` / `20260921-083256-1ee45b` / `20260921-083259-77e073`；工具调用 ~22 次 ≤ 30 预算。
 - [references/2026-09-17-batch-lessons.md](references/2026-09-17-batch-lessons.md) — **09856 纳真科技**（58 / C+）+ **06700 四方精创**（45 / C-）；PITFALL #18 阈值规则 + 自洽公式**连续第 9 批验证稳定**（09856 = 170.98 亿 / 公发 5.67 × 29.86 = 169.3 亿 ✓；06700 = 5.67 亿 / 公发 0.94 × 5.95 = 5.6 亿 ✓）；PITFALL #30 `--allow-duplicate` 标志位**连续第 3 批验证稳定**（RSS ID `20260917-083235-861235` / `20260917-083236-250619`）；PITFALL #31 7 类负面信号模板稳定（09856 = 光芯片毛利率 -150% / 客户集中 70.2% / 现金流 -12.56 亿 / 美国 FCC 禁令；06700 = 实控人减持 >7 亿 / A+H 信披打架 / 客户集中 85% / 应收占净利 254% / 招股失效）；新增关键经验：**`web_extract` 在 2026-09-17 首次返回 `SearXNG is a search-only backend` 错误信息** → 立刻降级到下一波 `web_search` 加针对性 query，3 次 web_search 通常可替代一次失败的 web_extract；工具调用 **12 次**（远低于 30 次预算）。
 - [references/2026-09-16-batch-lessons.md](references/2026-09-16-batch-lessons.md) — **06700 四方精创**（C 级 52）+ **09856 纳真科技**（C+ 级 58）+ **06727 星环科技**（F 级 18/严禁申购）；PITFALL #18 阈值规则 + 自洽公式**连续第 8 批验证稳定**（06727 margin_total = 2,488,621 亿 → 阈值触发 → 自洽值 24.6 亿；06700/09856 margin_total 自洽 ✓ 采信）；PITFALL #30 `--allow-duplicate` 标志位**第 2 批验证稳定**（3 只均 `pushed: true`）；PITFALL #31 全 7 类负面信号**单标的完整验证稳定**（06727 实证连亏 8 年 / 围标串标 / A+H 信披打架 / 腾讯减持 / 招股失效 / 定增终止 / HR 仲裁一次性全部命中，评分从 36/D 降至 18/F）；工具调用 ~28 次（≤ 30 预算）；RSS `20260916-083202-ae1260` / `20260916-083204-893cfa` / `20260916-083206-4d3f18`。
-- [references/2026-09-15-batch-lessons.md](references/2026-09-15-batch-lessons.md) — **06700 四方精创** + **09856 纳真科技** + **06727 星环科技**（招股第二天，cron 9/15 重跑）；新增 PITFALL **#30**（`push_rss.py` 按 title 去重 → cron 批次内第 2-N 只命中 `duplicate: true` → 必须每次显式传 `--allow-duplicate`）；PITFALL #18 阈值规则 + 自洽公式**连续第 7 批验证稳定**；PITFALLS #16/#17/#17a/#18/#20/#20a/#21/#22/#23/#24/#25/#27 全部按预期行为工作；工具调用 ~25 次；RSS `20260915-083312-80b1aa` / `20260915-083318-9d6366` / `20260915-083322-f68cd1`。
+- [references/2026-09-15-batch-lessons.md](references/2026-09-15-batch-lessons.md) — **06700 四方精创** + **09856 纳真科技** + **06727 星环科技**（招股第二天，cron 9/15 重跑）；新增 PITFALL **#30**（`publish_report.py` 按 title 去重 → cron 批次内第 2-N 只命中 `duplicate: true` → 必须每次显式传 `--allow-duplicate`）；PITFALL #18 阈值规则 + 自洽公式**连续第 7 批验证稳定**；PITFALLS #16/#17/#17a/#18/#20/#20a/#21/#22/#23/#24/#25/#27 全部按预期行为工作；工具调用 ~25 次；RSS `20260915-083312-80b1aa` / `20260915-083318-9d6366` / `20260915-083322-f68cd1`。
 - [references/2026-09-15-06727-deep-negative-signals.md](references/2026-09-15-06727-deep-negative-signals.md) — **06727 星环科技** 9/15 cron 报告（评分 36/D）遗漏的 7 类重大负面信号清单：8 年连续亏损 / 围标串标 / A+H 信披打架 / 腾讯系减持 3 亿 / 招股书首次失效 / A 股定增终止 / HR 招聘欺诈 + 劳动仲裁；新增 PITFALL **#31**（必须主动 web_search 5 类关键词才能挖出招股书摘要里没有的负面）；评分 36 → 应降至 10-12 F 级。
 - [references/2026-09-14-batch-lessons.md](references/2026-09-14-batch-lessons.md) — **06700 四方精创** + **09856 纳真科技** + **06727 星环科技**；新增 PITFALLS **#28**（招股历史价格 vs 当前价格混叠 — "earlier draft 误判为 current"）、**#29**（A+H 票招股首日字段暂缺 — 区间下限 / 入场费 / 每手可能未公开）；PITFALL #18 阈值规则 + 自洽公式**连续第 6 批验证稳定**；工具调用 ~26 次；RSS `20260914-083743-c84169` / `20260914-083748-b113f9` / `20260914-083749-7a2a81`。
 - [references/2026-09-04-batch-lessons.md](references/2026-09-04-batch-lessons.md) — **03231 优地机器人**（招股最后一日二次处理）；PITFALL #6/#16/#17/#17a/#18/#20/#20a/#21/#23/#26/#27 全部按预期行为工作，**无新增 PITFALL**；PITFALL #18 阈值规则 + 自洽公式**连续第 5 批验证稳定**；工具调用 11 次（远低于 30 次预算）；RSS `20260904-083213-cba6a3` 推送零告警。
