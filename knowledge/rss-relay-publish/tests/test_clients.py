@@ -8,6 +8,10 @@ from unittest.mock import patch
 PACKAGE = Path(__file__).resolve().parents[1]
 ROOT = PACKAGE.parents[1]
 CANONICAL = PACKAGE / 'scripts/rss_relay_client.py'
+CONSUMERS = [ROOT / name / 'scripts/rss_relay_client.py' for name in (
+    'personal-tools/bilibili-subtitle-rss', 'hk-ipo-research', 'finance-macro/a-share-macro-impact-skill',
+    'finance-macro/bond-market-macro-impact-skill', 'personal-tools/waytoagi-update-log')]
+CONSUMERS += [ROOT.parent / name / 'rss_relay_client.py' for name in ('daily-review', 'stock-info-dingding')]
 spec = importlib.util.spec_from_file_location('public_client', CANONICAL)
 client = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(client)
@@ -15,14 +19,18 @@ spec.loader.exec_module(client)
 
 class ClientTests(unittest.TestCase):
     def test_generated_shims_match_canonical(self):
-        consumers = [ROOT / name / 'scripts/rss_relay_client.py' for name in (
-            'personal-tools/bilibili-subtitle-rss', 'hk-ipo-research', 'finance-macro/a-share-macro-impact-skill',
-            'finance-macro/bond-market-macro-impact-skill', 'personal-tools/waytoagi-update-log')]
-        consumers += [ROOT.parent / name / 'rss_relay_client.py' for name in ('daily-review', 'stock-info-dingding')]
+        consumers = CONSUMERS
         for path in consumers:
             if path.exists():
                 with self.subTest(path=path):
                     self.assertEqual(path.read_bytes(), CANONICAL.read_bytes())
+
+    def test_sync_script_tracks_same_consumer_list(self):
+        sync_path = PACKAGE / 'scripts/sync_shims.py'
+        sync_spec = importlib.util.spec_from_file_location('rss_sync_shims', sync_path)
+        sync = importlib.util.module_from_spec(sync_spec)
+        sync_spec.loader.exec_module(sync)
+        self.assertEqual(sorted(map(str, sync.consumer_paths())), sorted(map(str, CONSUMERS)))
 
     def test_locate_and_stdin_preserve_text_without_shell_interpolation(self):
         temp_root = ROOT / '.cache/rss-client-tests'

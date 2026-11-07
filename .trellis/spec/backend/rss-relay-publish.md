@@ -48,7 +48,7 @@ HTTP errors from readback must never be mistaken for POST rejection. Catch `http
 
 Use local fake HTTP servers and temporary state. Cover id/full-content confirmation, source/channel namespaces, key conflicts, same-key concurrency, crash pending recovery, lost/truncated/malformed POST response, explicit rejection, 404 readback, ambiguous remote matches, unwritable state, dry-run, preserved CRLF and package upgrade receipt retention. Execute core tests on Windows and Linux.
 
-Migration tests must exercise business entry -> compatibility shim -> subprocess CLI -> fake relay. Preserve validators, old outputs and business receipts; macro duplicates must still allow dashboard retry. Serialize WaytoAGI read/merge/replace under its SQLite lock, not just atomic file replacement. Canonical shim is `scripts/rss_relay_client.py`; verify generated consumers remain consistent.
+Migration tests must exercise business entry -> compatibility shim -> subprocess CLI -> fake relay. Preserve validators, old outputs and business receipts; macro duplicates must still allow dashboard retry. Serialize WaytoAGI read/merge/replace under its SQLite lock, not just atomic file replacement. Canonical shim is `scripts/rss_relay_client.py`; `scripts/sync_shims.py` propagates it to every consumer (including sibling projects outside the repo), `tests/test_clients.py` verifies byte equality, and the repo pre-commit hook (githooks/) rejects commits with drifted copies.
 
 ## 7. Wrong vs Correct
 

@@ -47,7 +47,7 @@ unknown 表示 POST 可能成功或已有 pending。重跑完全相同的命令�
 
 ## 既有入口迁移
 
-兼容脚本附带 rss_relay_client.py 定位 shim：只 subprocess 调公共 CLI，不含 HTTP；其真源是公共包 scripts/rss_relay_client.py。源码仓库能自动发现 knowledge/rss-relay-publish；独立安装时部署公共包为同级 rss-relay-publish，或显式设置 RSS_RELAY_SKILL_DIR。不得找不到公共包时回退旧 POST。维护 shim 时同步全部副本，tests/test_clients.py 检查一致性。
+兼容脚本附带 rss_relay_client.py 定位 shim：只 subprocess 调公共 CLI，不含 HTTP；其真源是公共包 scripts/rss_relay_client.py。源码仓库能自动发现 knowledge/rss-relay-publish；独立安装时部署公共包为同级 rss-relay-publish，或显式设置 RSS_RELAY_SKILL_DIR。不得找不到公共包时回退旧 POST。维护 shim 时运行 `python knowledge/rss-relay-publish/scripts/sync_shims.py` 同步全部副本（含仓库外兄弟项目），`tests/test_clients.py` 检查一致性；仓库 pre-commit 钩子（githooks/，core.hooksPath 已指向）在提交涉及 shim 时自动校验，副本漂移会被拒绝提交。
 
 | 来源 | 公共键/原业务职责 |
 |---|---|

@@ -1,0 +1,45 @@
+#!/bin/sh
+# RSS shim 一致性守卫：提交涉及任何 rss_relay_client.py 时，
+# 校验索引（即将提交的内容）里所有业务副本与真源逐字节一致，不一致则拒绝提交。
+# 真源：knowledge/rss-relay-publish/scripts/rss_relay_client.py
+# 修复：python knowledge/rss-relay-publish/scripts/sync_shims.py
+# 仓库外兄弟项目（daily-review、stock-info-dingding）的副本不在 git 内，
+# 由 tests/test_clients.py 与 sync_shims.py --check 覆盖。
+set -u
+
+staged=$(git diff --cached --name-only)
+case "$staged" in
+  *rss_relay_client.py*) : ;;
+  *) exit 0 ;;
+esac
+
+CANONICAL="knowledge/rss-relay-publish/scripts/rss_relay_client.py"
+canonical_blob=$(git rev-parse -q --verify ":$CANONICAL" 2>/dev/null)
+if [ -z "$canonical_blob" ]; then
+  echo "[pre-commit] 真源 $CANONICAL 不在本次提交中（被删除？）。如确要删除请先移除全部副本与守卫测试。" >&2
+  exit 1
+fi
+
+drift=0
+for path in \
+  "personal-tools/bilibili-subtitle-rss/scripts/rss_relay_client.py" \
+  "hk-ipo-research/scripts/rss_relay_client.py" \
+  "finance-macro/a-share-macro-impact-skill/scripts/rss_relay_client.py" \
+  "finance-macro/bond-market-macro-impact-skill/scripts/rss_relay_client.py" \
+  "personal-tools/waytoagi-update-log/scripts/rss_relay_client.py"
+do
+  blob=$(git rev-parse -q --verify ":$path" 2>/dev/null || true)
+  # 索引中没有该副本 = 提交里不存在（新消费者按约定不再复制 shim），不算漂移
+  [ -z "$blob" ] && continue
+  if [ "$blob" != "$canonical_blob" ]; then
+    echo "[pre-commit] 副本与真源不一致：$path" >&2
+    drift=1
+  fi
+done
+
+if [ "$drift" -ne 0 ]; then
+  echo "" >&2
+  echo "修复：python knowledge/rss-relay-publish/scripts/sync_shims.py 同步后重新 git add。" >&2
+  exit 1
+fi
+exit 0
