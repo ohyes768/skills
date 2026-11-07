@@ -78,3 +78,65 @@ cd ~/.hermes/skills/daily-pick-brief && python3 scripts/daily_pick.py --latest-a
 
 - 不得修改 SKILL.md、daily_pick.py、历史 JSON；不得额外推送第二遍。
 - 分析事实只来自 skill 读到的财报原文，不得凭记忆编造财务数据。
+
+## 运行时与迁移坑位（2026-11-07 实测）
+
+### 路径契约：`.env` 与 `data/` 在 skill 根目录，不在 `scripts/` 下
+
+脚本用 `Path(__file__).resolve().parent` 定位时会把 `.env`、`data/` 当成 `scripts/` 的子目录。
+目录契约是 skill 根目录持有 `.env` + `data/`，`scripts/` 下只有脚本与 CSV。
+正确写法是 `_skill_dir = Path(__file__).resolve().parent.parent`，
+`HISTORY_PATH` 与 `.env` 都锚到 `_skill_dir`；`sw_industry_mapping.csv` 仍锚 `scripts/`。
+
+**症状**：webhook 读不到 → 报「webhook 未配置或不是 http(s) 完整 URL」；
+历史文件不存在 → 按空历史运行 → `DAILY_PICK_ONCE_DAILY=1` 守卫失效，有重复推送风险。
+
+### 缺 `import requests` 会伪装成「无可推荐」
+
+`requests` 只在函数体内调用而没有顶层导入时，三处 HTTP 调用（人气榜 / 腾讯行情 / 东财公告）
+抛 `NameError`，被 `run_pipeline` 的 `except Exception` 捕获后 `return None, ...`。
+**表面上是一条正常的「今日无可推荐」，实际是拉数据全失败。**
+判断方法：日志里若同时出现 `拉取数据失败` 且选股为空，先查依赖导入，不要当成真的没有推荐。
+
+### 宿主 python3 没有 akshare，必须用 stock-info 镜像
+
+宿主机 `python3`（3.11）无 `akshare`；`stock-info:latest` 镜像内有 `akshare 1.20.35`。
+选股主流程需在镜像内跑：
+
+```bash
+docker run --rm --network nginx_nginx-bridge \
+  -v ~/.hermes/skills/daily-pick-brief:/skill \
+  -v ~/skills/personal-tools/dingtalk-push:/opt/dingtalk-push:ro \
+  -v ~/.local/state/dingtalk-push:/state \
+  -v <摘要目录>:/digests:ro \
+  -e DINGTALK_PUSH_SKILL_DIR=/opt/dingtalk-push \
+  -e DINGTALK_PUSH_STATE_DIR=/state \
+  -w /skill stock-info:latest python3 scripts/daily_pick.py
+```
+
+### 钉钉回执库是容器 root 所有，宿主 CLI 写不进去
+
+`~/.local/state/dingtalk-push/receipts.sqlite3` 由容器内 root 创建，
+宿主直接跑 `dingtalk_send.py` 会报 `OperationalError: attempt to write a readonly database`。
+推摘要也在容器内做（webhook 经 `--env-file` 传入，**绝不放 argv**）。
+
+### 摘要推送的 webhook 环境变量名不一致
+
+`.env` 里是 `DAILY_PICK_WEBHOOK`，公共 CLI 认 `DINGTALK_WEBHOOK`。
+容器内用 `--env-file`（文件里写 `DINGTALK_WEBHOOK=...`）传入，避免命令行泄露。
+
+### 标题必须含关键词「财报」
+
+机器人安全设置是自定义关键词，标题与正文都要覆盖。
+主推送标题 `【财报阅读】…`；两个摘要分别是 `【财报分析】…`、`【财报行业学习】…`。
+
+## 两个 AI skill 的验收口径
+
+- `financial-statement-analysis`：以 `run_pipeline.py report --independent-review` 返回
+  `quality_status=verified` + `terminal=true` 为完成标志。定性段落**禁止出现任何数字**
+  （含静态数字，只有 statement/table 能放数字）；且不得写「利润主要来自…」
+  「同比改善的主要驱动…」「确认转固」这类未获支持的归因，验收器会直接拦截。
+  `## 核心结论` 句子数 = statements 数 + 定性段落句数，须落在 3–5（4 条 statement 时定性段落只能 1 句）。
+- `annual-report-industry-learning`：摘要 1,200–1,600 字（硬上限 1,800），
+  六节软预算用 `assemble_report.py` 检查；原文部分不受字数限制，
+  正文里不能出现 `【PDF 第 N 页】` 内联标记，页码放元数据或小节标题。
