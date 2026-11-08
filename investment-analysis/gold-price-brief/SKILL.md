@@ -7,6 +7,8 @@ description: 黄金走势每日研判播报 skill。每日取国内金价/伦敦
 
 数据一律来自取数脚本实时返回，禁止凭模型记忆回答价格类事实；缺失字段保留"资料不足"，不估算、不切换数据源。默认中文输出，注明数据时间（Asia/Shanghai）。结论仅供研究参考。
 
+> 运行环境：python3 + pandas + numpy + requests + openpyxl（均为预装依赖）。`openpyxl` 是 pandas 读写 SSGA 的 `.xlsx` 净值/持仓文件的引擎，缺失时取数直接失败，不要在运行时临时安装。
+
 Canonical source：本包。迁移自 `stock-info-dingding/gold_price_push.py`（2026-11-07）；旧入口在调度切换完成前保留兼容，两处不得各自独立演进。
 
 ## 流程
