@@ -67,12 +67,58 @@ cd ~/.hermes/skills/daily-pick-brief && python3 scripts/daily_pick.py --latest-a
 按 `annual-report-industry-learning` skill 执行，输入：年报 PDF URL。
 产物 Markdown 存 `data/reports/{code}-{period}-industry-{yyyymmdd}.md`。
 
-### 第 5 步：推送分析结果
+### 第 5 步：全文进 RSS，钉钉只推摘要 + 链接
 
-- 每份分析完成后：摘要（第一部分/结论段）经公共 `dingtalk-push` CLI 推财报群，
-  关键词「财报」必须在标题中（如「【财报分析】润建股份（002929）」「【财报行业学习】…」）。
+两份分析用**同一套投递契约**，顺序固定为**先 RSS、后钉钉**。钉钉群只承载摘要，
+全文一律落到 RSS 详情页，由「阅读完整分析」链接进入。
+
+1. **先把全文发布到 RSS relay**（`channel=caibao`、`source=daily-pick`）：
+
+   ```bash
+   python3 ~/skills/knowledge/rss-relay-publish/scripts/rss_publish.py publish \
+     --file data/reports/<code>-<period>-<fsa|industry>-<yyyymmdd>.md \
+     --title '<名称> <报告期> 财报分析|行业学习' \
+     --channel caibao --source daily-pick \
+     --dedupe-key 'daily-pick:<code>:<period>:<fsa|industry>:<yyyymmdd>' \
+     --url '<该期报告 PDF 直链>'
+   ```
+
+   读 stdout JSON：`status` 为 `published`/`duplicate` **且 `detail_url` 非空**才算成功，
+   记下 `detail_url`（`https://web.duomi77.cn:9443/rss/view/<id>`，15 天有效）。
+   首次接新环境先加 `--dry-run` 确认 payload，再正式发。
+   本部署是**自签证书**：不带 `--insecure` 会在预检阶段报
+   `failed / preflight_failed / Could not read remote posts`（TLS 校验失败，实际一篇都没发）；
+   有正式 CA 时才改用 `--ca-file`。
+
+2. **钉钉只推摘要**，正文按模板拼，**不要自由发挥首行与排版**：
+
+   ```markdown
+   ### 📊 AI 财报分析：{名称}（{报告期}）
+
+   {摘要原文}
+
+   [阅读完整分析]({detail_url})
+   ```
+
+   行业学习把首行换成 `### 📚 AI 财报行业学习：{名称}（{报告期}）`，
+   链接文案换成 `[阅读完整学习]({detail_url})`，其余结构相同。
+
+   - 财报分析摘要 = 报告里第一个 `## 核心结论` 到下一个 `## ` 之间的原文（通常 4–5 条、
+     约 400–600 字）；没有该标题时取报告开头 300 字。
+   - 行业学习摘要 = `## 第一部分：AI 行业学习摘要` 到 `## 第二部分` 之间的原文
+     （约 1,200–1,600 字），不带原文部分。
+   - 摘要**照抄原文**：保留原句、原数字、原顺序，不压缩、不改写、不另加小标题或表格。
+   - 链接行独占正文最后一行：财报分析 `[阅读完整分析]({detail_url})`，
+     行业学习 `[阅读完整学习]({detail_url})`；
+     RSS 失败或没拿到 `detail_url` 时一律退化为 `[财报原文]({PDF 直链})`。
+   - 推送标题：`【财报分析】{名称}（{代码}）` / `【财报行业学习】{名称}（{代码}）`。
+
+3. **不得把全文塞进钉钉**：钉钉 markdown 单条有长度上限，`industry-learning.md`
+   约 50KB（摘要 + 所引原文全文），直推会截断或整条失败。全文只有第 1 步一个出口。
+   标题必须含关键词「财报」（「【财报分析】…」「【财报行业学习】…」），否则 `--keyword` 预检直接拦。
+
 - 第 3/4 步互不依赖：任一失败记下原因继续另一边，不影响选股主推送已成功的事实。
-- 最终回复只写：选股结果 + 两个分析是否完成（失败写原因），不要粘贴全文。
+- 最终回复只写：选股结果 + 两个分析是否完成 + 各自的 `detail_url`（失败写原因），不要粘贴全文。
 
 ## 边界
 
