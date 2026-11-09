@@ -3,7 +3,7 @@
   "name": "financial-analysis-f10-runtime-optimization",
   "title": "F10 财报分析：减少源码探索并完善分析证据与运行效率",
   "description": "记录 b6a632fe 会话复盘，规划写作合同、分析包、语义证据和宿主终止优化；本次仅建档。",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -11,7 +11,7 @@
   "creator": "codex",
   "assignee": "codex",
   "createdAt": "2026-10-28",
-  "completedAt": null,
+  "completedAt": "2026-11-09",
   "branch": null,
   "base_branch": "master",
   "worktree_path": null,
@@ -21,6 +21,6 @@
   "children": [],
   "parent": null,
   "relatedFiles": [],
-  "notes": "",
+  "notes": "仓库侧实现、spec、负例与文档全部完成（FSA 148 项 pytest 全绿，spec 已写覆盖分层/analysis_pack/顶层 next_cursor/修复预算/终态语义）。归档时残留仅外部依赖：A6 性能回放（同一留档 ≥3 次 MiniMax-M3.1-Flash，记录耗时中位数、工具/API 次数、源码访问、可得 token、语义质量）未执行；stock-info-dingding 的 f10-v3 提示词本地已改未部署；Hermes 终态停循环与读源码权限未改。未做的实测不计入完成声明，不把旧基线写成已下降。",
   "meta": {}
 }
