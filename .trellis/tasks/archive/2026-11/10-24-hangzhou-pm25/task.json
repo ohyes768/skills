@@ -3,7 +3,7 @@
   "name": "hangzhou-pm25",
   "title": "杭州 PM2.5 实况与五天趋势脚本及 Skill",
   "description": "开发脚本与 Skill，输出杭州 PM2.5 当前情况、未来五天趋势，并以通俗语言解释天气影响；区分实测与模型预报。",
-  "status": "in_progress",
+  "status": "completed",
   "dev_type": null,
   "scope": null,
   "package": null,
@@ -11,7 +11,7 @@
   "creator": "codex",
   "assignee": "codex",
   "createdAt": "2026-10-24",
-  "completedAt": null,
+  "completedAt": "2026-11-09",
   "branch": null,
   "base_branch": "master",
   "worktree_path": null,
@@ -20,7 +20,11 @@
   "subtasks": [],
   "children": [],
   "parent": null,
-  "relatedFiles": ["environment/hangzhou-pm25", "README.md", ".trellis/spec/backend/hangzhou-pm25.md"],
+  "relatedFiles": [
+    "environment/hangzhou-pm25",
+    "README.md",
+    ".trellis/spec/backend/hangzhou-pm25.md"
+  ],
   "notes": "Implementation complete: stdlib CLI, CNEMC observations, CAMS five-date forecast, weather explanations, JSON/Markdown, replay and 24 passing tests. Independent review issue fixed. User authorized a PM2.5-only commit while preserving pre-existing staged log cleanup; no push or publication requested.",
   "meta": {}
 }
