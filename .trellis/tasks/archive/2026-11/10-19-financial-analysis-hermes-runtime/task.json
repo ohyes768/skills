@@ -1,0 +1,31 @@
+{
+  "id": "financial-analysis-hermes-runtime",
+  "name": "financial-analysis-hermes-runtime",
+  "title": "财报 Skill Hermes 运行流程收敛与耗时优化",
+  "description": "基于Hermes MiniMax-M3运行导出，规划统一编排、事实构造、报告同源生成、有限修复与运行时只读边界。",
+  "status": "completed",
+  "dev_type": "backend",
+  "scope": "financial-statement-analysis",
+  "package": null,
+  "priority": "P1",
+  "creator": "codex",
+  "assignee": "codex",
+  "createdAt": "2026-10-19",
+  "completedAt": "2026-11-09",
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    ".trellis/tasks/10-19-financial-analysis-hermes-runtime/prd.md",
+    ".trellis/tasks/10-19-financial-analysis-hermes-runtime/design.md",
+    ".trellis/tasks/10-19-financial-analysis-hermes-runtime/implement.md",
+    ".trellis/tasks/10-19-financial-analysis-hermes-runtime/research/runtime-evidence.md"
+  ],
+  "notes": "仓库侧实现、测试与文档全部完成并已按用户授权提交推送。归档时残留仅外部依赖：同模型新旧各3次回放对比（由 10-28 A6 承接）、Hermes 宿主终态循环与只读隔离（2026-10-20 用户已撤回原宿主方案，改由 10-28 外部依赖登记）、NAS/Hermes 部署未执行。PDF 相关夹具项随 10-21 F10 单一来源迁移废止。未做的实测不计入完成声明。",
+  "meta": {}
+}

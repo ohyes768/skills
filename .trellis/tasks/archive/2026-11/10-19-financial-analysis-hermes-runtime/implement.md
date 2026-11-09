@@ -26,7 +26,7 @@ Hermes 核心、调用端、模型配置不变；不宣称真实模型性能基�
 - [x] fact_inputs.json 合同与示例 references/fact-inputs-example.md；METRIC_CONTRACTS 公开于 financial_schema.py；新增 build_financials.py。
 - [x] 回归期初/期末、本期/比较期、归属/范围、null、扫描证据降级、错误行列定位（tests/test_build_financials.py，13 例）；attribution 不可改写由合同强制。
 - [x] pack_context.py 页码范围语法（1,3,5-9）与文档边界校验；fetch_pdf 缓存核对 requested_url。
-- [ ] 真实混合表边界夹具：依赖实际 PDF 样本，待样本到位后补（只对实证边界缺陷修改 inspect/extract）。
+- [x] 真实混合表边界夹具：本项随 PDF 路径一并废止——10-21 已把数据源收敛为 F10 单一来源（见该任务 prd 与 .trellis/spec/backend/financial-statement-analysis.md），PDF 提取/夹具不再存在，改为按 F10 覆盖分层（no_data/fetch_failed/字段 null/未映射/未计算）的离线夹具验证。
 
 ## P2：正文和claims同源生成 ✅
 
@@ -44,10 +44,10 @@ Hermes 核心、调用端、模型配置不变；不宣称真实模型性能基�
 
 - [x] 全量 pytest 218 例（保留 160 例原回归）、Ruff 全过、skill-creator quick_validate 通过。
 - [x] 新离线端到端：构造→标准化→计算→渲染→校验→review verified；两轮失败预算停止链（tests/e2e/test_pipeline_offline.py）。
-- [ ] 用固定凡拓样本复现原失败，添加金盾样本：需要真实 PDF，待用户提供或另行执行。
-- [ ] 同 MiniMax-M3 新旧各 3 次运行对比耗时/轮次/usage：需要 Hermes 环境，另行执行。
-- [ ] 宿主只读隔离 + 专用 Hermes profile 试跑：另行执行，未验证前不宣称受保护运行。
-- [ ] 按用户指令提交/部署，不自行发布。
+- [x] 用固定凡拓样本复现原失败、添加金盾样本：本项随 PDF 路径一并废止（同 P1 夹具项），样本复现改为 F10 留档下的离线端到端与变异回归，不再保留 PDF 样本依赖。
+- [ ] 同 MiniMax-M3 新旧各 3 次运行对比耗时/轮次/usage：转外部依赖，见文末《收尾与外部依赖》。实测基线与目标已由 10-28-financial-analysis-f10-runtime-optimization 的 A6 承接，本任务不再重复执行。
+- [x] 宿主只读隔离 + 专用 Hermes profile 试跑：本项为已撤回方案——2026-10-20 用户撤回宿主补丁与客户端专用模式（见文首《回滚点》），因此不作为本任务验收项；宿主侧终态循环与只读隔离改由 10-28 的外部依赖登记承接。
+- [x] 按用户指令提交/部署：仓库内改动已按用户授权提交并推送；NAS/Hermes 部署未执行，按用户指令不自行发布。
 
 ## 验证命令（Windows）
 
@@ -78,3 +78,15 @@ NAS 已安装实际运行环境，空闲时重启 profile 网关并检查能力�
 未运行真实模型的全财报性能对比；既有 P4 其他验收仍待完成，不归档整个任务。
 
 每阶段保留旧CLI/只读旧产物；产物schema或校验器版本改变时新建运行目录。测试失败停在对应阶段，不能通过改验收文件、提升权限或扩大豁免继续运行。新profile未验收不替换日常任务。
+
+## 收尾与外部依赖（2026-11-09）
+
+本任务在本仓库范围内的实现、测试与文档已全部完成并随用户授权提交推送。归档时未完成项仅剩外部依赖，均已登记且不阻塞本仓库工作：
+
+| 遗留项 | 现状 | 接续位置 |
+|---|---|---|
+| 同模型新旧各 3 次运行的耗时/轮次/usage 对比 | 未执行。仓库侧已具备留档、紧凑分析包与统一游标，可支撑回放；缺的是模型侧实测 | 由 10-28-financial-analysis-f10-runtime-optimization 的 A6 承接（同一留档、MiniMax-M3.1-Flash、≥3 次回放） |
+| 宿主终态循环与只读隔离 | Skill 侧已在 verified 时返回 terminal=true、next_action=null；它不能关闭宿主工具循环或收回读源码权限 | 10-28 的 research/external-dependencies.md 已登记 Hermes 与 stock-info-dingding 两处外部改动 |
+| NAS/Hermes 部署 | 未执行，按用户指令不自行发布 | 需要时单独授权，不在本任务验收范围 |
+
+未完成的实测**不计入完成声明**：归档只表示仓库侧工作收口，不代表真实模型性能或受保护运行已被验证。
