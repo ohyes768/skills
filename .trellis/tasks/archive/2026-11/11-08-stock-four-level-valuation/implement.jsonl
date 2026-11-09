@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/index.md","reason":"Discover relevant backend contracts"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"No duplicated sibling pipeline; single arithmetic owner"}
+{"file":"investment-analysis/basic-quality-rating/references/output-contract.md","reason":"Read-only upstream eleven-field compatibility and source boundaries"}
+{"file":"investment-analysis/financial-statement-analysis/references/artifact-contracts.md","reason":"Read-only upstream financial evidence identity"}
