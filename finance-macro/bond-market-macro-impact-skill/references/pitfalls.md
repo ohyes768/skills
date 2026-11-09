@@ -242,3 +242,56 @@ print('方向词2命中:', '<方向词2>' in sec)
 - 涉及"外部约束数值"这一复盘维度时（SKILL.md 强制要求的第 ⑤ 项），若发现修订，直接在表中加注
 
 **反例**：❌ "上期收窄 10.43bp + 本期收窄 18.03bp = 累计收窄 28.46bp"（跨报告相加）；❌ 不核对就沿用上期报告里的 -3.4403% 当 10-19 的真值。
+
+## 19. 月度「疑似回填」数据 —— 别把与上月完全相同的值当成本月真实变化（2026-11-09 实战新增）
+
+**现象**（2026-11-09）：本期 `evidence.json` 显示 2026-10 期八项月度指标全部 status=ok —— PMI 49.3 / 工业 5.5% / FAI -9.7% / 社零 1.1% / CPI 0.7% / PPI 5.7% / M2 7.2% / M1 3.2%。表面看"10 月数据已落地"。但**其中工业、FAI、社零、M2、M1 五项的 10 月值与 9 月逐项完全相同**，且 API 自身标注 `next_release_at = 2026-11-13`（说明官方口径 11-13 才发）。只有 PMI（10-31 发布）、CPI / PPI（11-09 发布）三项是真实发布。
+
+**根因**：上游快照把未到期的指标按上月值回填并标 `status=ok`。脚本只看 `status` 和 `value` 合法就收进证据，**没有任何字段区分"真实新值"与"回填旧值"**。唯一判别线索是 `next_release_at` 晚于该期常规发布日 + 数值与上期完全一致。
+
+**修复**：
+- 每次分析前，对 `money_supply` / `entity_economy` 的每一项做**逐项与上期比对**：值完全相同且 `next_release_at` 明显晚于该期常规发布日 → 判定疑似回填
+- 疑似回填的数据**只能作"未恶化"参照，不作为该月的真实变化**（不写"+0.0pp""持平"当结论）
+- 在「核心判断」的把握说明与「数据限制」章节**显式披露**：哪几项可确认、哪几项疑似回填、结论因此只挂在单点上（例如"增长回落目前仅 PMI 单点支撑"）
+- 交叉验证：`raw_snapshots.json` 里各指标的 `analyzed_at` 可佐证 —— 回填项的 analyzed_at 会晚于该期真实发布日但与本轮抓取同期
+
+**反例**：❌ 直接写"10 月工业增加值同比 5.5%，与 9 月持平"（当成真实环比）；❌ 在把握等级上按"8 项数据全部落地"计算时效改善。
+
+## 20. 推送前必须自建数值核对（把报告里的每个 bp 算回 evidence）（2026-11-09 实战新增）
+
+**现象**：pitfall #14 的本地校验只覆盖**结构**（章节、标题正则、方向词、字数、来源链接），**不覆盖数值正确性**。bp 级算错（如 slope 起点日期取错导致 -2.63bp 写成别的口径）在结构校验里完全查不出来，且推送后就是 RSS 上的公开错误内容。
+
+**修复**：推送前跑一遍脚本，把报告正文里的每个派生数字用 `evidence.json` 重算一遍并逐条比对：
+
+```python
+import json
+e = json.load(open('evidence.json'))
+d = e['daily']
+def series(k): return {o['normalized_date']: o['value'] for o in d[k]['observations']}
+def bp(a, b): return round((a - b) * 100, 2)
+# 逐条 assert 报告中的每个 bp / pp / 指数点
+```
+
+**检查清单**（本次实际覆盖 43 项）：DR001/DR007 各窗口变化、10Y 各窗口变化、推导 2Y 各窗口变化、slope 各窗口变化 + 单段变化 + 是否单调、美元指数差值、USD/CNY 差值、中美利差各段收窄幅度、HIBOR、VIX、两融、成交额、北向 7 日均值与环比、南向。**重点是"分段收窄幅度"这类复合数字**（如中美利差逐段收窄 13.79 → 8.67 → 2.25bp），最容易与文案口径不一致。
+
+**反例**：❌ 只跑 `validate_report` + `validate_title` 就推送（数值错误 100% 漏检）；❌ 手工抽查两三个数字就算核对过。
+
+## 21. `publish_report.py` 不读 .env —— token 必须显式注入（2026-11-09 实战新增）
+
+**现象**：`publish_report.py` 的 `--report-token` 默认值是 `os.environ.get("MACRO_SIGNAL_UPLOAD_TOKEN", "")`，**它不会去读 `finance-macro/.env`**。直接按 SKILL.md 第 7 步裸跑脚本，`report_push` 会返回 `skipped_no_token`（RSS 成功但宏观看板静默跳过），返回 JSON 里只会多一条 `quality_warnings`，**不主动看就发现不了**。
+
+**修复**：推送前把 token 从 `finance-macro/.env` 显式注入环境变量再调 `main()`：
+
+```python
+# 读 .env → os.environ["MACRO_SIGNAL_UPLOAD_TOKEN"] → 再调 publish_report.main(argv)
+# 注意：不要把 token 值打印到 stdout/日志，只打印长度或是否已加载
+```
+
+**推送三件套**（本 skill 实际生效的参数组合）：
+- `--insecure`：内网自签证书必需
+- `--source bond-market-macro-impact-skill`：与历史条目 source 一致；`is_duplicate` 按 **title + source** 匹配，source 写错会导致查重失效
+- `--allow-duplicate`：走公共层的 `key = macro:<title>:revision:<正文 sha256>`，既能绕过旧标题预查，又不会把同一稿件无条件发第二遍
+
+**回执校验**：推送后必须 `GET /rss/api/rss-relay/posts?limit=100&channel=macro` 回读，确认 ①channel=macro ②source 正确 ③正文与本地 report.md 逐字符相同（本次 16707 字符 EXACT MATCH）④`detail_url` 可访问（HTTP 200）。**回执 `published` 只代表 HTTP 成功，不代表语义正确**。
+
+**反例**：❌ 裸跑脚本后只看 `pushed: true` 就宣布成功（可能 `skipped_no_token`）；❌ `--source` 留默认值 `my-bot`（与历史条目 source 不一致，查重逻辑失效）；❌ 用 `cat .env` 打印 token 到终端日志。
