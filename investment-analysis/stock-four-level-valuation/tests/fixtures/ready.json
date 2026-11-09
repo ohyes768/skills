@@ -1,0 +1,50 @@
+{
+  "code": "000001",
+  "name": "虚构示例公司（非真实证券）",
+  "as_of": "2026-11-08",
+  "currency": "CNY",
+  "status": "ready",
+  "summary": "纯虚构算术夹具，不是对真实证券的研究或投资建议。",
+  "confidence": {"level": "low", "reason": "全部输入均为测试设定，不对应真实公司事实。"},
+  "risks": ["虚构盈利、估值倍数与股利均不代表可投资机会。"],
+  "invalidation_conditions": ["测试假设失效时，应停止使用这些虚构观察线。"],
+  "data_gaps": ["本夹具不能用于真实投资判断。"],
+  "analysis": {
+    "business": "这是虚构稳定经营企业的离线测试，未调查真实证券。",
+    "normalization": "正常化每股盈利与历史滚动盈利分别设定，不混用二者。",
+    "dividend": "普通每股股利为虚构滚动口径，不含特别股利，也不承诺未来派息。",
+    "valuation": "四点共用虚构正常化盈利锚，倍数变化只是测试参数。",
+    "risk": "算术通过不证明证据真实、倍数合理或适合任何账户。"
+  },
+  "evidence": [{
+    "id": "fixture",
+    "title": "虚构测试输入，非真实公告",
+    "kind": "input",
+    "origin": "tests/fixtures/ready.json",
+    "locator": "valuation及analysis测试设定",
+    "period": "虚构截至2026-09-30滚动期",
+    "published_at": null,
+    "accessed_at": "2026-11-08",
+    "verification": "read"
+  }],
+  "valuation": {
+    "primary_method": "pe_multiple",
+    "anchor": "四点共用虚构正常化EPS=2；显示PE另用虚构TTM EPS=1.6。不是统一估值规则。",
+    "scenarios": {
+      "bear": {"model": {"method": "pe_multiple", "eps": "1.5", "multiple": "8"}, "rationale": "虚构盈利压力与谨慎倍数设定，仅验证悲观情景计算。", "evidence_ids": ["fixture"]},
+      "base": {"model": {"method": "pe_multiple", "eps": "2", "multiple": "12"}, "rationale": "虚构正常化盈利与基准倍数设定，不是事实推导。", "evidence_ids": ["fixture"]},
+      "bull": {"model": {"method": "pe_multiple", "eps": "2.5", "multiple": "16"}, "rationale": "虚构乐观盈利与倍数设定，用于压力比较。", "evidence_ids": ["fixture"]}
+    },
+    "decisions": {
+      "heavy_position": {"model": {"method": "pe_multiple", "eps": "2", "multiple": "8"}, "rationale": "虚构重仓观察线采用共同盈利锚及较谨慎倍数；不表示可买或实际持仓比例。", "evidence_ids": ["fixture"]},
+      "add_position": {"model": {"method": "pe_multiple", "eps": "2", "multiple": "10"}, "rationale": "虚构加仓线的盈利相同、倍数较高，保护空间相应变窄。", "evidence_ids": ["fixture"]},
+      "reduce_position": {"model": {"method": "pe_multiple", "eps": "2", "multiple": "14"}, "rationale": "虚构减仓线使用较高倍数，表示模型内的回报吸引力下降。", "evidence_ids": ["fixture"]},
+      "full_exit": {"model": {"method": "pe_multiple", "eps": "2", "multiple": "18"}, "rationale": "虚构退出线采用更高倍数设定，只为测试四点顺序，不是机械退出策略。", "evidence_ids": ["fixture"]}
+    },
+    "metric_inputs": {"ttm_eps": "1.6", "common_bvps": "4", "annual_dps": "0.8", "dps_basis": "ttm_ordinary", "period": "虚构截至2026-09-30滚动期", "share_basis": "虚构一致普通股基准，无拆送配", "evidence_ids": ["fixture"]},
+    "sensitivity": [
+      {"label": "虚构盈利下调", "base_level": "heavy_position", "model": {"method": "pe_multiple", "eps": "1.5", "multiple": "8"}, "rationale": "将正常化盈利调低以测试压力，倍数不变。", "evidence_ids": ["fixture"]},
+      {"label": "虚构倍数下调", "base_level": "add_position", "model": {"method": "pe_multiple", "eps": "2", "multiple": "8"}, "rationale": "仅下调倍数以测试估值敏感性，不代表真实合理倍数。", "evidence_ids": ["fixture"]}
+    ]
+  }
+}

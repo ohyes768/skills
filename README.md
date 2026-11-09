@@ -54,6 +54,7 @@ README.md
 | [basic-quality-rating](investment-analysis/basic-quality-rating) | 自动化五维基本面评级（10 字段 nullable JSON）：企业/银行/保险财务 E 评分、银行保险 API 候选取数、结构化数据与官方网页取证、失败换路与取证预算、统一校验 | active |
 | [financial-statement-analysis](investment-analysis/financial-statement-analysis) | A 股 F10 财务分析：输入股票代码与报告期，输出中文报告（合并三表、指标计算、独立复核；正文默认不逐项标注来源，字段级来源留在 claim 台账，spec 顶层 `cite_sources` 可打开）；验收见其 [acceptance.md](investment-analysis/financial-statement-analysis/acceptance.md) | active |
 | [annual-report-industry-learning](investment-analysis/annual-report-industry-learning) | 财报行业学习 | active |
+| [stock-four-level-valuation](investment-analysis/stock-four-level-valuation) | 独立单股四挡位估值：复用财报/基本面成果，逐公司定价，输出结构化结果及报告；不读写收藏或执行交易 | 本地源码，未部署 |
 | [csi300-brief](../stock-info-dingding/tree/main/csi300_brief) | 沪深300简报；纯脚本，已迁出至 stock-info-dingding 仓库 `csi300_brief/`（task-web 调度） | 已迁出 |
 | [gold-price-brief](investment-analysis/gold-price-brief) | 黄金走势研判播报：实时取数（金价/伦敦金/SPDR/美联储利率预期/RSI）→ 模型研判 → 钉钉推送（加签）；task-web 调度 | active |
 

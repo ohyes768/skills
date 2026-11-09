@@ -1,0 +1,21 @@
+{
+  "code": "000001",
+  "name": "虚构示例公司（非真实证券）",
+  "as_of": "2026-11-08",
+  "currency": "CNY",
+  "status": "insufficient_data",
+  "summary": "虚构资料不足样例：缺少支持定价的核心证据，不出四点价格。",
+  "confidence": {"level": "unavailable", "reason": "没有可支持估值的财务证据。"},
+  "risks": [],
+  "invalidation_conditions": ["取得一致口径的财务和行业证据后重新研究。"],
+  "data_gaps": ["缺少正常化盈利、普通股权益与股东现金流依据。"],
+  "analysis": {
+    "business": "虚构企业的具体经营情况尚不明，不能凭名称推断。",
+    "normalization": "无盈利桥接材料，不能填入中性正常化盈利。",
+    "dividend": "普通分红及现金覆盖尚未验证，不能猜测股息率。",
+    "valuation": "首版模型都缺少必要的估值参数，不输出有效价格。",
+    "risk": "这是信息不足而不是已确认基本面红线，也不是低价机会。"
+  },
+  "evidence": [],
+  "valuation": null
+}
