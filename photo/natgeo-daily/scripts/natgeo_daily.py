@@ -109,9 +109,32 @@ def extract_og_tag(html: str, property_name: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
+_NAME = r"[A-ZÀ-Ý][\w'’\.\-]*"
+# 部分署名带资质后缀，如 "Endia Beal, MoCP"（MoCP = Master of Cinematography Program）
+_CRED_SUFFIX = r"(?:,\s*[A-Z][A-Za-z0-9&\.]{1,8})?"
+
+
+def _clean_name(raw: str) -> str:
+    return raw.strip().strip(".,;:")
+
+
 def extract_photographer_from_description(description: str) -> Optional[str]:
-    m = re.search(r"[Pp]hotograph by\s+(.+)", description or "")
-    return m.group(1).strip() if m else None
+    """从 OG 描述里取摄影师。
+
+    NatGeo 的描述有两种写法：
+      1) 结尾署名 "Photograph by Emre Çaylak"
+      2) 正文内嵌 "photographer Emre Çaylak says ..."
+    只认首字母大写的词组，避免把 "the photographer notes ..." 之类的普通短语误当成人名。
+    """
+    text = description or ""
+    pat = rf"({_NAME}(?:\s+{_NAME}){{0,2}}{_CRED_SUFFIX})"
+    m = re.search(rf"[Pp]hotograph(?:ed)? by\s+{pat}", text)
+    if m:
+        return _clean_name(m.group(1))
+    m = re.search(rf"photographer\s+{pat}", text)
+    if m:
+        return _clean_name(m.group(1))
+    return None
 
 
 def extract_from_page(html: str, page_url: str) -> Optional[PhotoItem]:
@@ -131,24 +154,49 @@ def extract_from_page(html: str, page_url: str) -> Optional[PhotoItem]:
     return photo
 
 
-def push_to_dingtalk(message: str) -> bool:
+def push_to_dingtalk(message: str, attempts: int = 3) -> bool:
     webhook = os.environ.get("NATGEO_DINGTALK_WEBHOOK", "")
     if not webhook:
         print("钉钉推送失败: 未设置 NATGEO_DINGTALK_WEBHOOK（写入 skill 目录 .env 或调度环境后重试）")
         return False
     secret = os.environ.get("NATGEO_DINGTALK_SECRET", "")
-    if secret:
-        ts, sign = get_sign(secret)
-        webhook = f"{webhook}&timestamp={ts}&sign={sign}"
-    resp = requests.post(
-        webhook,
-        json={"msgtype": "markdown", "markdown": {"title": DINGTALK_KEYWORD, "text": message}},
-        headers={"Content-Type": "application/json"},
-        timeout=10,
-    )
-    ok = resp.status_code == 200
-    print(f"钉钉推送: HTTP {resp.status_code} {resp.text[:120]}")
-    return ok
+    for attempt in range(1, attempts + 1):
+        url = webhook
+        if secret:
+            ts, sign = get_sign(secret)
+            url = f"{webhook}&timestamp={ts}&sign={sign}"
+        try:
+            resp = requests.post(
+                url,
+                json={"msgtype": "markdown", "markdown": {"title": DINGTALK_KEYWORD, "text": message}},
+                headers={"Content-Type": "application/json"},
+                timeout=10,
+            )
+        except requests.RequestException as e:
+            print(f"钉钉推送: 第{attempt}次请求异常 {e}")
+            if attempt < attempts:
+                time.sleep(3 * attempt)
+                continue
+            return False
+        print(f"钉钉推送: HTTP {resp.status_code} {resp.text[:120]}")
+        if resp.status_code != 200:
+            if attempt < attempts:
+                time.sleep(3 * attempt)
+                continue
+            return False
+        # 钉钉业务错误也是 HTTP 200，必须看 errcode：-1=系统繁忙(可重试)，其他非 0 同理。
+        try:
+            errcode = resp.json().get("errcode")
+        except ValueError:
+            errcode = None
+        if errcode == 0:
+            return True
+        print(f"钉钉推送: 业务失败 errcode={errcode}（HTTP 200 不代表送达）")
+        if attempt < attempts:
+            time.sleep(3 * attempt)
+            continue
+        return False
+    return False
 
 
 def build_dingtalk_markdown(photo: PhotoItem) -> str:
