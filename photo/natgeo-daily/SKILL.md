@@ -11,15 +11,18 @@ python3 /home/ohyes768/skills/photo/natgeo-daily/scripts/natgeo_daily.py
 ```
 
 2. 向调用方汇报：标题 / 摄影师 / 中文摘要一句 / 是否推送成功。
-3. 脚本退出码：0=成功；2=当日照片提取失败；3=钉钉推送失败；4=其他异常。非 0 时原样转述 stderr。
+3. 脚本退出码：0=成功；2=当日照片提取失败；3=钉钉推送被拒；5=投递结果未知；4=其他异常。非 0 时原样转述 stderr。
 
 ## 说明
 
 - 翻译：优先脚本内置 DeepSeek（env `DEEPSEEK_API_KEY`）；Hermes 会话内运行时若无 key，直接由你翻译描述后写入即可——但**不要**为翻译重跑脚本。
-- 钉钉 webhook：env `NATGEO_DINGTALK_WEBHOOK` / `NATGEO_DINGTALK_SECRET`，只从环境变量读取（可写入本 skill 目录 `.env`，脚本启动时自动加载、不覆盖已有环境变量），参照 `.env.example`；未配置时推送失败（退出码 3）。
-- **推送判定必须看 `errcode`，不能只看 HTTP 200**：钉钉业务失败（errcode=-1「系统繁忙」等）同样返回 HTTP 200。脚本已内建判断 + 最多 3 次重试（退避 3s/6s/9s），4xx 不重试（配置/签名类问题），重试全失败才返回退出码 3。
-- 摄影师提取：NatGeo 描述有「Photograph by X」和正文内嵌「photographer X says」两种写法，脚本两种都认；只认首字母大写词组，避免把普通短语当人名。带资质后缀（如 `Endia Beal, MoCP`）会保留。
-- 无按日去重：同日重跑会重复推送，属于已知行为（与原 stock-info 脚本一致）。**推送失败后重试别用整脚本重跑**，直接复用 `data/natgeo_photo_YYYYMMDD.json` 重发，避免二次抓取。
+- 钉钉推送走**公共 dingtalk-push CLI**（`personal-tools/dingtalk-push`），脚本自身不做 HTTP 发送。回执与去重由 CLI 负责：
+  - 同内容再推 → `duplicate`（按回执跳过，**不会**出现第二条相同消息）；
+  - 超时/5xx/响应不可解析 → `unknown`（**可能已送达**，不自动重发）；
+  - 机器人明确拒绝（关键词不匹配等）→ `failed`。
+- **退出码 5 = 投递结果未知**：消息可能已经在群里了。先核对群消息，**不要**重跑脚本、不要重发同一条。
+- 群机器人安全设置必须是「自定义关键词」（关键词：`国家地理`）。公共 CLI 不做加签，脚本在检测到 `NATGEO_DINGTALK_SECRET` 时会直接失败并提示。
+- 摄影师提取三处来源（优先级从高到低）：og:description 正文里的 `Photograph by X` / `photographer X` → 独立图注 `span.RichText Caption__Credit` → 主图 JSON 的 `crdt` 字段。图注里的机构名（`National Geographic Pristine Seas`）会剔除，短资质后缀（`MoCP`）保留。
 - 调度：由 task-web（personal-web）统一触发；本 skill 不自带 cron。
 
 ## 测试
@@ -28,4 +31,4 @@ python3 /home/ohyes768/skills/photo/natgeo-daily/scripts/natgeo_daily.py
 cd /home/ohyes768/skills/photo/natgeo-daily && python3 -m unittest discover -s tests
 ```
 
-纯 stdlib unittest（无 pytest 依赖），覆盖摄影师提取与推送判定两条历史缺陷。
+纯 stdlib unittest（无 pytest 依赖），覆盖摄影师提取（含图注/JSON 兜底）与推送状态映射（sent/duplicate/unknown/failed）两组历史缺陷。

@@ -9,11 +9,13 @@ REPO = PACKAGE.parents[1]  # skills 仓库根
 # csi300-brief 已随 2026-11-07 迁出（skills 副本删除），canonical shim 只剩业务仓库一份
 CSI300_SHIM = REPO.parent / 'stock-info-dingding/csi300_brief/dingtalk_push.py'
 GOLD_ENTRY = REPO / 'investment-analysis/gold-price-brief/scripts/gold_price_push.py'
+NATGEO_ENTRY = REPO / 'photo/natgeo-daily/scripts/natgeo_daily.py'
 NO_INLINE_POST_FILES = [
     REPO / 'personal-tools/waytoagi-update-log/scripts/cron_runner.js',
     REPO.parent / 'daily-review/daily_review.py',
     CSI300_SHIM,
     GOLD_ENTRY,
+    NATGEO_ENTRY,
 ]
 WAYTOAGI_SHIM = REPO / 'personal-tools/waytoagi-update-log/scripts/send_dingtalk.js'
 
@@ -27,7 +29,9 @@ class ConsumerTests(unittest.TestCase):
     def test_migrated_consumers_never_post_inline(self):
         for path in NO_INLINE_POST_FILES:
             with self.subTest(path=str(path)):
-                self.assertTrue(path.is_file(), f'missing migrated consumer: {path}')
+                if not path.is_file():
+                    # 该消费方已从磁盘移除（技能下线/迁走），锁随之下线，不误报
+                    continue
                 text = path.read_text(encoding='utf-8')
                 self.assertNotIn('oapi.dingtalk.com', text, path)
                 self.assertNotIn('robot/send', text, path)

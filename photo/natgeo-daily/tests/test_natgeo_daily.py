@@ -1,8 +1,11 @@
-"""natgeo_daily 回归测试：摄影师提取 + 钉钉推送判定。
+"""natgeo_daily 回归测试：摄影师提取 + 钉钉投递（走公共 CLI）。
 
-重点覆盖两个历史缺陷：
-  1. 推送只看 HTTP 200，钉钉业务失败(errcode=-1 系统繁忙)被误判成功 → 必须看 errcode
-  2. 摄影师正则只匹配 "Photograph by"，NatGeo 描述多为正文内嵌 "photographer X says" → 恒为 null
+重点覆盖三个历史缺陷：
+  1. 重复推送：内联 POST 遇 errcode=-1「系统繁忙」会原样重发，而 -1 是受理后的
+     繁忙回执（消息已进群）→ 群里两条相同消息。修复：改走公共 dingtalk-push CLI，
+     回执去重（同内容 → duplicate 跳过）+ 结果未知不盲重（unknown）。
+  2. 摄影师只从 og:description 正文匹配，"Photograph by" 之外的正文内嵌写法恒为 null。
+  3. 署名在正文之外（独立图注 / 主图 JSON crdt）时提取不到 → 补兜底。
 """
 import importlib.util
 import unittest
@@ -16,34 +19,20 @@ natgeo_daily = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(natgeo_daily)
 
 
-class StubResponse:
-    """模拟钉钉响应：HTTP 200 既可能是成功也可能是业务失败。"""
+class StubDingTalkPush:
+    """公共 dingtalk_push 模块替身：记录 send() 调用并返回预设状态。"""
 
-    def __init__(self, status_code=200, body=None, text=None):
-        self.status_code = status_code
-        self._body = body
-        self.text = text if text is not None else repr(body)
+    def __init__(self, status='sent', extra=None):
+        self.status = status
+        self.extra = extra or {}
+        self.calls = []
 
-    def json(self):
-        if self._body is None:
-            raise ValueError('not json')
-        return self._body
-
-
-class StubPost:
-    """按顺序返回桩响应；前 errors 次抛网络异常。记录调用次数。"""
-
-    def __init__(self, responses, errors=0):
-        self.responses = responses
-        self.errors = errors
-        self.calls = 0
-
-    def __call__(self, *_args, **_kwargs):
-        i = self.calls
-        self.calls += 1
-        if i < self.errors:
-            raise natgeo_daily.requests.RequestException('boom')
-        return self.responses[min(i - self.errors, len(self.responses) - 1)]
+    def send(self, title, text, *, webhook, keyword=None, **_kwargs):
+        self.calls.append({'title': title, 'text': text,
+                           'webhook': webhook, 'keyword': keyword})
+        result = {'status': self.status}
+        result.update(self.extra)
+        return result
 
 
 class PhotographerTests(unittest.TestCase):
@@ -77,8 +66,64 @@ class PhotographerTests(unittest.TestCase):
         self.assertIsNone(natgeo_daily.extract_photographer_from_description(''))
 
 
+class CreditFallbackTests(unittest.TestCase):
+    """署名不在 og:description 正文时的兜底：图注 + 主图 JSON。"""
+
+    CAPTION_HTML = (
+        '<span aria-label="Manu San Félix, National Geographic Pristine Seas" '
+        'class="RichText Caption__Credit">Manu San Félix, National Geographic Pristine Seas</span>'
+    )
+    JSON_HTML = (
+        '{"rt":"https://i.natgeofe.com/x.jpg","src":"https://i.natgeofe.com/x.jpg",'
+        '"altText":"Bright blue giant clams with wavy mantles.",'
+        '"crdt":"Manu San Félix, National Geographic Pristine Seas",'
+        '"dsc":"Giant clams (Tridacna maxima) ..."}'
+    )
+
+    def test_caption_credit_is_used(self):
+        self.assertEqual(
+            natgeo_daily.extract_photographer_from_html(self.CAPTION_HTML), 'Manu San Félix')
+
+    def test_json_credit_is_used(self):
+        self.assertEqual(
+            natgeo_daily.extract_photographer_from_html(self.JSON_HTML), 'Manu San Félix')
+
+    def test_organization_only_is_not_a_person(self):
+        """机构名不是人名：超过 3 个词 → 不认。"""
+        self.assertIsNone(natgeo_daily.normalize_credit('National Geographic Pristine Seas'))
+
+    def test_normalize_credit_keeps_credential_only(self):
+        self.assertEqual(natgeo_daily.normalize_credit('Endia Beal, MoCP'), 'Endia Beal, MoCP')
+        self.assertEqual(
+            natgeo_daily.normalize_credit('Manu San Félix, National Geographic Pristine Seas'),
+            'Manu San Félix')
+        self.assertEqual(natgeo_daily.normalize_credit('  Manu San Félix '), 'Manu San Félix')
+
+    def test_extract_from_page_prefers_description(self):
+        html = (
+            '<meta property="og:title" content="Electric Reef">'
+            '<meta property="og:description" content="A boy in dress. Photograph by Benjamin Pawlica">'
+            '<meta property="og:image" content="https://i.natgeofe.com/x.jpg">'
+            + self.CAPTION_HTML
+        )
+        photo = natgeo_daily.extract_from_page(html, 'https://www.nationalgeographic.com/photo-of-the-day/')
+        self.assertIsNotNone(photo)
+        self.assertEqual(photo.photographer, 'Benjamin Pawlica')
+
+    def test_extract_from_page_falls_back_to_caption(self):
+        html = (
+            '<meta property="og:title" content="Electric Reef">'
+            '<meta property="og:description" content="Giant clams spread their mantles.">'
+            '<meta property="og:image" content="https://i.natgeofe.com/x.jpg">'
+            + self.CAPTION_HTML
+        )
+        photo = natgeo_daily.extract_from_page(html, 'https://www.nationalgeographic.com/photo-of-the-day/')
+        self.assertIsNotNone(photo)
+        self.assertEqual(photo.photographer, 'Manu San Félix')
+
+
 class PushTests(unittest.TestCase):
-    """push_to_dingtalk：HTTP 200 不等于送达，必须校验 errcode。"""
+    """push_to_dingtalk：走公共 CLI，回执去重 + unknown 不盲重。"""
 
     def setUp(self):
         self.env = patch.dict(natgeo_daily.os.environ, {
@@ -87,60 +132,70 @@ class PushTests(unittest.TestCase):
         })
         self.env.start()
         self.addCleanup(self.env.stop)
-        no_sleep = patch.object(natgeo_daily.time, 'sleep')
-        no_sleep.start()
-        self.addCleanup(no_sleep.stop)
 
-    def test_busy_errcode_is_failure_not_success(self):
-        """回归点：HTTP 200 + errcode=-1 旧代码会误报成功。"""
-        post = StubPost([StubResponse(200, {'errcode': -1, 'errmsg': '系统繁忙'})])
-        with patch.object(natgeo_daily.requests, 'post', post):
-            self.assertFalse(natgeo_daily.push_to_dingtalk('m', attempts=1))
-        self.assertEqual(post.calls, 1)
+    def _push(self, status='sent', extra=None):
+        stub = StubDingTalkPush(status=status, extra=extra)
+        with patch.object(natgeo_daily, '_load_dingtalk_push', return_value=stub):
+            result = natgeo_daily.push_to_dingtalk('正文')
+        return stub, result
 
-    def test_busy_errcode_retries_until_success(self):
-        post = StubPost([StubResponse(200, {'errcode': -1}),
-                          StubResponse(200, {'errcode': 0, 'errmsg': 'ok'})])
-        with patch.object(natgeo_daily.requests, 'post', post):
-            self.assertTrue(natgeo_daily.push_to_dingtalk('m'))
-        self.assertEqual(post.calls, 2)
+    def test_sent_is_success(self):
+        stub, status = self._push('sent')
+        self.assertEqual(status, 'sent')
+        self.assertEqual(len(stub.calls), 1)
+        self.assertEqual(stub.calls[0]['keyword'], '国家地理')
 
-    def test_retries_exhausted_returns_false(self):
-        post = StubPost([StubResponse(200, {'errcode': -1})])
-        with patch.object(natgeo_daily.requests, 'post', post):
-            self.assertFalse(natgeo_daily.push_to_dingtalk('m', attempts=3))
-        self.assertEqual(post.calls, 3)
+    def test_duplicate_is_success_and_not_resent(self):
+        """回归点：同内容再推 → duplicate 跳过，绝不产生第二条相同消息。"""
+        stub, status = self._push('duplicate')
+        self.assertEqual(status, 'duplicate')
+        self.assertEqual(natgeo_daily._push_exit_code(status), 0)
+        self.assertEqual(len(stub.calls), 1)
 
-    def test_client_error_is_not_retried(self):
-        """4xx 是配置/签名问题，重试无意义，应立即失败。"""
-        post = StubPost([StubResponse(400, {'errcode': 310000})])
-        with patch.object(natgeo_daily.requests, 'post', post):
-            self.assertFalse(natgeo_daily.push_to_dingtalk('m', attempts=3))
-        self.assertEqual(post.calls, 1)
+    def test_unknown_is_not_retried(self):
+        """回归点：结果未知（可能已送达）→ 不自动重发，退出码 5。"""
+        stub, status = self._push('unknown')
+        self.assertEqual(status, 'unknown')
+        self.assertEqual(natgeo_daily._push_exit_code(status), 5)
+        self.assertEqual(len(stub.calls), 1)
 
-    def test_network_error_then_success(self):
-        post = StubPost([StubResponse(200, {'errcode': 0})], errors=1)
-        with patch.object(natgeo_daily.requests, 'post', post):
-            self.assertTrue(natgeo_daily.push_to_dingtalk('m'))
-        self.assertEqual(post.calls, 2)
+    def test_failed_status_maps_to_exit_3(self):
+        stub, status = self._push('failed')
+        self.assertEqual(status, 'failed')
+        self.assertEqual(natgeo_daily._push_exit_code(status), 3)
+        self.assertEqual(len(stub.calls), 1)
 
-    def test_non_json_200_body_is_failure(self):
-        post = StubPost([StubResponse(200, None, text='<html>oops</html>')])
-        with patch.object(natgeo_daily.requests, 'post', post):
-            self.assertFalse(natgeo_daily.push_to_dingtalk('m', attempts=1))
-
-    def test_missing_webhook_never_calls_http(self):
+    def test_missing_webhook_never_calls_cli(self):
         with patch.dict(natgeo_daily.os.environ, {'NATGEO_DINGTALK_WEBHOOK': ''}):
-            post = StubPost([StubResponse(200, {'errcode': 0})])
-            with patch.object(natgeo_daily.requests, 'post', post):
-                self.assertFalse(natgeo_daily.push_to_dingtalk('m'))
-            self.assertEqual(post.calls, 0)
+            stub = StubDingTalkPush()
+            with patch.object(natgeo_daily, '_load_dingtalk_push', return_value=stub):
+                status = natgeo_daily.push_to_dingtalk('正文')
+        self.assertEqual(status, 'failed')
+        self.assertEqual(stub.calls, [])
 
-    def test_success_sends_once(self):
-        post = StubPost([StubResponse(200, {'errcode': 0, 'errmsg': 'ok'})])
-        with patch.object(natgeo_daily.requests, 'post', post):
-            self.assertTrue(natgeo_daily.push_to_dingtalk('m'))
-        self.assertEqual(post.calls, 1)
+    def test_secret_mode_is_rejected_before_cli(self):
+        """公共 CLI 不做加签；机器人是加签模式时必须显式失败，不能盲推。"""
+        with patch.dict(natgeo_daily.os.environ, {'NATGEO_DINGTALK_SECRET': 'sec'}):
+            stub = StubDingTalkPush()
+            with patch.object(natgeo_daily, '_load_dingtalk_push', return_value=stub):
+                status = natgeo_daily.push_to_dingtalk('正文')
+        self.assertEqual(status, 'failed')
+        self.assertEqual(stub.calls, [])
+
+    def test_missing_cli_is_failure(self):
+        with patch.object(natgeo_daily, '_load_dingtalk_push', side_effect=ImportError('not found')):
+            status = natgeo_daily.push_to_dingtalk('正文')
+        self.assertEqual(status, 'failed')
+
+
+class ExitCodeTests(unittest.TestCase):
+    """退出码语义：0 成功 / 3 被拒 / 5 结果未知。"""
+
+    def test_mapping(self):
+        self.assertEqual(natgeo_daily._push_exit_code('sent'), 0)
+        self.assertEqual(natgeo_daily._push_exit_code('duplicate'), 0)
+        self.assertEqual(natgeo_daily._push_exit_code('failed'), 3)
+        self.assertEqual(natgeo_daily._push_exit_code('unknown'), 5)
 
 
 if __name__ == '__main__':
