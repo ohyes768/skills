@@ -31,6 +31,15 @@ daily-pick-brief/
 
 ## 流程
 
+> **两段编排（2026-11-17 起）**：单次 Hermes run 做完全部步骤会撞工具调用迭代上限
+> （2026-11-16 小熊电器：两份分析写完但 RSS/钉钉投递被截断）。task-web 已拆成两个任务：
+>
+> - `hermes-daily-pick`（17:30）：第 1→2→3→5 步，只做到**财报分析**的投递为止；
+> - `hermes-daily-industry`（18:10）：第 2→4→5 步接力，读历史 JSON 取当日标的，
+>   只做**年报行业学习**及其投递，不选股、不推主卡片。
+>
+> 第 2 步的读取逻辑两段共用；第二段发现历史最后一条不是今天，如实转述后结束。
+
 ### 第 1 步：执行选股主流程（真实推送）
 
 ```bash
@@ -49,13 +58,15 @@ cd ~/.hermes/skills/daily-pick-brief && \
 `code`（股票代码）、`name`（名称）、`latest_report_url`（格式为「公告标题 公告URL」，
 从中解析出报告期，如 `2026年三季度报告` → `2026-09-30`）。
 「今日已推送/无可推荐」则如实转述后结束，不执行第 3/4 步。
+（第二段 hermes-daily-industry 也走第 2 步取标的；历史最后一条不是今天 → 转述后结束。）
 
-### 第 3 步：财报分析（AI skill：financial-statement-analysis）
+### 第 3 步：财报分析（AI skill：financial-statement-analysis）——第一段（hermes-daily-pick）执行
 
 按 `financial-statement-analysis` skill 执行，输入：股票代码 + 报告期。
 产物 Markdown 存 `data/reports/{code}-{period}-fsa-{yyyymmdd}.md`。
+写完**必须接着执行第 5 步投递**（RSS → 钉钉摘要），只落盘不算完成。
 
-### 第 4 步：年报行业学习（AI skill：annual-report-industry-learning）
+### 第 4 步：年报行业学习（AI skill：annual-report-industry-learning）——第二段（hermes-daily-industry）执行
 
 先查年报公告：
 
@@ -131,8 +142,9 @@ cd ~/.hermes/skills/daily-pick-brief && python3 scripts/daily_pick.py --latest-a
    约 50KB（摘要 + 所引原文全文），直推会截断或整条失败。全文只有第 1 步一个出口。
    标题必须含关键词「财报」（「【财报分析】…」「【财报行业学习】…」），否则 `--keyword` 预检直接拦。
 
-- 第 3/4 步互不依赖：任一失败记下原因继续另一边，不影响选股主推送已成功的事实。
-- 最终回复只写：选股结果 + 两个分析是否完成 + 各自的 `detail_url`（失败写原因），不要粘贴全文。
+- 第 3/4 步分属两段任务、互不依赖：任一失败记下原因，不影响选股主推送已成功的事实。
+- 最终回复只写：选股结果 + 本段分析是否完成 + `detail_url`（失败写原因），不要粘贴全文。
+  「报告已生成但 detail_url 未生成 / 钉钉摘要未推」**不算完成**，原因必须写进最终回复。
 
 ## 边界
 
