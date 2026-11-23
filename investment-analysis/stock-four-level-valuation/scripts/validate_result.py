@@ -23,6 +23,11 @@ from valuation_math import NUMBER, decimal_value, evaluate, level_metrics, round
 
 FORMULA_VERSION = "1"
 
+
+def _fmt6(value: Decimal) -> str:
+    """exact_price 输出为 6 位小数字符串，避免 256 位精度长串撑爆交付体积。"""
+    return format(value.quantize(Decimal("0.000001")), "f")
+
 SCHEMA_VERSION = "1.0.0"
 STATUSES = ("ready", "insufficient_data", "blocked", "not_applicable")
 KINDS = ("official", "data_platform", "research", "media", "upstream", "input")
@@ -317,7 +322,7 @@ def _compute_ready(draft):
     for key in SCENARIOS:
         exact = evaluate(valuation["scenarios"][key]["model"])
         scenario_exact[key] = exact
-        scenario_values[key] = {"exact_price": str(exact), "price": round_price(exact)}
+        scenario_values[key] = {"exact_price": _fmt6(exact), "price": round_price(exact)}
     _require(scenario_exact["bear"] <= scenario_exact["base"] <= scenario_exact["bull"],
              "scenarios: unrounded values must satisfy bear<=base<=bull")
 
@@ -326,7 +331,7 @@ def _compute_ready(draft):
     for key in LEVELS:
         exact = evaluate(valuation["decisions"][key]["model"])
         price = round_price(exact)
-        calculated[key] = {"exact_price": str(exact), "price": price}
+        calculated[key] = {"exact_price": _fmt6(exact), "price": price}
         rounded_prices[key] = price
     for lower, higher in itertools.pairwise(LEVELS):
         _require(rounded_prices[lower] < rounded_prices[higher],
@@ -346,7 +351,7 @@ def _compute_ready(draft):
         base_exact = Decimal(calculated[item["base_level"]]["exact_price"])
         delta = ((exact - base_exact) / base_exact * 100).quantize(QUANTUM)
         sensitivity_values.append({"label": item["label"], "base_level": item["base_level"],
-                                   "exact_price": str(exact), "price": round_price(exact),
+                                   "exact_price": _fmt6(exact), "price": round_price(exact),
                                    "delta_pct": delta})
 
     derived = {"formula_version": FORMULA_VERSION, "calculated": calculated,
@@ -375,7 +380,7 @@ def render_report(result):
             pct = "-" if yield_pct is None else format(yield_pct, ".4f")
             lines.append(f"| {key} | {format(level['price'], '.2f')} | {pe} | {pb} | {pct} |")
         lines += ["", "### 估值锚", "", valuation["anchor"], "",
-                  "### 情景价值（未舍入见 exact_price）", "",
+                  "### 情景价值（exact_price 保留6位小数）", "",
                   "| 情景 | 价格 |", "|---|---|"]
         for key in SCENARIOS:
             lines.append(f"| {key} | {format(valuation['scenario_values'][key]['price'], '.2f')} |")
@@ -394,9 +399,8 @@ def render_report(result):
         lines += [f"### {key}", "", result["analysis"][key], ""]
     lines += ["## 证据", ""]
     for item in result["evidence"]:
-        lines.append(f"- {item['id']}（{item['kind']}，{item['verification']}）：{item['title']}；"
-                     f"来源 {item['origin']}；定位 {item['locator']}；期间 {item['period']}；"
-                     f"披露 {item['published_at'] or '未记录'}；访问 {item['accessed_at'] or '未记录'}")
+        lines.append(f"- {item['id']}（{item['kind']}，{item['verification']}）：{item['title']}"
+                     f"（来源/定位/期间详见 result.evidence）")
     if not result["evidence"]:
         lines.append("-（无）")
     for title, field in (("风险", "risks"), ("数据缺口", "data_gaps"),

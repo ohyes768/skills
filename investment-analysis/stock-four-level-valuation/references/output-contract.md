@@ -89,7 +89,7 @@ terminal恰为三种之一：
 - levels四键固定，各为 `{price,pe,pb}`。price舍入到分，PE/PB四位小数。非ready三项全部null。
 - pe=price/正TTM EPS；pb=price/正普通股BVPS。缺失或分母非正为null，绝不显示负PE。选定估值PE在model.multiple，不能混在levels.pe。
 - ready valuation保留六个输入键，并添加 `formula_version="1"`、`calculated`、`scenario_values`、`sensitivity_values`、`level_metrics`：
-  - calculated：四点→`{exact_price,price}`，exact_price是未舍入十进制字符串。
+  - calculated：四点→`{exact_price,price}`，exact_price是保留6位小数的十进制字符串（内部计算仍为全精度，仅输出层截断展示）。
   - scenario_values：bear/base/bull同结构。
   - sensitivity_values：顺序数组，`{label,base_level,exact_price,price,delta_pct}`。
   - level_metrics：四点→`{dividend_yield_pct}`，普通DPS/舍入price×100，四位小数；DPS未知则null，0则0。
