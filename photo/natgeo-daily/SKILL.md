@@ -22,7 +22,7 @@ python3 /home/ohyes768/skills/photo/natgeo-daily/scripts/natgeo_daily.py
   - 机器人明确拒绝（关键词不匹配等）→ `failed`。
 - **退出码 5 = 投递结果未知**：消息可能已经在群里了。先核对群消息，**不要**重跑脚本、不要重发同一条。
 - 群机器人安全设置必须是「自定义关键词」（关键词：`国家地理`）。公共 CLI 不做加签，脚本在检测到 `NATGEO_DINGTALK_SECRET` 时会直接失败并提示。
-- 摄影师提取三处来源（优先级从高到低）：og:description 正文里的 `Photograph by X` / `photographer X` → 独立图注 `span.RichText Caption__Credit` → 主图 JSON 的 `crdt` 字段。图注里的机构名（`National Geographic Pristine Seas`）会剔除，短资质后缀（`MoCP`）保留。
+- 摄影师提取三处来源（优先级从高到低）：og:description 正文里的 `Photograph by X` / `photographer X` → 独立图注 `span.RichText Caption__Credit` → 主图 JSON 的 `crdt` 字段。图注里的机构名（`National Geographic Pristine Seas`、`National Geographic`）会剔除，短资质后缀（`MoCP`）保留；姓名里的小写粒子词（`de`/`van`/`von`/`der`…）不截断（`Robin de Puy`、`Vincent van Gogh`）。
 - 调度：由 task-web（personal-web）统一触发；本 skill 不自带 cron。
 
 ## 测试

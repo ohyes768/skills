@@ -58,6 +58,54 @@ class PhotographerTests(unittest.TestCase):
             natgeo_daily.extract_photographer_from_description('Photograph by Endia Beal, MoCP'),
             'Endia Beal, MoCP')
 
+    def test_name_with_lowercase_particle(self):
+        """回归点：姓名里的粒子词（de/van/von…）不能被截断。
+
+        2026-11-20：'photographer Robin de Puy says' 只抽到 'Robin'，
+        推送到群里的摄影师署名缺姓氏。
+        """
+        self.assertEqual(
+            natgeo_daily.extract_photographer_from_description(
+                '... who photographer Robin de Puy says was often perched on her shoulder'),
+            'Robin de Puy')
+        self.assertEqual(
+            natgeo_daily.extract_photographer_from_description('photographer Vincent van Gogh says'),
+            'Vincent van Gogh')
+        self.assertEqual(
+            natgeo_daily.normalize_credit('Robin de Puy'), 'Robin de Puy')
+
+    def test_organization_name_still_rejected(self):
+        """加了粒子词不能把机构名放进来：'National Geographic Pristine Seas' 仍不认。"""
+        self.assertIsNone(natgeo_daily.normalize_credit('National Geographic Pristine Seas'))
+        self.assertIsNone(natgeo_daily.normalize_credit('National Geographic'))
+
+    def test_signature_ends_at_sentence_boundary(self):
+        """回归点：署名后面的正文不能被吸进来。
+
+        2026-11-20：'Photograph by Emre Çaylak. His work spans ...' 抽成
+        'Emre Çaylak. His'，多了一个 ' His'。
+        """
+        self.assertEqual(
+            natgeo_daily.extract_photographer_from_description(
+                'Photograph by Emre Çaylak. His work spans four continents.'),
+            'Emre Çaylak')
+
+    def test_institution_after_comma_is_dropped(self):
+        """回归点：'Steve Winter, National Geographic' 里的机构名不能进署名。"""
+        self.assertEqual(
+            natgeo_daily.extract_photographer_from_description(
+                'Photograph by Steve Winter, National Geographic'),
+            'Steve Winter')
+        self.assertEqual(
+            natgeo_daily.normalize_credit('Steve Winter, National Geographic'),
+            'Steve Winter')
+
+    def test_name_suffix_is_kept(self):
+        self.assertEqual(
+            natgeo_daily.extract_photographer_from_description(
+                'Photograph by Carlton Ward Jr. He is based in Maine.'),
+            'Carlton Ward Jr')
+
     def test_lowercase_phrase_is_not_a_name(self):
         self.assertIsNone(natgeo_daily.extract_photographer_from_description(
             'The photographer notes that the market was quiet that day.'))

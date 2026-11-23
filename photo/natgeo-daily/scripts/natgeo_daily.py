@@ -93,9 +93,17 @@ class PhotoItem:
     photographer: Optional[str] = None
 
 
-# 摄影师署名：首字母大写的姓名（最多 3 词），部分带资质后缀如 "Endia Beal, MoCP"
-_NAME = r"[A-ZÀ-Ý][\w'’\.\-]*"
-_CREDIT = rf"{_NAME}(?:\s+{_NAME}){{0,2}}(?:,\s*[A-Z][A-Za-z0-9&\.]{{1,8}})?"
+# 摄影师署名：首字母大写的姓名（最多 3 个大写词），部分带资质后缀如 "Endia Beal, MoCP"
+# 姓名里可含小写粒子词（de/van/von…）："Robin de Puy"、"Vincent van Gogh"、"Ludwig Mies van der Rohe"
+_NAME = r"[A-ZÀ-Ý][\w'’\-]*"
+_INITIAL = r"[A-ZÀ-Ý]\."  # 名字缩写：J. / R.
+_SUFFIX = r"(?:Jr|Sr|II|III|IV)\."  # 头衔：Jr. / Sr.
+_PARTICLES = r"de|del|della|di|da|van|von|der|den|du|la|le|los|das|dos|bin|ibn|ten|ter"
+_NAME_WORD = rf"(?:{_INITIAL}|{_SUFFIX}|{_NAME})"
+# 大写词上限仍是 3（"National Geographic Pristine Seas" 这类机构名要被排除）
+_FULL_NAME = rf"{_NAME_WORD}(?:\s+(?:(?:{_PARTICLES})\s+)*{_NAME_WORD}){{0,2}}"
+# 逗号后可能是资质（MoCP）也可能是机构（National Geographic…），判定交给 normalize_credit
+_CREDIT = rf"{_FULL_NAME}(?:,\s*[A-Za-z][A-Za-z0-9&\.]*)?"
 # NatGeo 描述里署名的两种写法
 _BY_PATTERNS = (r"[Pp]hotograph(?:ed)? by\s+", r"photographer\s+")
 # 独立图注里的署名（NatGeo 常把署名放在正文之外）：
@@ -103,8 +111,10 @@ _BY_PATTERNS = (r"[Pp]hotograph(?:ed)? by\s+", r"photographer\s+")
 _CAPTION_CREDIT_RE = re.compile(r'class="[^"]*Caption__Credit[^"]*"[^>]*>([^<]{1,160})<')
 # 主图 JSON 里的署名字段（"altText" 与 "crdt" 相邻，属同一张主图对象）
 _JSON_CREDIT_RE = re.compile(r'"altText":"[^"]{0,400}","crdt":"([^"]{1,160})"')
-# 资质后缀（MoCP 之类）；机构名（National Geographic Pristine Seas）不算
-_CREDENTIAL_RE = re.compile(r"^[A-Z][A-Za-z0-9&\.]{1,8}$")
+# 资质后缀（MoCP、AFP 这类缩写）：大写为主，最多一个小写字母；"National" 这种普通词不算
+_CREDENTIAL_RE = re.compile(r"^[A-Z][A-Z0-9&\.]*[a-z]?[A-Z0-9&\.]*$")
+# 机构名不是摄影师：词数上限挡不住 "National Geographic" 这种两词机构名
+_ORG_NAMES = ("National Geographic",)
 
 
 def normalize_credit(raw: str) -> Optional[str]:
@@ -118,7 +128,9 @@ def normalize_credit(raw: str) -> Optional[str]:
         return None
     parts = [p.strip() for p in text.split(",")]
     name = parts[0]
-    if not re.fullmatch(rf"{_NAME}(?:\s+{_NAME}){{0,2}}", name):
+    if not re.fullmatch(_FULL_NAME, name):
+        return None
+    if name.startswith(_ORG_NAMES):
         return None
     if len(parts) > 1 and _CREDENTIAL_RE.fullmatch(parts[1]):
         return f"{name}, {parts[1]}"
