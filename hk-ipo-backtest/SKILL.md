@@ -205,6 +205,8 @@ python3 ../hk-ipo-research/scripts/publish_report.py /tmp/hk-ipo-backtest-final.
 
 8b. **回测验证阶段工具调用预算硬上限 ≤ 6 次抓取 / 单标的**。本次会话（2026-09-01）原本 30 次预算，验证阶段就消耗了 ~13 次（push2 09615 × 5 次失败、xueqiu × 1 WAF、sina hkstock × 1 JS-only、aaStocks quote × 2 空文件、各种 web_search 收评尝试 × 4），最终因预算耗尽未能生成最终 Markdown 并 publish_report。**应对**：验证阶段严格按 8. 的顺序，每个 endpoint **最多 2 次重试**，3 次失败立即接受"sina hq 15:58 + web_search snippet 可见的盘中数字"为主源，**不要进入"无限找 EOD 收评"的死循环**。**首日收盘价精度损失 0.1-0.2 港元对回测结论（破发/上涨/持平）无实质影响**，但耗尽预算导致无法生成报告是致命失败。
 
+8c. **`push_rss.py` 不存在 —— 唯一真实入口是 `publish_report.py`**（2026-11-23 实测确认）。`~/.hermes/skills/hk-ipo-research/scripts/` 目录实际内容仅：`daily_rss_report.py`、`hkipo.py`、`publish_report.py`、`rss_relay_client.py`、`config/`、`hkipo/`。**没有 `push_rss.py`**。若 cron prompt 或用户指令写「立即调用 push_rss.py」，那是**错的**——按本 skill §6 用 `publish_report.py --report-type backtest --channel hkipo --source hk-ipo-backtest`（`--insecure` 仅在内网 Relay 使用可信自签名证书时追加）。**零成熟案例日不需要任何推送调用**，故此错配在无案例日不会暴露，直到有案例日才失败。
+
 9. **`publish_report.py` 章节检查器对 backtest 类型仍用未编号子串匹配**。`hk-ipo-research/scripts/publish_report.py::validate_ownership_section` 与章节缺失检查走的是 hk-ipo-research 的子串匹配（找 `## 回测状态` 等不带前缀的字符串），但 `report-contract.md` 明确要求 backtest 报告用 `## 1. 回测状态` 等带编号二级标题。结果：`pushed == true` 但 `quality_warnings` 把 7 个章节全部列为"缺少章节"（实测 2026-08-25 03223 推送即触发）。**应对**：
    - 当前已知是**误报**，无 `--strict` 时不阻断推送（与 hk-ipo-research PITFALL #16 同根因）；不要因为这条误报重推。
    - 写 backtest Markdown 时仍按 `report-contract.md` 用 `## 1. 回测状态` 等带编号标题（这是契约硬要求），不要因为 checker 误报就改回不带编号——会破坏与 `report-contract.md` 的一致性，未来真要消除误报要在 `publish_report.py` 章节正则里加 `^## (?:\\d+\\.\\s+)?(?P<name>...)$` 可选编号前缀。
