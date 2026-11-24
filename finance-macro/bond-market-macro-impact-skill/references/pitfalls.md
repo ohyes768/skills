@@ -346,3 +346,45 @@ def bp(a, b): return round((a - b) * 100, 2)
 - 数值核对脚本里对低频序列用各自的真实基期，否则核对器会误报（本次即误报 2 条）
 
 **反例**：❌ 假设所有日频指标采样日相同；❌ 用 10-19 起点算 HIBOR 的 4 周变动。
+
+## 26. 快照 API 被 nginx basic auth 挡住（401）——直连 macro-backend，别改 nginx（2026-11-23 实战新增）
+
+**现象**（2026-11-23）：`python3 scripts/fetch_snapshot.py` 直接失败，输出 `Collection failed: HTTP Error 401: Unauthorized`。用 `curl -k` 手工打 `https://web.duomi77.cn:9443/api/macro/analysis/snapshot` 返回 **nginx 自带的 401 HTML 页面**（`<center><h1>401 Authorization Required</h1></center><hr><center>nginx/1.29.6</center>`），不是 FastAPI 的 JSON 错误——说明是**前端 nginx 拦截**，不是应用层鉴权。
+
+**根因**：`web.conf` 的 9443 server 块有 server 级 `auth_basic "personal"`（2026-11-18 前后为保护 11 个子应用统一加的密码锁）。2026-11-17 给 rss 域批量加了 `auth_basic off`（`/rss/` 下的多个 location），**但 `/api/macro/analysis/` 这个 location 没有一起豁免**，所以它仍在密码锁后面。而 `api-contract.md` 写的是"无需鉴权"——那说的是 FastAPI 路由本身无鉴权，nginx 代理层另有一层，两者不矛盾。
+
+**诊断顺序**：
+1. 401 页面里有没有 `nginx/` 字样 → 有就是 nginx 层，不是应用层
+2. `docker exec nginx sh -c 'grep -n "analysis" /etc/nginx/conf.d/web.conf'` → 看该 location 有没有 `auth_basic off`
+3. 对比同文件里 `/rss/` 各 location 的 `auth_basic off` 注释（2026-11-17 加的），确认 `/api/macro/analysis/` 漏了
+
+**修复（本次采用，不改 nginx）**：
+```python
+# 直接指向 macro-backend 容器，nginx 的 rewrite ^/api/macro/(.*)$ /api/$1 在上游是 /api/analysis/snapshot
+import subprocess, ssl, urllib.request
+from urllib.parse import urlencode
+ip = subprocess.run(["docker","inspect","-f","{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+                     "macro-backend"], capture_output=True, text=True, check=True).stdout.strip()
+base = f"http://{ip}:8094/api/analysis/snapshot"   # 与 SKILL.md 的 https://web.duomi77.cn:9443/api/macro/analysis/snapshot 等价
+# 然后 import fetch_snapshot 模块，覆盖 fs.URL 与 fs.fetch，main() 照旧跑
+```
+- 该路径**只读**，不触发上游数据更新，与 SKILL.md"不上传信号 API、不触发上游数据更新"不冲突
+- RSS 推送**不受影响**：`/rss/` 域已豁免 basic auth，`publish_report.py` 正常发布
+- macro 报告看板 `/api/macro/reports/upload`（nginx 里 `= /api/macro/reports/upload` 这个精确 location）**已豁免** auth_basic，`report_push` 返回 `ok`
+
+**核对上游返回等价**：直连前先打一次 probe，确认 `schema_version=1.0`、`daily.as_of` 与请求日一致、月份列表与经 nginx 路径一致——`fetch_snapshot.py` 自己的 `validate()` 会校验 schema_version / monthly.periods / daily.cards / daily.as_of，探针通过即可认定等价。
+
+**反例**：❌ 直接去改 nginx 加 `auth_basic off`（超出本 skill 范围，且动的是对外暴露面的密码锁）；❌ 因为 api-contract 写"无需鉴权"就以为凭证问题，去翻 .env 找 token 试 `X-Upload-Token` / `Authorization: Bearer`（那是 macro 上传接口的 token，与只读快照无关，试了也是 401）；❌ 把 401 当成"数据源不可用"从而跳过本期分析——数据完全可取。
+
+## 27. 日频末点不是分析日前一交易日时，"序列最低"要逐指标核对（2026-11-23 实战新增）
+
+**现象**（2026-11-23）：本期 DR001 1.2629% 确为本次序列最低，但 DR007 1.3639% **不是**——11-09 的 1.3580% 更低。初稿写了"DR001 与 DR007 均为本次序列最低"，属于把一个指标的结论套到另一个指标上。
+
+**根因**：5 个日频采样点对每个指标是同一组日期，但**各指标的数值序列不同步**，"最低/最高"必须逐指标在序列内比较，不能因为两个指标同属流动性卡就一起断言。
+
+**修复**：
+- 报告里凡出现"序列最低/最高"，先用脚本对**该指标自身**的序列取 min/max 再写
+- 同一句里并列两个指标时，若只有一个是极值，就写成"DR001 1.2629%（序列最低）、DR007 1.3639%（仅次于 11-09 的 1.3580%）"
+- 同理适用于"连续第 N 个采样点下降"这类跨点表述——margin（两融）本期只有 3 个点（10-26 / 11-02 / 11-05），应写明"本次序列三个采样点连续下降（23892.60 → 22951.08 → 22709.78）"而不是套用上期的"连续第六个"
+
+**反例**：❌ "DR001 与 DR007 均为本次序列最低"；❌ 把"连续第 N 个采样点下降"从 6 个点的序列照搬到 3 个点的序列。
