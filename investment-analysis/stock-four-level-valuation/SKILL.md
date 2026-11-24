@@ -2,7 +2,7 @@
 name: stock-four-level-valuation
 description: Use when a single A-share company needs 重仓、加仓、减仓、全卖 price observation levels, valuation review, or reuse of existing financial and business-quality research; also when a caller needs structured four-level valuation output independent of a stock-watchlist website.
 metadata:
-  version: 1.2.0
+  version: 1.3.0
 ---
 
 # 单股四挡位估值
@@ -24,7 +24,7 @@ metadata:
 1. 清点已有成果的身份、期间、普通股口径、来源和缺口；保留上游判断/本次事实/假设区别。不重做已足够的业务研究，来源复用不等于独立双源核验。
 2. 只补影响定价或核心风险的缺口：初查加最多两轮定向补查，仍缺则收口；鉴权/额度失败停用后端，临时失败两次停用。不安装工具、拆接口或开发爬虫。无资料可用时返回不足，而非不停搜索。
 3. 读 [估值方法](references/valuation-methods.md)，审查经营、治理、现金分配、负债/资本门槛，选择 PE、PB 或股东现金流现值。银行基础评分不包含监管资本等，必须补证；特别分红不得永久化。
-4. 形成悲观/基准/乐观**当前价值**及四点独立理由；每个倍数、折扣、增长、折现率都解释依据和反证。未来股价和期间分红分别折现，不重复计入；不机械平均不同模型。
+4. 形成悲观/基准/乐观**当前价值**及四点独立理由；每个倍数、折扣、增长、折现率都解释依据和反证。未来股价和期间分红分别折现，不重复计入；不机械平均不同模型。建模粒度按 [估值方法](references/valuation-methods.md) 的降级上限执行：够解释四点即可，禁止搭建逐年全报表引擎；须给 finalize/check 保留至少 8 轮工具额度。
 5. 读 [输出与命令](references/output-contract.md)，写 draft。脚本计算四点、TTM PE/PB、敏感性及同源报告：
 
 ```text
