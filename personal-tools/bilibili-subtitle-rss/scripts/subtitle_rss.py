@@ -93,7 +93,9 @@ def build_post(envelope, bvid):
     lines = [f'# {escape_text(title)}', '', f'原视频：{url}', '',
              f'UP 主：{escape_text(author)}', '',
              f'视频时长：{escape_text(video.get("duration", "未知"))}', '',
-             '以下为平台字幕原文，按停顿和字数合并分段，未作摘要或纠错。', '', '## 完整文字稿', '']
+             ('以下为语音识别（ASR）生成的文字稿，非平台字幕，可能有错字或漏句，未作摘要或纠错。'
+              if subtitle.get('transcript_source') == 'asr'
+              else '以下为平台字幕原文，按停顿和字数合并分段，未作摘要或纠错。'), '', '## 完整文字稿', '']
     segments = []
     previous_start = -1.0
     for item in subtitle['items']:
