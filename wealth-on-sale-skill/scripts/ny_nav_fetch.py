@@ -61,6 +61,9 @@ def nav_all(code,tries=8):
 if __name__=="__main__":
     codes=sys.argv[1:]
     for code in codes:
+        if code.startswith("-"):  # 防止把 --help 等参数当销售码抓取
+            print(f"跳过非法代码 {code}")
+            continue
         rows=nav_all(code)
         json.dump({"salesCode":code,"rows":rows},open(os.path.join(OUT,f"{code}_nav.json"),"w",encoding="utf8"),ensure_ascii=False)
         print(code,"->",len(rows),"行")

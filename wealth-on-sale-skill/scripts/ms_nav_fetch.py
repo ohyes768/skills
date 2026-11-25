@@ -59,6 +59,9 @@ def main():
         return
     # 直接按 real_prd_code
     for code in sys.argv[1:]:
+        if code.startswith("-"):  # 防止把 --help 等参数当产品码抓取
+            print(f"跳过非法代码 {code}")
+            continue
         rows=fetch_nav(code)
         json.dump({"realPrdCode":code,"rows":rows},
                   open(os.path.join(OUT,f"{code}.json"),"w",encoding="utf8"),ensure_ascii=False)
