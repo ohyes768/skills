@@ -136,7 +136,7 @@ python3 nav_stats.py <code> [<code>...]
 
 **T 份额查不到 ≠ 无业绩**：cfweb 对渠道专属 T 份额返回"查无此代码"，但同一产品的 A/B/C/D 份额查得到（例：招睿增利指南针180天持有期1号，108998T 失败、108998A/C 一次命中 142 点）。报"无参照"前先把代码尾缀换成 A/C/D 各试一次。封闭系列新发期（如增鼎封闭11号仅成立 7 天）才算真无参照——用官网详情页/同花顺搜索结果交叉确认最老份额的成立日期再下结论。
 
-`nav_stats.py` 内置统一 loader：招银/杭银 CSV 之外，自动识别 `~/study/nav/` 下 citic/ny/hx/xy 四家的 JSON 格式（深度限制见「已知限制」对照表）；ms/ceb/boc 无结构化历史。
+`nav_stats.py` 内置统一 loader：招银/杭银 CSV 之外，自动识别兴银/信银/华夏/南银四家 fetcher 输出的 JSON 格式（深度限制见「已知限制」对照表）；ms/ceb/boc 无结构化历史。
 
 **同系列老份额参照（新份额必做）**：
 
@@ -153,16 +153,9 @@ python3 series_ref.py <系列关键字> [--top 5] [--min-days 180] [--online-cmb
 
 ```
 scripts/data/nav_history/     招银+杭银自营净值 CSV
-~/study/nav/xy/               兴银净值 JSON（7786 只）
-~/study/nav/citic/            信银净值 JSON（8102 只）
-~/study/nav/ceb/              光大净值 JSON（100 只）
-~/study/nav/ms/               民生净值公告清单 JSON（1399 只）
-~/study/nav/boc/              中银净值 JSON
-~/study/nav/hx/               华夏净值报告 JSON
-~/study/nav/ny/               南银净值 JSON
-~/study/cmb_daixiao_products.json   招行官网货架 132 只
-~/study/hzbank_daixiao_thirdparty.json  杭行代销第三方 1469 只
 ```
+
+第三方管理人的研究期缓存曾在 `~/study/nav/`，2026-11-25 已随研究工作区清理删除；需要时用对应 fetcher 重新抓取（xy/citic/hx/ny 等脚本支持按代码拉取，华夏/南银全量索引重新跑一遍批量脚本即可重建）。招行/杭行代销清单同理，用 `on_sale_cmb.py` / `on_sale_hzbank.py` 实时查询，不依赖本地缓存文件。
 
 ---
 
@@ -189,6 +182,26 @@ scripts/data/nav_history/     招银+杭银自营净值 CSV
 
 ---
 
+## 推送到 RSS（可选，用户明确要求时才发）
+
+筛选/净值结果可推送到个人 RSS 中转服务，实际投递委托公共包 `rss-relay-publish`（subprocess 调用其 `scripts/rss_publish.py`，不自己实现 POST；查重回执由公共层 SQLite 管理）。公共包按 `RSS_RELAY_SKILL_DIR` 环境变量或本仓库 `skills/knowledge/rss-relay-publish` 自动定位，找不到时明确失败不回退。
+
+```bash
+# 直接推 Markdown 报告
+python scripts/rss_push.py --file report.md --title "杭行代销在售 2026-11-25" \
+    --channel bank-wealth --source bank-wealth-screening \
+    --dedupe-key "hzbank-onsale:2026-11-25"
+
+# 从 on_sale_hzbank.py / on_sale_cmb.py 的 JSON 输出自动渲染 Markdown 表格后推送
+python scripts/rss_push.py --json hzbank_onsale.json --title "..." \
+    --dedupe-key "hzbank-onsale:2026-11-25"
+```
+
+- `--dry-run` 仅预览；可选 `--url`、`--base-url`、`--ca-file`、`--insecure`（仅显式要求）。
+- `--dedupe-key` 必须稳定唯一：建议 `<渠道>-onsale:<日期>`（如 `cmb-onsale:2026-11-25`、`hzbank-onsale:2026-11-25`）；修订版加 `:v2` 并在标题体现。
+- stdout 是单个 JSON：`published`/`duplicate` 为成功；`conflict`=同键不同内容；`unknown`=可能已接收，同命令重跑只核对不重发。详见公共包 SKILL.md 判定表。
+- 频道须已在 RSS 服务登记且启用（默认 `bank-wealth`，未登记时发布会被拒，不自动建频道）。只查看/生成结果时不发布，不能因为加载本 skill 就自动发送。
+
 ## 业绩指标门槛
 
 | 指标 | 最低门槛 | 勉强可信 |
@@ -203,7 +216,7 @@ scripts/data/nav_history/     招银+杭银自营净值 CSV
 
 1. 先在渠道产品目录按系列名关键字搜老份额（按 `beginDate` 排序取最老）；老份额已不在渠道发行的，用 web 搜产品全名找老代码（例：665593=招睿安悦370天1号、130052A=招睿明裕180天持有2号）。
    **⚠️ `series_ref.py` 只覆盖信银/华夏/南银/招行目录，不含杭银自营**。杭银自营系列的参照必须手动查杭银全量目录（`https://www.hzbankwealth.cn/eportal/hzbw/product_data.json`，5568 只含存续）：按系列名关键字过滤 `contenttitle`，取 `chanpinzhuangtai=存续` 且 `chengliriqi` ≥180 天的份额，用 `leijijingzhi` 和成立日算年化。**杭银自营系列报"无参照"之前必须先走这一步**，否则一律视为漏查（2026-11-25 实例：添益180天持有、安享优选182天周期型、半年添益全都有多年老份额，series_ref 却报 0）。
-   同理，**南银系列 series_ref 报 0 时也要检查 `~/study/nav/ny/*_nav.json` 本地缓存并直接用 `ny_nav_fetch.py` 按代码拉**（增瑞财富牛 Z70021 当时缓存里就有 58 点净值，series_ref 却报 0）。华夏系同判断：先查 `hx/_index.json`（10153 份报告按产品 id 索引），候选代码在 priority 列表里就可用单代码抓取流程拉净值——固收增强周期180天（2119187001，5年老份额）就是这样找回的。
+   同理，**南银系列 series_ref 报 0 时也要直接用 `ny_nav_fetch.py` 按代码拉**（增瑞财富牛 Z70021 实测能拉到 58 点净值，series_ref 却报 0）。华夏系同判断：先跑 `hx_fetch.py` 建索引（1 万+份报告按产品 id 索引），候选代码在 priority 列表里就可用单代码抓取流程拉净值——固收增强周期180天（2119187001，5年老份额）就是这样找回的。
 2. **"同系列"必须同登记编号（杭银看 `dengjino`、招银系列名逐字匹配），不能拿同家族不同产品线充数**：同一策略前缀下常有并行产品线（如杭银"丰鸿固收371天XXXX期"与"丰鸿固收（灵动目标盈）XXXX期"是两条独立线，登记编号不同）。拿错参照=虚假业绩背书。
 3. 注意**风险等级的历史变化**：老份额当年可能风险等级更高（如丰鸿系 2026-06 前份额是 R3，之后才降标 R2），要向用户说明参照与本期不完全对应。
 4. **typeinfo 等内部字段可作策略指纹**：杭银 typeinfo `b5`=含转债/弹性敞口（固收+），同带 b5 的产品线即使标 R2 波动也明显高于纯固收（b2/b3）线；稳健型用户优先纯固收线。
@@ -213,7 +226,7 @@ scripts/data/nav_history/     招银+杭银自营净值 CSV
 
 **净值缓存深度对照（决定哪个系列能用历史业绩验证，2026-11-25 实测）**：
 
-| 通道（`~/study/nav/<mgmt>/`） | 历史深度 | 说明 |
+| 通道（fetcher 脚本输出） | 历史深度 | 说明 |
 |---|---|---|
 | hx（华夏） | **全历史**（数百点/支） | 净值报告 JSON，最可靠 |
 | xy（兴银） | 全历史（700+ 点） | `adjustedValue` 复权净值 |
@@ -229,6 +242,6 @@ scripts/data/nav_history/     招银+杭银自营净值 CSV
 - 光大专款（杭行74只/招行20只）：光大理财官网 cebwm.com 有瑞数反爬，脚本化不可行；用同系列公开份额参照
 - 民生理财历史净值：cmbcwm.com.cn BTADailyQry 结构化直连（508只零售），但本地缓存只存了最新净值
 - 南银理财偶发失败：重试即可（失败率~30%）；缓存深度仅 2 个月（见上表）
-- **中国理财网（chinawealth.com.cn）：已退役，勿再使用**。2026-11-24 实测 `prod/search` 返回 `code:-1 "二次校验参数不能为空"`——服务端加了新的二次校验参数，RSA+AES 签名流程整体失效，**不是限频，重试无意义**（曾有记录误写为"限流 3-4 请求即 429"，以本条为准）。历史逆向代码**不在本仓库 git 历史中**（该文件从未提交过），副本在 `~/study/wealth-distribution-channel/cw_chinawealth.py` 和 `~/study/hzbank_yield/cw_chinawealth.py`。管理人直连接口已覆盖其原有用途
+- **中国理财网（chinawealth.com.cn）：已退役，勿再使用**。2026-11-24 实测 `prod/search` 返回 `code:-1 "二次校验参数不能为空"`——服务端加了新的二次校验参数，RSA+AES 签名流程整体失效，**不是限频，重试无意义**（曾有记录误写为"限流 3-4 请求即 429"，以本条为准）。历史逆向代码（cw_chinawealth.py 等副本）从未提交过 git，已随 2026-11-25 的 `~/study` 清理删除，不再保留。管理人直连接口已覆盖其原有用途
 - 无直连数据源的管理人（建信/中邮/工银/浦银/交银/平安/宁银/北银等）：业绩不可验证，推荐时明确标注"无业绩可参照、盲买管理人"，不要凭列表信息推荐
 - 华夏银行自营 164 只（杭行货架）：全部"到期"状态，2026底清理，无需关注
