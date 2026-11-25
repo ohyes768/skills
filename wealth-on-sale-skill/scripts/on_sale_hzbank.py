@@ -12,6 +12,8 @@
 """
 import argparse, json, sys, time, urllib.request
 
+from term_parse import hold_days
+
 API="https://iibsp.hzbank.com.cn/IntegratedServer/queryLcProdInfoList"
 UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120"
 
@@ -45,8 +47,9 @@ def main():
     ap=argparse.ArgumentParser(description="杭行代销第三方在售理财筛选")
     ap.add_argument("--risk",help="风险等级过滤: R1,R2,R3...")
     ap.add_argument("--manager",help="管理人关键字(逗号分隔)")
-    ap.add_argument("--min-days",type=int,help="产品期限≥N天")
+    ap.add_argument("--min-days",type=int,help="实际锁定天数≥N（名称持有期解析，非接口 prodTerm 存续期字段）")
     ap.add_argument("--json",action="store_true",help="JSON 输出")
+    ap.add_argument("--all-shares",action="store_true",help="不去重，列出全部份额（默认同款多份额聚合为一条）")
     args=ap.parse_args()
 
     print("正在拉取杭行代销在售产品...",file=sys.stderr)
@@ -61,23 +64,35 @@ def main():
     if args.manager:
         kws=[x.strip() for x in args.manager.split(",")]
         rows=[r for r in rows if any(k in r.get("taName","") for k in kws)]
-    # 期限过滤
+    # 期限过滤（按名称解析实际锁定天数；prodTerm 是存续期字段不能用）
     if args.min_days:
-        rows=[r for r in rows if (r.get("prodTerm") or 0)>=args.min_days]
+        rows=[r for r in rows if (hold_days(r.get("prdName",""), r.get("prodTerm")) or 0)>=args.min_days]
 
     if args.json:
         print(json.dumps(rows,ensure_ascii=False,indent=1))
         return
 
+    # 同款多份额聚合（如「半年鑫189天96号(幸福金桂A/B/C/D）」只算一条），--all-shares 展开
+    if not args.all_shares:
+        groups = {}
+        for r in rows:
+            import re as _re
+            key = (r.get("riskLevel"), _re.sub(r"([天号款])[A-Z]$", r"\1",
+                   _re.sub(r"（[^）]*）|\([^)]*\)", "", r.get("prdName","")))[:20],
+                   hold_days(r.get("prdName",""), r.get("prodTerm")))
+            groups.setdefault(key, []).append(r)
+        rows = [min(g, key=lambda x: x.get("iniAmount") or 0) for g in groups.values()]
+
     # 表格输出
-    print(f"\n杭行代销第三方在售: {len(rows)} 只\n")
-    print(f"{'产品代码':<14}{'管理人':<12}{'风险':<5}{'期限(天)':<8}{'起购':<10}{'产品名称'}")
+    print(f"\n杭行代销第三方在售: {len(rows)} 只"
+          f"{'' if args.all_shares else '（同款份额已聚合，--all-shares 展开）'}\n")
+    print(f"{'产品代码':<14}{'管理人':<12}{'风险':<5}{'锁定(天)':<8}{'起购':<10}{'产品名称'}")
     print("-"*95)
-    for r in sorted(rows,key=lambda x:(x.get("riskLevel") or 0,x.get("prodTerm") or 0)):
+    for r in sorted(rows,key=lambda x:(x.get("riskLevel") or 0, hold_days(x.get("prdName",""), x.get("prodTerm")) or 0)):
         code=r.get("prdCode","")
         ta=r.get("taName","").replace("有限责任公司","")
         risk=f"R{r.get('riskLevel','')}"
-        term=str(r.get("prodTerm",""))
+        term=str(hold_days(r.get("prdName",""), r.get("prodTerm")) or "")
         amt=str(r.get("iniAmount",""))
         name=r.get("prdName","")[:36]
         print(f"{code:<14}{ta:<12}{risk:<5}{term:<8}{amt:<10}{name}")

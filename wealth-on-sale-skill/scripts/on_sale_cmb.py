@@ -16,50 +16,14 @@
 import argparse, datetime, json, re, sys
 import requests
 
+from term_parse import term_days, hold_days
+
 API = "https://m.cmbchina.com/api/financing/product-list"
 RISK = {"R1": "R1", "R2": "R2", "R3": "R3", "R4": "R4", "R5": "R5",
         "低风险": "R1", "中低风险": "R2", "中风险": "R3",
         "中高风险": "R4", "高风险": "R5"}
 OPEN_PAT = re.compile(r"日开|天天|活期|最短持有|最低持有|天持有|月持有|持有期|定开")
 RETAIL_EXCL = re.compile(r"机构专享|私行|私享|私募|尊享")
-
-
-def term_days(term):
-    """把期限字段解析成 (最短天数, 最长天数|None)。
-
-    支持: "181天-365天（含）" / "180天持有期" / "365天以上" / "90天" /
-    "最低持有360天" 等。解析失败返回 None。
-    """
-    if not term:
-        return None
-    t = term.replace("（含）", "").replace("(含)", "")
-    m = re.search(r"(\d+)天-以上", t)  # 不会命中，防御性
-    nums = [int(x) for x in re.findall(r"(\d+)天", t)]
-    if "以上" in t:
-        return (nums[0] if nums else None, None)
-    if len(nums) >= 2:
-        return (min(nums), max(nums))
-    if len(nums) == 1:
-        return (nums[0], nums[0])
-    return None
-
-
-def hold_days(name, term):
-    """产品对用户的实际锁定天数（持有期/封闭期），解析失败返回 None。
-
-    常开产品的 term 字段「365天以上」指产品存续期而非持有期，
-    所以持有期优先从名称解析（「180天持有期」「最低持有360天」等），
-    名称没有才回退到 term 字段（封闭式产品 term 即封闭期）。
-    """
-    # 日开/天天/活期/现金管理类：无锁定天数，优先于名称持有期和 term 判定
-    if re.search(r"日开|天天|活期|现金管理", name):
-        return 0
-    m = re.search(r"(\d+)天(?=持有|最低持有|最短持有)", name) \
-        or re.search(r"(?:最低|最短)持有(\d+)天", name)
-    if m:
-        return int(m.group(1))
-    td = term_days(term)
-    return td[0] if td else None
 
 
 def pdate(s):

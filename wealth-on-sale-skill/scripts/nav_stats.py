@@ -10,6 +10,8 @@
 import argparse
 import csv
 import datetime
+import glob
+import json
 import math
 import os
 import re
@@ -23,10 +25,60 @@ import numpy as np
 RF = 0.015
 HERE = os.path.dirname(os.path.abspath(__file__))
 NAV_DIR = os.path.join(HERE, "data", "nav_history")
+# 各管理人结构化净值缓存目录（~/study/nav/<mgmt>/）及行字段映射
+JSON_SOURCES = [
+    ("citic", ["navDate", "nav"]),            # {'navDate':'20261124','nav':'1.02'}
+    ("ny",    ["date", "netValue"]),          # {'date':'2026-11-24','netValue':'1.11'}
+    ("hx",    ["netValueDate", "shareNetVal"]),  # 净值报告 rows
+    ("xy",    ["dataDt", "adjustedValue"]),   # 复权净值，回退 effTotNetVal
+    ("ms",    None), ("ceb", None), ("boc", None),  # 无结构化历史，仅占位
+]
+STUDY_NAV = os.path.expanduser("~/study/nav")
+
+
+NAME_HINT = {}  # code -> 产品名（从 JSON 缓存顺带取到）
+
+
+def _load_json(code):
+    """从 ~/study/nav/<mgmt>/<code>*.json 读历史净值，返回 [(date, nav)] 或 None。"""
+    for mgmt, fields in JSON_SOURCES:
+        if not fields:
+            continue
+        for f in sorted(glob.glob(os.path.join(STUDY_NAV, mgmt, f"{code}*"))):
+            try:
+                d = json.load(open(f))
+            except Exception:
+                continue
+            rows = d.get("rows") if isinstance(d, dict) else d
+            if not rows:
+                continue
+            name = (d.get("name") or d.get("productName") or d.get("title") or "")
+            if name:
+                NAME_HINT[code] = re.sub(r"[\[【].*?[\]】]", "", name)[:40]
+            pts = []
+            for r in rows:
+                dt, nv = str(r.get(fields[0]) or ""), r.get(fields[1])
+                if fields[1] == "adjustedValue" and not nv:
+                    nv = r.get("effTotNetVal")
+                if not dt or nv in (None, "", 0):
+                    continue
+                dt = dt[:10].replace(".", "-")
+                try:
+                    pts.append((datetime.date.fromisoformat(dt), float(nv)))
+                except ValueError:
+                    continue
+            if len(pts) >= 2:
+                return sorted(set(pts))
+    return None
 
 
 def load(code):
     path = os.path.join(NAV_DIR, f"{code.upper()}.csv")
+    if not os.path.exists(path):
+        pts = _load_json(code.upper())
+        if pts:
+            return pts
+        raise FileNotFoundError(code)
     rows = list(csv.DictReader(open(path)))
     return [(datetime.date.fromisoformat(r["date"]), float(r["nav"])) for r in rows]
 
@@ -99,7 +151,9 @@ def main():
             m = re.search(r"(PR?\d)", risk)
             risk = m.group(1) if m else risk[:6]
         except Exception:
-            name, risk = code, ""
+            name, risk = NAME_HINT.get(code, code), ""
+            if name == code:
+                risk = ""
         name = name if len(name) <= 24 else name[:23] + "…"
         span = (pts[-1][0] - pts[0][0]).days
         dur = f"{span//365}年{span%365}天" if span >= 365 else f"{span}天"
