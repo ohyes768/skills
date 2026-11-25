@@ -2,7 +2,7 @@
 name: stock-four-level-valuation
 description: Use when a single A-share company needs 重仓、加仓、减仓、全卖 price observation levels, valuation review, or reuse of existing financial and business-quality research; also when a caller needs structured four-level valuation output independent of a stock-watchlist website.
 metadata:
-  version: 1.3.0
+  version: 1.4.0
 ---
 
 # 单股四挡位估值
@@ -32,7 +32,7 @@ python <skill目录>/scripts/validate_result.py finalize --stock stock.json --in
 python <skill目录>/scripts/validate_result.py check --stock stock.json --input result.json
 ```
 
-6. 语义复核公司/期间、模型适用性、参数理由与重要风险。脚本通过不证明事实或估值正确。成功后把 finalize 产出的 result JSON 作为唯一一条最终消息原样交付：不加代码围栏、不加解释、不复述草稿或过程文本——交付体积直接受模型输出上限约束，任何附加文本都可能把 JSON 挤到截断。不得补充另一套价格。失败只修具体问题，不交付旧结果。
+6. 语义复核公司/期间、模型适用性、参数理由与重要风险。脚本通过不证明事实或估值正确。成功后把 finalize 产出的 result JSON 作为唯一一条最终消息原样交付：不加代码围栏、不加解释、不复述草稿或过程文本——交付体积直接受模型输出上限约束，任何附加文本都可能把 JSON 挤到截断。证据 locator 只写定位要素（栏目/页码/字段名），不整段抄原始数据；rationale 依据加反证一两句即可；体积上限见 output-contract.md，超限 finalize 会直接报错，先收缩再重跑。不得补充另一套价格。失败只修具体问题，不交付旧结果。
 
 ## 输出状态
 

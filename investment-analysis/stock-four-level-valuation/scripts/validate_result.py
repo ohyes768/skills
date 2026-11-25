@@ -23,6 +23,14 @@ from valuation_math import NUMBER, decimal_value, evaluate, level_metrics, round
 
 FORMULA_VERSION = "1"
 
+# 交付体积守卫：最终 result JSON 必须能被模型单条消息完整吐出。
+# 2026-11-25 招行 run 实测：locator 抄数据 + rationale 写小作文把 compact JSON
+# 撑到 77KB，超模型单条输出上限，交付被截断判失败。这些上限是合同，不是建议。
+LOCATOR_MAX_CHARS = 300
+TITLE_MAX_CHARS = 120
+RATIONALE_MAX_CHARS = 400
+RESULT_MAX_BYTES = 50000
+
 
 def _fmt6(value: Decimal) -> str:
     """exact_price 输出为 6 位小数字符串，避免 256 位精度长串撑爆交付体积。"""
@@ -141,6 +149,13 @@ def _validate_stock(stock):
     return stock
 
 
+def _bounded_text(value, label, max_chars):
+    _text(value, label)
+    _require(len(value) <= max_chars,
+             f"{label}: {len(value)} chars exceeds limit {max_chars}; trim, do not copy raw data")
+    return value
+
+
 def _check_origin(origin):
     """Validate where evidence came from without touching the network or disk.
 
@@ -178,10 +193,10 @@ def _validate_evidence(draft, as_of):
         _text(item["id"], f"{label}.id")
         _require(item["id"] not in ids, f"{label}.id: duplicate id {item['id']}")
         ids.add(item["id"])
-        _text(item["title"], f"{label}.title")
+        _bounded_text(item["title"], f"{label}.title", TITLE_MAX_CHARS)
         _require(item["kind"] in KINDS, f"{label}.kind: unsupported")
         _check_origin(item["origin"])
-        _text(item["locator"], f"{label}.locator")
+        _bounded_text(item["locator"], f"{label}.locator", LOCATOR_MAX_CHARS)
         _text(item["period"], f"{label}.period")
         for field in ("published_at", "accessed_at"):
             if item[field] is not None:
@@ -196,6 +211,8 @@ def _validate_evidence(draft, as_of):
 def _model_entry(entry, label, primary_method, known_ids, keys=("model", "rationale", "evidence_ids")):
     _exact_keys(entry, keys, label)
     _chinese_text(entry["rationale"], f"{label}.rationale")
+    _require(len(entry["rationale"]) <= RATIONALE_MAX_CHARS,
+             f"{label}.rationale: {len(entry['rationale'])} chars exceeds limit {RATIONALE_MAX_CHARS}; state basis and counter-evidence in one or two sentences")
     _id_refs(entry["evidence_ids"], known_ids, f"{label}.evidence_ids")
     model = entry["model"]
     _require(isinstance(model, dict) and model.get("method") == primary_method,
@@ -413,6 +430,22 @@ def render_report(result):
     return "\n".join(lines)
 
 
+def _check_result_size(result):
+    """Guard the delivery channel: the caller receives this JSON as one model
+    message, which has a hard output cap. Oversize means the delivery gets
+    truncated and the whole run fails even though the analysis was correct."""
+    per_key = {key: len(dumps(value).encode("utf-8"))
+               for key, value in sorted(result.items(),
+                                        key=lambda kv: len(dumps(kv[1]).encode("utf-8")),
+                                        reverse=True)}
+    total = len(dumps(result).encode("utf-8"))
+    _require(total <= RESULT_MAX_BYTES,
+             f"result: compact JSON is {total} bytes, over delivery limit {RESULT_MAX_BYTES}; "
+             f"largest fields: "
+             + ", ".join(f"{key}={size}B" for key, size in per_key.items() if size >= 1000)
+             + "; trim locator/rationale/report_md wording, not the 17-field set")
+
+
 def finalize(draft, stock, skill_path):
     """Validate draft against stock, recompute everything, return the 17-field result."""
     _validate_stock(stock)
@@ -445,6 +478,7 @@ def finalize(draft, stock, skill_path):
     }
     result["report_md"] = render_report(result)
     _require(set(result) == set(RESULT_KEYS), "internal: result key set drifted")
+    _check_result_size(result)
     return result
 
 

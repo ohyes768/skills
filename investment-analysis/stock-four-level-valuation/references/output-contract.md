@@ -48,6 +48,19 @@ finalize 成功将完整JSON打印stdout，并原子保存到明确的output；c
 
 一个事实跨多维可复用同一id，别为凑数量伪造独立来源。假设不必都有外部来源“批准”，但其rationale要说明事实基础与本次判断区别。
 
+### 交付体积上限（硬性，脚本强制）
+
+最终 result JSON 以单条模型消息交付，受模型输出上限硬约束；超限会导致交付截断、整个 run 判失败（2026-11-25 招行 run 实测 77KB 被截断）。证据链只负责**可追溯**，不负责把原始数据搬进 JSON：
+
+| 项 | 上限 | 说明 |
+|---|---|---|
+| evidence.locator | 300字符 | 只写定位要素：URL已含来源，此处写栏目/页码/章节/字段名与少量关键数值；禁止整段抄录财务数据或公告原文 |
+| evidence.title | 120字符 | 真实标题 |
+| rationale（scenarios/decisions/sensitivity） | 400字符 | 依据一句 + 反证一句，不写小作文；数据本体在 model 参数里，不在rationale复述 |
+| 整份 compact result JSON | 50000字节 | finalize 前预判：draft 明显偏大先自行收缩，finalize 报错按提示裁最大的字段 |
+
+report_md 同理：正文不复述 JSON 已有的逐项数值，细节让读者看 evidence/levels。finalize/check 都会执行该校验，超限 exit=2 并指出最大的几个字段。
+
 ### ready valuation六个输入键
 
 1. `primary_method`：pe_multiple/pb_multiple/equity_cashflow_pv。
@@ -123,3 +136,4 @@ python <skill目录>/scripts/validate_result.py check --input <本轮目录>/res
 4. JSON与报告同一批数值，非ready没有暗藏参考四点。
 5. 当前执行finalize/check均成功，旧文件不能代替成功回执。
 6. 输出一个JSON，调用端自行决定展示、存储及批准更新；无enabled或自动写网站字段。
+7. 交付体积在上限内（见第3节体积上限表）；最终消息只含这一个JSON对象，无任何前言、解释或代码围栏。
