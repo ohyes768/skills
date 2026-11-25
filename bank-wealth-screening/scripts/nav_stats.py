@@ -25,7 +25,7 @@ import numpy as np
 RF = 0.015
 HERE = os.path.dirname(os.path.abspath(__file__))
 NAV_DIR = os.path.join(HERE, "data", "nav_history")
-# 各管理人结构化净值缓存目录（~/study/nav/<mgmt>/）及行字段映射
+# 各管理人结构化净值缓存目录（可用环境变量 BWS_NAV_DIR 覆盖；历史研究缓存 ~/study/nav 已删除，需重新抓取）
 JSON_SOURCES = [
     ("citic", ["navDate", "nav"]),            # {'navDate':'20261124','nav':'1.02'}
     ("ny",    ["date", "netValue"]),          # {'date':'2026-11-24','netValue':'1.11'}
@@ -33,14 +33,14 @@ JSON_SOURCES = [
     ("xy",    ["dataDt", "adjustedValue"]),   # 复权净值，回退 effTotNetVal
     ("ms",    None), ("ceb", None), ("boc", None),  # 无结构化历史，仅占位
 ]
-STUDY_NAV = os.path.expanduser("~/study/nav")
+STUDY_NAV = os.environ.get("BWS_NAV_DIR", os.path.expanduser("~/study/nav"))
 
 
 NAME_HINT = {}  # code -> 产品名（从 JSON 缓存顺带取到）
 
 
 def _load_json(code):
-    """从 ~/study/nav/<mgmt>/<code>*.json 读历史净值，返回 [(date, nav)] 或 None。"""
+    """从 <缓存目录>/<mgmt>/<code>*.json 读历史净值，返回 [(date, nav)] 或 None。"""
     for mgmt, fields in JSON_SOURCES:
         if not fields:
             continue

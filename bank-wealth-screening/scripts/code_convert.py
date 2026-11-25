@@ -3,7 +3,7 @@
 
 可插拔适配器架构：新增一家理财子公司时，继承 Resolver 实现 match/resolve，
 然后加入 RESOLVERS 列表即可。代销渠道（信银/光大/民生/兴银等）的研究代码
-已移至 ~/study/wealth-distribution-channel/，本脚本不再支持。
+原研究副本在 ~/study/wealth-distribution-channel/，该工作区已于 2026-11-25 清理，本脚本不再支持。
 
 用法:
   python code_convert.py 120053A               # 招银自营销售代码

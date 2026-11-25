@@ -9,7 +9,7 @@
 数据源: m.cmbchina.com /api/financing/product-list（目录约770支，2026-11起仅招银自营，代销已不在返回中）
 自营判定: 招银自营产品 prdCode 为 4-6 位数字（可带份额字母，如 120053A、8914）；
       代销产品代码带机构前缀（XY/GD/MS/JX/GY/JY 等），已默认排除。
-      代销渠道研究代码在 ~/study/wealth-distribution-channel/。
+      代销渠道研究代码原在 ~/study/wealth-distribution-channel/（已清理），逻辑已并入本脚本。
 判定: 长期开放型（日开/天天/最短持有期/定开且未到期）视为可申购；
       封闭式新发按募集窗口 beginDate~endDate 是否覆盖今天。
 """

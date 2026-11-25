@@ -4,7 +4,7 @@
 用法:
   python3 series_ref.py <系列关键字> [--top 5] [--min-days N]
 
-在各通道本地产品索引（~/study/nav/ 的 citic/hx/ny products json + 招行目录缓存）
+在各通道本地产品索引（citic/hx/ny products json + 招行目录缓存；目录可用环境变量 BWS_NAV_DIR 覆盖）
 里按系列名关键字找同系列份额，优先选成立最早、且本地有净值数据的份额，
 输出 nav_stats 同款业绩表 —— 用于给新份额找"系列业绩参照"。
 
@@ -19,7 +19,7 @@ import sys
 
 import nav_stats as ns
 
-STUDY = os.path.expanduser("~/study/nav")
+STUDY = os.environ.get("BWS_NAV_DIR", os.path.expanduser("~/study/nav"))
 
 
 def candidates(keyword, online_cmb=False):
