@@ -364,14 +364,17 @@ def fetch_hot_codes() -> list[str]:
 
 
 def fetch_spot_all() -> pd.DataFrame:
-    """akshare 新浪源全 A 股实时行情（含 code6 / amount_wan / pct_chg 派生列）。"""
+    """akshare 新浪源全 A 股实时行情（含 code6 / amount_wan / pct_chg 派生列）。
+
+    akshare 1.20.46 起 `stock_zh_a_spot` 更名为 `stock_zh_a_spot_sina`
+    （旧名保留但调用即抛 AttributeError）。先探新名再回落旧名。
+    """
     import akshare as ak  # type: ignore[import-untyped]
 
-    df = ak.stock_zh_a_spot()
+    fetcher = getattr(ak, "stock_zh_a_spot_sina", None) or getattr(ak, "stock_zh_a_spot")
+    df = fetcher()
     if df is None or df.empty:
         return df  # type: ignore[no-any-return]
-    df = df.copy()
-    df["code6"] = df["代码"].astype(str).str.extract(r"(\d{6})")
     df = df.copy()
     df["code6"] = df["代码"].astype(str).str.extract(r"(\d{6})")
     df["amount_wan"] = pd.to_numeric(df["成交额"], errors="coerce") / 10_000.0
@@ -464,12 +467,29 @@ def parse_spot_row(
         return None
 
 
+def _call_ipo_info(ak: object, code: str) -> pd.DataFrame:
+    """按 akshare 版本调用 stock_ipo_info。
+
+    1.20.46 起首参名由 `stock` 改为 `symbol`；用签名探测，老版本仍走 `stock=`。
+    """
+    import inspect
+
+    func = getattr(ak, "stock_ipo_info")
+    params = inspect.signature(func).parameters
+    if "symbol" in params:
+        return func(symbol=code)
+    return func(stock=code)
+
+
 def fetch_real_listing_date(code: str) -> date | None:
-    """新浪 stock_ipo_info 拿真实上市日期。失败返回 None（用启发式兜底）。"""
+    """新浪 stock_ipo_info 拿真实上市日期。失败返回 None（用启发式兜底）。
+
+    akshare 1.20.46 起首参名 `stock` 更名为 `symbol`；按签名探测并回落。
+    """
     import akshare as ak
 
     try:
-        df = ak.stock_ipo_info(stock=code)
+        df = _call_ipo_info(ak, code)
     except Exception as exc:  # noqa: BLE001
         LOGGER.debug("拉 %s 上市日期失败: %s", code, exc)
         return None
