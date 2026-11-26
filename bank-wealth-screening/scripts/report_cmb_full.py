@@ -68,6 +68,9 @@ def main():
     lo, hi = (min(cash7), max(cash7)) if cash7 else (None, None)
     avg = sum(cash7) / len(cash7) if cash7 else None
 
+    # 推荐池排序：成立年化为主(持续性)、近6月为辅、回撤惩罚。
+    # 纯按近6月排会把"债牛末段短期爆发"的产品顶上来(成立+2.3%但近6月+5.0%)，
+    # 这类收益不可持续，不能因为近6月高就排第一。
     reco = []
     for r in rows:
         if r["m_kind"] != "本份额":
@@ -76,7 +79,12 @@ def main():
             continue
         if "美元" in r["name"]:
             continue
-        reco.append((r["m_t6"] * 100 - abs(r["m_mdd"]) * 300, r))
+        ann = r["m_ann"] or 0
+        # 持续性：近6月不应显著低于成立年化（低于1个百分点说明近期走弱）
+        if r["m_t6"] < ann - 0.01:
+            continue
+        score = ann * 100 * 2 + r["m_t6"] * 100 - abs(r["m_mdd"]) * 300
+        reco.append((score, r))
     reco.sort(key=lambda x: -x[0])
 
     L = []
