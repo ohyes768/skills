@@ -14,6 +14,13 @@ description: 招商银行/杭州银行 自营+代销理财产品筛选与净值�
 
 所有脚本在 `scripts/` 下。依赖：`requests`、`numpy`、`gmssl`（招银 SM4）、`cryptography`（南银/招行 RSA+AES）。
 
+> ⚠️ **2026-11-26 实测：`on_sale_cmb.py` 的 `fetch_all()` 只拿到 770 只，实际目录有 7689 只。**
+> 原因有二：(1) `pageSize` 被服务端钳到 10（填 100/500/1000 都只返 10 条），需翻 769 页；
+> (2) 顺序翻页第 78 页起触发限频（返回空 body），原代码遇空就 `break`，于是停在 770。
+> **用 `scripts/fetch_cmb_catalog.py`（并行翻页 + 指数退避）抓全量，实测 7687/7689 只、0 失败页。**
+> 候选集因此从 51 只变为 830 只 —— 别用旧 `on_sale_cmb.py` 做全量筛选。
+> 全量筛选用 `scripts/screen_cmb_full.py`，出报告用 `scripts/report_cmb_full.py`。
+
 ---
 
 ## 第一步：筛在售产品
@@ -59,7 +66,7 @@ python3 scripts/on_sale_hzbank.py --json              # JSON输出
 |---|---|---|---|---|
 | 招银自营 | `fetch_nav_history.py` | cfweb.paas.cmbchina.com | ✅ | SM4 签名（gmssl） |
 | 杭银自营 | `fetch_nav_history.py` | hzbankwealth.cn JSON | ✅ | 无 |
-| 兴银理财 | `xy_fetch.py` | cibwm.com.cn `/api/public/pc/productVal/performanceTrend/<code>/SINCE` | ✅ | 无 |
+| 兴银理财 | `xy_fetch.py` | cibwm.com.cn `/api/public/pc/productVal/performanceTrend/<code>/SINCE` | ✅ | 无。⚠️货币型产品净值恒 1，须读 `sevenDayAnnualized` 字段（**单位是百分数数值**，0.8926 = 0.8926%，与民生/信银的小数口径不同，需 /100） |
 | 信银理财 | `citic_fetch.py` | wechat.citic-wealth.com `getTAProductNav` | ✅ | TLS legacy renegotiation（`ctx.options\|=0x4`） |
 | 光大理财 | `ceb_fetch.py` | 95595.com.cn `getLsjz.portlet` | ✅ | 无；⚠️仅覆盖母行100只，专款不在内 |
 | 民生理财 | `ms_nav_fetch.py` | cmbcwm.com.cn `BTADailyQry`（form-urlencoded） | ✅ | 无；先 `BTAProductQry` 按名称搜 REAL_PRD_CODE |
@@ -210,12 +217,36 @@ python scripts/rss_push.py --json hzbank_onsale.json --title "..." \
 | 最大回撤 | 6个月 | 1年 |
 | Sharpe | 1年 | 2年+ |
 
+## 万份收益型（现金管理类）的业绩口径（2026-11-26 实测）
+
+货币型/现金管理类产品**净值恒为 1.0**，用净值序列算年化一律得到 0，**不能当"零收益"报给用户**。正确口径是七日年化：
+
+| 管理人 | 字段/接口 | 单位 | 备注 |
+|---|---|---|---|
+| 民生 | `BTADailyQry` → `WEEK_CLIENTRATE` | **小数**（0.0084 = 0.84%） | 本身即七日年化率，勿再复利 52 次。接口用 `'-'` 表示当日无数据 |
+| 兴银 | `performanceTrend` → `sevenDayAnnualized` | **百分数数值**（0.8926 = 0.8926%） | 需 `/100` 归一。同一响应里 `effIopv`=万份收益、`effTotNetVal` 可交叉验证 |
+| 信银 | `productInfo/search` → `sevenDaysIncomeRate` / `totalYearIncomeRate` | **小数** | 匹配须用 **(期号, 份额尾字母, 代销含"招商银行")** 三重条件，只按期号会串份额 |
+
+- **匹配键**：招行货架的代销产品名尾字母 = 管理人官网的份额代码尾字母。
+  例：招行 `ZX100018`=日盈象天天利816号M → 信银 `AM264385M`（代销含招商银行）。
+- **民生/信银的招行渠道专属份额在管理人官网零售检索里查不到**（如 268/294/125/126 号），
+  只能退到同系列老份额（FSAF18178A 天天增利、FBAE68001A 贵竹天天盈1号）作参照。
+- **实测同类区间**：120 只万份收益型产品的七日年化落在 **+0.77% ~ +2.17%**，均值 **+1.13%**。
+  拿不到直连接口的产品可用此区间做"同类基准"，但必须标明是参考区间而非该产品实绩。
+- **宁银官网域名不通**（nigl.com.cn / ningbobl.com 均 DNS 解析失败）；
+  **中银理财官网被 Cloudflare 挡**（bocwealth.com 跳 hugedomains 验证）；
+  **平安官网理财页路径已变**（/lcprd/lcprd_licai_list.shtml 返回 404）。
+  这三家的七日年化暂无直连路径。
+
 ## 同系列老份额参照（推荐前必做）
 
 新份额（成立 <6 个月）指标是建仓期虚高，**不输出给用户**；推荐理由建立在同系列成立 1 年+ 老份额上：
 
 1. 先在渠道产品目录按系列名关键字搜老份额（按 `beginDate` 排序取最老）；老份额已不在渠道发行的，用 web 搜产品全名找老代码（例：665593=招睿安悦370天1号、130052A=招睿明裕180天持有2号）。
    **⚠️ `series_ref.py` 只覆盖信银/华夏/南银/招行目录，不含杭银自营**。杭银自营系列的参照必须手动查杭银全量目录（`https://www.hzbankwealth.cn/eportal/hzbw/product_data.json`，5568 只含存续）：按系列名关键字过滤 `contenttitle`，取 `chanpinzhuangtai=存续` 且 `chengliriqi` ≥180 天的份额，用 `leijijingzhi` 和成立日算年化。**杭银自营系列报"无参照"之前必须先走这一步**，否则一律视为漏查（2026-11-25 实例：添益180天持有、安享优选182天周期型、半年添益全都有多年老份额，series_ref 却报 0）。
+   **⚠️ 招行货架 `m.cmbchina.com/api/financing/product-list` 带 `keyword` 参数时可搜到全目录 7689 只**
+   （不传 keyword 只能按页翻；`prdName`/`prdCode` 参数无效，只有 `keyword` 生效）。
+   用它搜系列名 + `beginDate` 排序，是找招银自营老份额最可靠的路子。
    同理，**南银系列 series_ref 报 0 时也要直接用 `ny_nav_fetch.py` 按代码拉**（增瑞财富牛 Z70021 实测能拉到 58 点净值，series_ref 却报 0）。华夏系同判断：先跑 `hx_fetch.py` 建索引（1 万+份报告按产品 id 索引），候选代码在 priority 列表里就可用单代码抓取流程拉净值——固收增强周期180天（2119187001，5年老份额）就是这样找回的。
 2. **"同系列"必须同登记编号（杭银看 `dengjino`、招银系列名逐字匹配），不能拿同家族不同产品线充数**：同一策略前缀下常有并行产品线（如杭银"丰鸿固收371天XXXX期"与"丰鸿固收（灵动目标盈）XXXX期"是两条独立线，登记编号不同）。拿错参照=虚假业绩背书。
 3. 注意**风险等级的历史变化**：老份额当年可能风险等级更高（如丰鸿系 2026-06 前份额是 R3，之后才降标 R2），要向用户说明参照与本期不完全对应。
@@ -223,6 +254,12 @@ python scripts/rss_push.py --json hzbank_onsale.json --title "..." \
 5. 整个系列无 1 年以上老份额的，明确标注"无业绩可参照、盲买管理人"。
 
 ## 已知限制
+
+**招行货架的私行/私募份额排除规则（2026-11-26 实测）**：
+私行份额与零售份额**共享同一登记编码**，只有 `prdCode` 的字母段不同：
+`120084A`（零售）vs `PB120084`（私行尊享），`JYPB0123` = JY + PB + 0123。
+判定规则：**代码里含独立 `PB` 或 `PW` 段即私行/私募**，不能只按开头匹配。
+另有定向份额以 `D` 结尾（`NBD`/`JXD`/`BYD`/`NYD`/`ZYD`），靠名称里的"定向"字样识别。
 
 **净值缓存深度对照（决定哪个系列能用历史业绩验证，2026-11-25 实测）**：
 
