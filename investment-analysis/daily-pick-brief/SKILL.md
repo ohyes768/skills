@@ -170,6 +170,20 @@ cd ~/.hermes/skills/daily-pick-brief && python3 scripts/daily_pick.py --latest-a
 **表面上是一条正常的「今日无可推荐」，实际是拉数据全失败。**
 判断方法：日志里若同时出现 `拉取数据失败` 且选股为空，先查依赖导入，不要当成真的没有推荐。
 
+### akshare 升级会让选股链整条失效（2026-11-26 实测）
+
+镜像 `stock-info:latest` 的 akshare 升到 1.20.65 后，两处调用改名，**整条行情链抛异常被
+`except` 吞成「今日无可推荐」，而且照样推送成功**——群里会收到一条假的「无推荐」消息：
+
+- `ak.stock_zh_a_spot()` → 已移除，更名 `ak.stock_zh_a_spot_sina()`（旧名调用即抛 AttributeError）
+- `ak.stock_ipo_info(stock=...)` → 首参名改为 `symbol`
+
+脚本已做兼容（先探新名再回落旧名；`stock_ipo_info` 按签名探测）。
+**判读主流程输出时必须先看日志有没有 `拉取数据失败`**：
+有这条日志就说明是数据链故障而非真的没推荐，需要修完再重跑，
+否则群里会同时留下「无推荐」和真实标的两条消息。
+当天已推送过真实标的后历史文件不会重复落盘，守卫只对有 pick 的记录生效。
+
 ### 宿主 python3 没有 akshare，必须用 stock-info 镜像
 
 宿主机 `python3`（3.11）无 `akshare`；`stock-info:latest` 镜像内有 `akshare 1.20.35`。
@@ -196,6 +210,10 @@ docker run --rm --network nginx_nginx-bridge \
 
 `.env` 里是 `DAILY_PICK_WEBHOOK`，公共 CLI 认 `DINGTALK_WEBHOOK`。
 容器内用 `--env-file`（文件里写 `DINGTALK_WEBHOOK=...`）传入，避免命令行泄露。
+
+**宿主 CLI 写回执库报 readonly 时**：把 `/state` 挂进容器即可（容器内 root 写的库宿主可读，
+反之宿主写的库容器内未必可写）；`dingtalk_send.py` 的子命令是 `send`，
+漏掉 `send` 会报 `invalid_input_or_state`（argparse 的 subcommand 必填）。
 
 ### 标题必须含关键词「财报」
 
