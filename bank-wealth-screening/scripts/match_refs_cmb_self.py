@@ -22,7 +22,7 @@ NAV = os.path.join(HERE, "data", "nav_history")
 
 # 招银自营产品线（系列名 -> 官方系列名近似）
 LINES = ["添金", "添鑫", "添利", "丰和", "鑫鼎", "安悦", "明裕", "明睿",
-         "增瑞", "增泰", "添元", "智远", "恒睿", "添福"]
+         "增瑞", "增泰", "添元", "智远", "恒睿", "添福", "和鼎", "指南针"]
 # 策略族：同系列但不同策略的不能互相当参照
 # （如 添金(人民币固收) vs 天添金(美元) ；增泰日开(固收) vs 全球商品融合/湾区全球优选(商品/全球)）
 FOREIGN = re.compile(r"美元|欧元|港币|英镑|日元|离岸|跨境")
@@ -93,6 +93,7 @@ def main():
 
     # 参照池：招银自营代码(纯数字码) 且 span>=min_days
     pool = {}
+    loose = {}          # 放宽池：span 不足但 >=90 天（新系列无老份额时用）
     for f in os.listdir(NAV):
         if not f.endswith(".csv"):
             continue
@@ -100,17 +101,22 @@ def main():
         if not re.fullmatch(r"[0-9]{4,6}[A-Z]?", code):
             continue
         st = calc(code)
-        if st and st["span"] >= a.min_days:
-            nm = (catalog.get(code, {}) or {}).get("prdBrief") or ""
-            st["name"] = nm
-            st["line"] = line_of(nm)
-            st["hold"] = hold_days(nm)
-            st["strategy"] = strategy_of(nm)
-            if st["line"]:
-                pool[code] = st
-    print(f"招银自营参照池(span>={a.min_days}d): {len(pool)}")
+        if not st:
+            continue
+        nm = (catalog.get(code, {}) or {}).get("prdBrief") or ""
+        st["name"] = nm
+        st["line"] = line_of(nm)
+        st["hold"] = hold_days(nm)
+        st["strategy"] = strategy_of(nm)
+        if not st["line"]:
+            continue
+        if st["span"] >= a.min_days:
+            pool[code] = st
+        elif st["span"] >= 90:
+            loose[code] = st
+    print(f"招银自营参照池(span>={a.min_days}d): {len(pool)} | 放宽池(90~{a.min_days - 1}d): {len(loose)}")
     by_line = {}
-    for code, st in pool.items():
+    for code, st in list(pool.items()) + list(loose.items()):
         by_line.setdefault(st["line"], []).append(code)
     for L, lst in by_line.items():
         print(f"  {L}: {len(lst)} 支")
@@ -126,15 +132,29 @@ def main():
             continue
         # 策略族必须一致：人民币固收 不能用 外币/全球商品 当参照
         want = strategy_of(r["name"])
-        cands = [c for c in by_line.get(L, []) if pool[c]["strategy"] == want]
+        cands = [c for c in by_line.get(L, [])
+                 if c != r["code"]
+                 and pool.get(c, loose.get(c, {})).get("strategy") == want]
         if not cands:
             continue
         hd = r["hold"]
         # 优先持有期相同，其次最接近；同条件下取成立最久
-        cands = sorted(cands,
-                       key=lambda c: (abs(pool[c]["hold"] - hd), -pool[c]["span"]))
+        def key(c):
+            st = pool.get(c) or loose[c]
+            return (abs(st["hold"] - hd), -st["span"])
+        cands = sorted(cands, key=key)
         rc = cands[0]
-        r["ref"] = dict(pool[rc], how="招银自营同产品线")
+        st = pool.get(rc) or loose[rc]
+        if rc == r["code"]:
+            # 参照就是自己 —— 说明该产品有净值但历史不足 180 天
+            r["own_short"] = dict(st, how="本份额(历史不足180天)")
+            added += 1
+            continue
+        if st["span"] < a.min_days:
+            st = dict(st, how="同产品线最老份额(历史不足180天)")
+        else:
+            st = dict(st, how="招银自营同产品线")
+        r["ref"] = st
         added += 1
     print(f"  新增自营参照: {added}")
 
