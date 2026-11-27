@@ -98,6 +98,19 @@ def trailing(pts, months):
     return (pts[-1][1] / prior[-1][1]) ** (365 / span) - 1 if span > 0 else None
 
 
+def trailing_days(pts, days):
+    """按天数的滚动窗口：返回 (年化, 区间最大回撤)。不足窗口返回 None。"""
+    start = pts[-1][0] - datetime.timedelta(days=days)
+    prior = [x for x in pts if x[0] <= start]
+    if len(prior) < 2:
+        return None
+    span = (pts[-1][0] - prior[-1][0]).days
+    ann = (pts[-1][1] / prior[-1][1]) ** (365 / span) - 1 if span > 0 else None
+    sub = np.array([x[1] for x in pts if x[0] >= prior[-1][0]])
+    mdd = ((sub / np.maximum.accumulate(sub)) - 1).min()
+    return ann, mdd
+
+
 def stats(pts):
     """-> (年化, 年化波动, sharpe, 最大回撤)"""
     v = np.array([x[1] for x in pts])
@@ -132,17 +145,17 @@ def main():
         os.makedirs(NAV_DIR, exist_ok=True)
         subprocess.run([sys.executable, os.path.join(HERE, "fetch_nav_history.py"),
                         "--out", NAV_DIR, *a.codes], check=False)
-    print(f"{'产品':<26}{'代码':<14}{'风险':>4}{'成立时长':>9}{'近6月年化':>10}{'成立年化':>10}"
+    print(f"{'产品':<24}{'代码':<14}{'风险':>4}{'成立时长':>9}{'近6月年化':>10}{'成立年化':>10}"
           f"{'最大回撤':>10}{'成立Sharpe':>12}{'近1年Sharpe':>13}")
     for code in a.codes:
         code = code.upper()
         try:
             pts = load(code)
         except FileNotFoundError:
-            print(f"{'?':<26}{code:<14}{'':>4} 无历史净值且拉取失败，检查网络后重试")
+            print(f"{'?':<24}{code:<14} 无历史净值且拉取失败，检查网络后重试")
             continue
         if not pts:
-            print(f"{'?':<26}{code:<14}{'':>4} 净值接口无数据（可能未披露/不支持该代码）")
+            print(f"{'?':<24}{code:<14} 净值接口无数据（可能未披露/不支持该代码）")
             continue
         try:
             info = convert(code)
@@ -154,14 +167,23 @@ def main():
             name, risk = NAME_HINT.get(code, code), ""
             if name == code:
                 risk = ""
-        name = name if len(name) <= 24 else name[:23] + "…"
+        name = name if len(name) <= 22 else name[:21] + "…"
         span = (pts[-1][0] - pts[0][0]).days
         dur = f"{span//365}年{span%365}天" if span >= 365 else f"{span}天"
         ann, _, sp, mdd = stats(pts)
         t6 = trailing(pts, 6)
         y = since(pts, 365)
         sp1y = stats(y)[2] if y else None
-        print(f"{name:<26}{code:<14}{risk:>4}{dur:>9}{fmt(t6):>10}{fmt(ann):>10}{fmt(mdd):>10}"
+        # 滚动窗口行：近30/90/180天的年化 + 区间最大回撤
+        wins = [(30, '近30天'), (90, '近90天'), (180, '近180天')]
+        label = f"  ↳ 滚动  {code}"
+        for d, tag in wins:
+            r = trailing_days(pts, d)
+            if r:
+                print(f"{label:<24}{tag:>8}{'':<6}年化{fmt(r[0]):>9}{f'区间回撤{fmt(r[1]):>9}':>22}"
+                      f"{'':>10}{'':>12}{'':>13}")
+        print(f"{name:<24}{code:<14}{risk:>4}{dur:>9}{fmt(t6):>10}{fmt(ann):>10}"
+              f"{fmt(mdd):>10}"
               f"{fmt(sp, pct=False):>12}{fmt(sp1y, pct=False):>13}")
 
 

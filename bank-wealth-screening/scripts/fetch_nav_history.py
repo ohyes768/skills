@@ -1,7 +1,7 @@
 """拉取理财产品历史净值（仅招银自营 + 杭银自营）。
 
 用法:
-    python fetch_nav_history.py <code> [<code> ...] [--out nav_history]
+    python fetch_nav_history.py <code> [<code> ...] [--out data/nav_history]
 
 - 招银自营 (4-6位数字可带字母，如 120053A): cfweb getSAValueByPage 全量分页
 - 杭银理财 (TYG/JQB/HYG...): 官网 /eportal/hzbw/netval/<code>_netval.json
@@ -16,6 +16,7 @@ import ssl
 import urllib.request
 
 HZ_NETVAL = "https://www.hzbankwealth.cn/eportal/hzbw/netval/{}_netval.json"
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def _ctx():
@@ -69,7 +70,7 @@ def fetch_hz(code: str):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("codes", nargs="+")
-    ap.add_argument("--out", default="nav_history")
+    ap.add_argument("--out", default=os.path.join(HERE, "data", "nav_history"))
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
     for code in args.codes:
