@@ -82,6 +82,26 @@ python3 "<skill-dir>/scripts/xianyu_monitor.py" digest --top 10             # �
 
 同日重发需显式 `--dedupe-key xianyu-digest:<日期>:v2`。各视图的条数默认统一为 7（show/report/digest 的 `--top` 默认值）。
 
+#### ⚠️ digest 同日重推必撞 `key_conflict`（2026-11-27 实测）
+
+`digest` 正文首行嵌了**分钟级时间戳**（`# 许愿池现状 2026-11-27 16:30`），
+而公共 CLI 的回执表按 `(base, channel, source, dedupe-key)` 存 **payload 的 sha256** ——
+**每次重跑内容都不同 → 同 key 必然 `status=conflict`（key_conflict），且根本不 POST**。
+`--dedupe-key ...:v2` 能绕开回执，但 **relay 远端按 title 去重** → 同 title 仍 `duplicate`；
+换 title 则制造**同日重复稿**。
+
+**正确处置**（顺序别乱）：
+1. 先回读远端确认**同 title 的条目已存在**（用 `media/rss-relay-publishing/scripts/readback_relay_posts.py`，
+   cron 里别手写 curl，会被网关拦）
+2. **改正文 → 直接改容器内落盘文件**（不要重发）：
+   `docker exec rss-relay-backend sh -c 'cat /app/data/posts/<id>.md'` → 换 body（保留 7 行 front-matter）→ `docker cp` 回去
+3. **同步本地回执的 digest**（否则下次同 key 重跑仍 conflict）：
+   `~/.local/state/rss-relay-publish/receipts.sqlite3`，UPDATE 该 identity 的 digest=新 payload 的 sha256
+4. 删掉同日被取代的旧稿（v2/v3/…）并**同步删掉它们的回执行**
+5. 回读验收：`channel=xianyu` / `source=xianyu-monitor` / 心愿段数 / App 深链条数 / 正文与本地逐字相同
+
+**根治**：让正文**不含时间戳**（把时刻挪进 title），digest 才会稳定幂等。
+
 ### 推 RSS
 
 ```bash

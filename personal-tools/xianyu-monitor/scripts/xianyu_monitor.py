@@ -553,7 +553,10 @@ def _collect_wishlist_rows(args_top: int) -> list[dict]:
 
 
 def _render_digest(tasks: list[dict], rows: list[dict], top: int) -> str:
-    now = datetime.now(CST).strftime("%Y-%m-%d %H:%M")
+    # 2026-11-27：正文不嵌分钟级时间戳。公共 CLI 的回执表按 payload 的 sha256 判重，
+    # 正文含时间戳 → 每次重跑 digest 都不同 → 同 dedupe-key 必然 key_conflict（不 POST）。
+    # 时刻信息放在标题里，正文保持稳定 → digest 可幂等重推。
+    now = datetime.now(CST).strftime("%Y-%m-%d")
     lines = [f"# 许愿池现状 {now}", ""]
     lines.append(f"> 共 {len(tasks)} 个心愿，推荐池展示每个心愿前 {top} 条，按捡漏分排序。")
     for t in tasks:
