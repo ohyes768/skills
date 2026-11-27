@@ -84,3 +84,14 @@ photo/natgeo-daily/data/
 
 # xianyu-monitor 运行状态（水位线/报告，不入库）
 personal-tools/xianyu-monitor/state/
+
+# bank-wealth-screening 运行产物/数据缓存（不入库）
+bank-wealth-screening/scripts/data/nav_history/
+bank-wealth-screening/scripts/data/hzb_catalog.json
+bank-wealth-screening/scripts/data/cmb_report_*.md
+bank-wealth-screening/scripts/hx/
+bank-wealth-screening/scripts/ms_nav/
+bank-wealth-screening/scripts/xy/
+bank-wealth-screening/scripts/citic/
+bank-wealth-screening/scripts/*_index.csv
+bank-wealth-screening/scripts/*_products.json

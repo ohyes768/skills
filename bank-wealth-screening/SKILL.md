@@ -1,180 +1,70 @@
 ---
 name: bank-wealth-screening
-description: 招商银行/杭州银行 自营+代销理财产品筛选与净值分析。Use when user wants 查询招行或杭行能买的理财产品（自营/代销）、按风险等级/持有期限筛选、看历史净值/年化/最大回撤/Sharpe、推荐理财产品。数据源覆盖招银自营(cfweb SM4)、杭银自营+代销(hzbankwealth+ rwpq)、兴银/信银/光大/民生/南银/华夏/中银各理财子官网。
+description: 招商银行/杭州银行自营+代销理财产品筛选、业绩参照与推荐。当用户想买理财、问"有什么可以买/推荐个稳健理财/这个和那个选哪个"，或要按风险等级(R1/R2/R3)、持有期限、起购金额筛选招行或杭行在售产品，或要看理财的历史净值、年化、最大回撤、Sharpe、七日年化、近30/90/180天滚动业绩，或要对比多只理财并给出推荐理由时使用。即使只说"稳健理财""活钱管理""封闭期一年内的固收"也用本 skill。数据源覆盖招银自营(cfweb SM4)、杭银自营+代销(hzbankwealth + rwpq)、兴银/信银/光大/民生/南银/华夏/中银各理财子官网。
 ---
 
 # 在售理财筛选与净值分析（招商银行 / 杭州银行）
 
-**入口分两个：招商银行 / 杭州银行。各自再分自营/代销。**
+工作流四步：**筛在售 → 找同系列参照 → 算业绩 → 按规范输出推荐**。各管理人接口细节、数据坑、参照匹配规则全在 `references/` 下，按需读：
 
-| 银行 | 自营 | 代销第三方 |
-|---|---|---|
-| 招商银行 | `on_sale_cmb.py`（招银自营+代销，同一目录接口；代销约 500 支可申购，光大/华夏/信银/兴银/交银/建信/中邮/民生等 20 家） | 杭行 rwpq 平台 326 只在售 |
-| 杭州银行 | `on_sale.py`（杭银理财） | rwpq 平台 326 只在售（光大74/华夏51/兴银系80/信银35/南银16/民生2...） |
+| 文件 | 何时读 |
+|---|---|
+| `references/reference-matching.md` | 推荐前必读：同系列判定（招银/杭银规则不同）、参照工具选择、业绩口径与门槛 |
+| `references/data-sources.md` | 拉净值/对接管理人官网时：接口表、签名细节、缓存深度、数据坑、万份收益口径 |
+| `references/rss-publish.md` | 用户要求发 RSS 时 |
 
-所有脚本在 `scripts/` 下。依赖：`requests`、`numpy`、`gmssl`（招银 SM4）、`cryptography`（南银/招行 RSA+AES）。
-
-> ⚠️ **2026-11-26 实测：`on_sale_cmb.py` 的 `fetch_all()` 只拿到 770 只，实际目录有 7689 只。**
-> 原因有二：(1) `pageSize` 被服务端钳到 10（填 100/500/1000 都只返 10 条），需翻 769 页；
-> (2) 顺序翻页第 78 页起触发限频（返回空 body），原代码遇空就 `break`，于是停在 770。
-> **用 `scripts/fetch_cmb_catalog.py`（并行翻页 + 指数退避）抓全量，实测 7687/7689 只、0 失败页。**
-> 候选集因此从 51 只变为 830 只 —— 别用旧 `on_sale_cmb.py` 做全量筛选。
-> 全量筛选用 `scripts/screen_cmb_full.py`，出报告用 `scripts/report_cmb_full.py`。
-
----
+依赖：`requests`、`numpy`、`gmssl`（招银 SM4）、`cryptography`（南银/招行 RSA+AES）。
 
 ## 第一步：筛在售产品
 
-### 招商银行
-
 ```bash
-# 招行在售（默认自营+代销都看；--self-only 只看自营，--daixiao 只看代销）
+# 招行（全量目录用 fetch_cmb_catalog.py 抓取 + screen_cmb_full.py 筛选；
+# on_sale_cmb.py 只拿 770/7689 只，勿用于全量筛选）
 python3 scripts/on_sale_cmb.py --retail --risk R1,R2 --max-amt 50000
-#   --min-days N  按持有期解析筛选（勿手工文本匹配期限）：
-#     持有期优先从产品名解析（「180天持有期」「最低持有360天」）——常开产品 term 字段
-#     「365天以上」指产品存续期而非持有期；名称无持有期才回退 term（封闭式 term 即封闭期，
-#     「181天-365天」取下界、「365天以上」取 365）；日开/天天/活期/现金管理视为零锁定。
-#     期限为「365天以上」的募集期封闭式容易被手工正则漏掉，用 --min-days 可避免。
+#   --min-days N 按持有期解析筛选（勿手工文本匹配期限）：
+#   持有期优先从产品名解析（「180天持有期」「最低持有360天」）；
+#   「365天以上」指存续期而非持有期；日开/天天/活期/现金管理视为零锁定。
 
-# 代销第三方（官网公开货架 72 只精选）—— 从缓存 JSON 或重新抓取
-# 数据: scripts/data/cmb_daixiao_products.json（132只含招银，剔招银=83只第三方）
+# 杭银自营（窗口开放=今天能买入）
+python3 scripts/on_sale.py [--all] [--risk R2]
+
+# 杭银代销第三方（rwpq 平台，剔杭银+招银后约 258 只）
+python3 scripts/on_sale_hzbank.py [--risk R2] [--manager 华夏,信银] [--min-days 30] [--json]
 ```
 
-### 杭州银行
+## 第二步：找同系列老份额参照（推荐前必做）
 
 ```bash
-# 杭银理财自营（窗口开放=今天能买入）
-python3 scripts/on_sale.py            # 今天窗口开放的
-python3 scripts/on_sale.py --all      # 全部在售状态
-python3 scripts/on_sale.py --risk R2
+# 杭银自营首选：同期限+同策略族参照，--nav 附带滚动窗口业绩
+python3 scripts/hz_ref_match.py <产品名片段|productCode|dengjino> [--nav] [--top 5]
 
-# 代销第三方在售（rwpq 平台，326只在售，剔杭银+招银后约258只）
-python3 scripts/on_sale_hzbank.py                     # 全部在售第三方
-python3 scripts/on_sale_hzbank.py --risk R2           # 按风险等级
-python3 scripts/on_sale_hzbank.py --manager 华夏,信银  # 按管理人关键字
-python3 scripts/on_sale_hzbank.py --min-days 30       # 最短持有期≥30天
-python3 scripts/on_sale_hzbank.py --json              # JSON输出
+# 信银/华夏/南银 + 招行目录（不含杭银）
+python3 scripts/series_ref.py <系列关键字> [--top 5] [--min-days 180] [--online-cmb]
 ```
 
----
+判定规则、正反实例、T 份额处理见 `references/reference-matching.md`。核心：**参照必须同产品线 + 同期限 + 同策略族（typeinfo b/c/d）**，不同期限线只可作辅助背景，不同名并行线（丰鸿灵动盈、稳盈1106天）只可作负面证据。整个系列无参照时明示"无业绩可参照、盲买管理人"。
 
-## 第二步：拉历史净值
-
-各管理人净值接口和脚本对照（**用杭行/招行货架上的产品名去各管理人官网搜索匹配代码，再拉净值**）：
-
-| 管理人 | 脚本 | 接口域名 | 结构化净值 | 签名/特殊 |
-|---|---|---|---|---|
-| 招银自营 | `fetch_nav_history.py` | cfweb.paas.cmbchina.com | ✅ | SM4 签名（gmssl） |
-| 杭银自营 | `fetch_nav_history.py` | hzbankwealth.cn JSON | ✅ | 无 |
-| 兴银理财 | `xy_fetch.py` | cibwm.com.cn `/api/public/pc/productVal/performanceTrend/<code>/SINCE` | ✅ | 无。⚠️货币型产品净值恒 1，须读 `sevenDayAnnualized` 字段（**单位是百分数数值**，0.8926 = 0.8926%，与民生/信银的小数口径不同，需 /100） |
-| 信银理财 | `citic_fetch.py` | wechat.citic-wealth.com `getTAProductNav` | ✅ | TLS legacy renegotiation（`ctx.options\|=0x4`） |
-| 光大理财 | `ceb_fetch.py` | 95595.com.cn `getLsjz.portlet` | ✅ | 无；⚠️仅覆盖母行100只，专款不在内 |
-| 民生理财 | `ms_nav_fetch.py` | cmbcwm.com.cn `BTADailyQry`（form-urlencoded） | ✅ | 无；先 `BTAProductQry` 按名称搜 REAL_PRD_CODE |
-| 南银理财 | `ny_nav_fetch.py` | nanyinwealth.com `queryNetValueList.portlet` | ✅ | AES-128-ECB + RSA PKCS1v1.5；⚠️偶发失败需重试；⚠️timeStamp 也是AES加密的 |
-| 华夏理财 | `hx_fetch.py` | hxwm.com.cn `gmjzbgData.js` + 静态报告 js | ✅ | 无；10153份报告，6092只产品 |
-| 中银理财 | `boc_fetch.py` | bankofchina.com 静态 JSON→详情页 | ✅ | 无 |
-
-### 使用示例
-
-```bash
-cd scripts/
-
-# 兴银：先按杭行产品名搜官网代码，再拉净值
-python3 -c "
-from xy_fetch import *
-import json,urllib.request
-UA='Mozilla/5.0'
-payload={'page':{'pageNumber':1,'pageSize':5,'orders':[]},
- 'pageFilterCriteria':{'preferredTypeKey':[],'riskLevel':[],'productPeriod':[],'productType1':[],'productStatus':[],'productForm':[],'orgType':[],'saleCurrency':[],'distributionChannel':[],'selectionLabel':[],'fuzzyStr':'添利天天利76号'}}
-req=urllib.request.Request('https://www.cibwm.com.cn/api/public/pc/productInfo/getProdInfoByPage',data=json.dumps(payload).encode(),method='POST')
-req.add_header('User-Agent',UA); req.add_header('Content-Type','application/json')
-print(json.load(urllib.request.urlopen(req,timeout=30))['data'])
-"
-
-# 信银：名称映射→净值
-python3 -c "
-import json,urllib.request,ssl,urllib.parse
-ctx=ssl.create_default_context(); ctx.options|=0x4
-op=urllib.request.build_opener(urllib.request.HTTPSHandler(context=ctx))
-q=urllib.parse.urlencode({'key':'日盈象天天利321号'})
-req=urllib.request.Request(f'https://wechat.citic-wealth.com/cms.product/api/custom/productInfo/search?{q}')
-req.add_header('User-Agent','Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)')
-print(json.load(op.open(req,timeout=30)))
-"
-
-# 民生：结构化历史净值
-python3 ms_nav_fetch.py FBAF19240F     # 按 real_prd_code
-python3 ms_nav_fetch.py --name "天天增利"  # 按名称搜索再拉
-
-# 南银：结构化历史净值（偶发失败重试即可）
-python3 ny_nav_fetch.py Z70021 Z99002
-
-# 华夏：净值报告（全量跑批 8499 只，已抓约3400）
-python3 hx_fetch.py                    # 全量（较慢）
-# 或者只跑杭行货架优先的
-```
-
-### 招行 SM4 签名细节（cfweb，招银自营+光大/兴银/信银代销共用）
-
-```
-appId = "LB50.22_CFWebUI"
-timespan = 毫秒时间戳
-signature = base64( SM4-ECB( key="9qwBGju73JAXid48", data="LB50.22_CFWebUI|<timespan>" ) )
-headers: appId, timespan, signature, X-B3-BusinessId: LB502215022970
-```
-
-### 民生 kType 对照（QryFinSamInfoByCode.do）
-
-1=发行公告 2=净值公告 3=(空) 4/5=其他 6=到期
-
-### 信银 TLS 注意
-
-wechat.citic-wealth.com 要求 UnsafeLegacyRenegotiation：Python 里 `ctx.options |= 0x4`，curl 加 `--ciphers DEFAULT@SECLEVEL=1`。
-
----
-
-## 第三步：业绩指标
+## 第三步：算业绩指标
 
 ```bash
 python3 nav_stats.py <code> [<code>...]
 # 输出: 成立时长、近6月年化、成立年化、最大回撤、成立Sharpe、近1年Sharpe
-#       以及每个代码下方的滚动窗口行: 近30天/近90天/近180天 年化 + 区间最大回撤
-# 净值缓存写 data/nav_history/<CODE>.csv
+#       每代码下方滚动窗口行: 近30/90/180天 年化 + 区间最大回撤
+# 起点净值≠1（溢价/折价份额）会打 ⚠：跨份额对比以滚动窗口为准
+# 净值缓存: scripts/data/nav_history/<CODE>.csv（nav_stats 自动调 fetch，--no-refresh 跳过）
 ```
 
-**T 份额查不到 ≠ 无业绩**：cfweb 对渠道专属 T 份额返回"查无此代码"，但同一产品的 A/B/C/D 份额查得到（例：招睿增利指南针180天持有期1号，108998T 失败、108998A/C 一次命中 142 点）。报"无参照"前先把代码尾缀换成 A/C/D 各试一次。封闭系列新发期（如增鼎封闭11号仅成立 7 天）才算真无参照——用官网详情页/同花顺搜索结果交叉确认最老份额的成立日期再下结论。
+预期锚定滚动窗口；滚动显著低于成立年化（如近30天为负、90/180 天不足一半）时按近期口径给预期并标注。万份收益型（净值恒1）走七日年化口径，详见 `references/data-sources.md`。
 
-`nav_stats.py` 内置统一 loader：招银/杭银 CSV 之外，自动识别兴银/信银/华夏/南银四家 fetcher 输出的 JSON 格式（深度限制见「已知限制」对照表）；ms/ceb/boc 无结构化历史。
+## 推荐输出规范（用户要"推荐/选哪个"时）
 
-**同系列老份额参照（新份额必做）**：
+固定输出三段：
 
-```bash
-python3 series_ref.py <系列关键字> [--top 5] [--min-days 180] [--online-cmb]
-# 例: python3 series_ref.py 悦嘉最短持有180天
-```
+1. **推荐至多 3 个放最前面**，逐个给理由（参照业绩 + 流动性 + 落选者原因）
+2. **候选必须全部列出**（代码、管理人、风险、期限、名称、起购；招行侧带 `beginDate`），推荐三只也必须出现在全量候选表里（可加 🏆 标记），两区不能互斥
+3. **业绩只用可信数据**：成立 <6 个月不输出自身指标，用同系列老份额参照
 
-在信银/华夏/南银本地索引 + 招行目录（`--online-cmb`）里搜同系列份额，输出成立最老、有净值数据的参照业绩表。老份额不在任何索引里时（如招行目录只收 770 支自营），用 web 搜索产品全名找老份额代码再喂给 `nav_stats.py`。整个系列查不到 ≥min-days 的份额就明确告知"该系列无业绩可参照"。
-
----
-
-## 数据缓存位置
-
-```
-scripts/data/nav_history/     招银+杭银自营净值 CSV
-```
-
-第三方管理人的研究期缓存曾在 `~/study/nav/`，2026-11-25 已随研究工作区清理删除；需要时用对应 fetcher 重新抓取（xy/citic/hx/ny 等脚本支持按代码拉取，华夏/南银全量索引重新跑一遍批量脚本即可重建）。招行/杭行代销清单同理，用 `on_sale_cmb.py`（默认自营+代销都看）实时查询，不依赖本地缓存文件——历史上缓存于 `~/study/cmb_daixiao_products.json` 的「132 只代销精选」从未入库 git，已随该次清理删除，勿再引用。
-
----
-
-## 推荐输出规范
-
-当用户要"推荐/选哪个"时，固定输出三段：
-
-1. **推荐至多 3 个放最前面**：逐个给理由（参照业绩 + 流动性 + 落选者原因），方便用户先看结论
-2. **候选必须全部列出**：满足用户条件的候选一个不落（代码、管理人、风险、期限、名称、起购；招行侧带上发售/开放起始日期 `beginDate`），用户要自己对比。**推荐的三只也必须出现在全量候选列表里**（可加 🏆 标记）——"全量"指筛选结果全集，推荐区只是排序摘要，两区不能互斥
-3. **业绩只用可信数据**：成立 <6 个月不输出指标，用同系列老份额参照
-4. **参照业绩跟候选放在一起输出，不许分两段**：每个候选一张卡片，格式如下（参照系没有数据的写明"无业绩可参照"及原因，绝不留空白）：
+每个候选一张卡片，参照与候选同段输出、不留空白：
 
 ```
 华夏理财悦嘉最短持有180天4号C
@@ -182,138 +72,9 @@ scripts/data/nav_history/     招银+杭银自营净值 CSV
 📎 参照:同系2号C/D/E(317天)
 近6月年化 +2.87%~+2.89%｜成立年化 +3.08%~+3.09%
 滚动: 近30天 +2.85%(回撤0.00%)｜近90天 +2.94%(0.00%)｜近180天 +2.98%(0.00%)
-最大回撤 -0.06%｜Sharpe(成立) +1.97｜数据截至 2026-10-12
+最大回撤 -0.06%｜数据截至 2026-10-12
 ✅/⚠️/❌ 一句话结论（是否推荐、为什么）
 ```
 
-5. **参照卡片必须包含滚动窗口（近30/90/180天年化 + 区间最大回撤），且以滚动窗口为预期锚，成立年化只作背景**（2026-11-27 实例教训）：
-   - 杭银丰裕固收（稳盈）3 年老份额：近30/90/180天年化 +2.7%~+3.0%、零回撤，与成立年化 +3.1~3.3% 一致 → 可按近期口径给预期。
-   - 杭银添益180天持有期老份额：成立年化 +2.2%~+3.1%，但**近30天 -2.2%~-2.5%、近90/180天仅 +0.3%~+0.7%**（债市调整）→ 只报成立年化会严重误导，必须降级并明示当前趋势弱。
-   - 规则：滚动窗口年化显著低于成立年化（如 90/180 天不足成立年化一半，或近30天为负）时，给用户的预期按滚动窗口口径，并标注"成立年化含前期牛市贡献"；两者接近时才可按成立年化表述。
-   - 现金管理类（净值恒 1）不适用滚动窗口，仍按七日年化口径（见下文万份收益章节）。
-6. **负面信号要当场验证并写进卡片**：不推荐的原因必须给数据（如权益增强型近3月实测年化为负、typeinfo b5 固收+、老份额历史风险等级更高），不许只说"波动大"
-7. 附"仅供参考，不构成投资建议"
-
----
-
-## 推送到 RSS（可选，用户明确要求时才发）
-
-筛选/净值结果可推送到个人 RSS 中转服务，实际投递委托公共包 `rss-relay-publish`（subprocess 调用其 `scripts/rss_publish.py`，不自己实现 POST；查重回执由公共层 SQLite 管理）。公共包按 `RSS_RELAY_SKILL_DIR` 环境变量或本仓库 `skills/knowledge/rss-relay-publish` 自动定位，找不到时明确失败不回退。
-
-```bash
-# 直接推 Markdown 报告
-python scripts/rss_push.py --file report.md --title "杭行代销在售 2026-11-25" \
-    --channel bank-wealth --source bank-wealth-screening \
-    --dedupe-key "hzbank-onsale:2026-11-25"
-
-# 从 on_sale_hzbank.py / on_sale_cmb.py 的 JSON 输出自动渲染 Markdown 表格后推送
-python scripts/rss_push.py --json hzbank_onsale.json --title "..." \
-    --dedupe-key "hzbank-onsale:2026-11-25"
-```
-
-- `--dry-run` 仅预览；可选 `--url`、`--base-url`、`--ca-file`、`--insecure`（仅显式要求）。
-- `--dedupe-key` 必须稳定唯一：建议 `<渠道>-onsale:<日期>`（如 `cmb-onsale:2026-11-25`、`hzbank-onsale:2026-11-25`）；修订版加 `:v2` 并在标题体现。
-- stdout 是单个 JSON：`published`/`duplicate` 为成功；`conflict`=同键不同内容；`unknown`=可能已接收，同命令重跑只核对不重发。详见公共包 SKILL.md 判定表。
-- 频道须已在 RSS 服务登记且启用（未登记时发布会被拒，不自动建频道）。**2026-11-27 实测：默认的 `bank-wealth` 频道在服务端不存在（会报 preflight_failed "Channel not found"），实际登记的理财频道是 `wealth`，推送用 `--channel wealth`**。已登记频道可用 `GET <base>/posts?limit=50` 看返回里的 channel 集合确认。只查看/生成结果时不发布，不能因为加载本 skill 就自动发送。
-
-## 业绩指标门槛
-
-| 指标 | 最低门槛 | 勉强可信 |
-|---|---|---|
-| 成立年化 | 3个月 | 6个月+ |
-| 最大回撤 | 6个月 | 1年 |
-| Sharpe | 1年 | 2年+ |
-
-## 万份收益型（现金管理类）的业绩口径（2026-11-26 实测）
-
-货币型/现金管理类产品**净值恒为 1.0**，用净值序列算年化一律得到 0，**不能当"零收益"报给用户**。正确口径是七日年化：
-
-| 管理人 | 字段/接口 | 单位 | 备注 |
-|---|---|---|---|
-| 民生 | `BTADailyQry` → `WEEK_CLIENTRATE` | **小数**（0.0084 = 0.84%） | 本身即七日年化率，勿再复利 52 次。接口用 `'-'` 表示当日无数据 |
-| 兴银 | `performanceTrend` → `sevenDayAnnualized` | **百分数数值**（0.8926 = 0.8926%） | 需 `/100` 归一。同一响应里 `effIopv`=万份收益、`effTotNetVal` 可交叉验证 |
-| 信银 | `productInfo/search` → `sevenDaysIncomeRate` / `totalYearIncomeRate` | **小数** | 匹配须用 **(期号, 份额尾字母, 代销含"招商银行")** 三重条件，只按期号会串份额 |
-
-- **匹配键**：招行货架的代销产品名尾字母 = 管理人官网的份额代码尾字母。
-  例：招行 `ZX100018`=日盈象天天利816号M → 信银 `AM264385M`（代销含招商银行）。
-- **民生/信银的招行渠道专属份额在管理人官网零售检索里查不到**（如 268/294/125/126 号），
-  只能退到同系列老份额（FSAF18178A 天天增利、FBAE68001A 贵竹天天盈1号）作参照。
-- **实测同类区间**：120 只万份收益型产品的七日年化落在 **+0.77% ~ +2.17%**，均值 **+1.13%**。
-  拿不到直连接口的产品可用此区间做"同类基准"，但必须标明是参考区间而非该产品实绩。
-- **宁银官网域名不通**（nigl.com.cn / ningbobl.com 均 DNS 解析失败）；
-  **中银理财官网被 Cloudflare 挡**（bocwealth.com 跳 hugedomains 验证）；
-  **平安官网理财页路径已变**（/lcprd/lcprd_licai_list.shtml 返回 404）。
-  这三家的七日年化暂无直连路径。
-
-### 各管理人官网缓存的数据坑（2026-11-26 实测）
-
-| 坑 | 现象 | 后果 |
-|---|---|---|
-| **华夏 rows 倒序** | `hx_fetch.py` 返回的 `rows` 最新在前（400/400 抽样确认） | 直接喂 `nav_stats` 抛 `math domain error`（负 span 做幂运算），若被 try/except 吞掉则**所有华夏参照静默失效、零报错** |
-| 兴银 rows 正序 | `xy_fetch.py` 的 rows 时间正序 | 无需排序 |
-| 日期字段名各家不同 | 华夏 `netValueDate`／兴银 `netvalDt`+`dataDt`／信银 `navDate` | 解析时必须逐家兼容 |
-| 净值字段名各家不同 | 华夏 `shareNetVal`／兴银 `adjustedValue`／信银 `nav` | 同上 |
-| 兴银封闭式当期无净值 | `稳利安盈封闭式2026年665期` 的 rows=0 | 须回溯同产品线的**早期次**（如 2023年231期，1077 天历史） |
-| 兴银产品名带期号 | 官网 `稳利安盈封闭式2023年231期固收类理财产品` vs 招行 `稳利安盈封闭式2026年665期F` | 按期号匹配必然落空，须去期号/年份/份额字母/通用后缀后按**产品线**归组 |
-
-### 招银自营的参照匹配（关键）
-
-**招银每期新发都是新登记编码**（`120148A`=Z7001626001284，老份额 `120007A` 是别的码），
-所以按 `regCode` 匹配必然失败。必须按**产品线**匹配：
-
-- 产品线：添金／添鑫／添利／丰和／鑫鼎／安悦／明裕／明睿／增瑞／增泰…
-- 同产品线内**优先取持有期相同**的老份额，其次取最接近的。
-- **必须做策略族校验**：同系列不同策略不能互为参照。
-  实测两处错配：`添金(人民币固收)` 误配 `天添金(美元)`；
-  `增泰日开(固收)` 误配 `增泰全球商品融合／湾区全球优选(商品/全球)`。
-  判定：名称含 美元/欧元/港币 → 外币；含 全球/国际/湾区/环球/商品/QDII → 全球；否则人民币。
-- 封闭式产品的 Sharpe 会异常高（净值几乎无波动），如兴银稳利恒盈 SR=14.6 —— 需向用户说明该指标在此类不适用。
-
-## 同系列老份额参照（推荐前必做）
-
-新份额（成立 <6 个月）指标是建仓期虚高，**不输出给用户**；推荐理由建立在同系列成立 1 年+ 老份额上：
-
-1. 先在渠道产品目录按系列名关键字搜老份额（按 `beginDate` 排序取最老）；老份额已不在渠道发行的，用 web 搜产品全名找老代码（例：665593=招睿安悦370天1号、130052A=招睿明裕180天持有2号）。
-   **⚠️ `series_ref.py` 只覆盖信银/华夏/南银/招行目录，不含杭银自营**。杭银自营系列的参照必须手动查杭银全量目录（`https://www.hzbankwealth.cn/eportal/hzbw/product_data.json`，5568 只含存续）：按系列名关键字过滤 `contenttitle`，取 `chanpinzhuangtai=存续` 且 `chengliriqi` ≥180 天的份额，用 `leijijingzhi` 和成立日算年化。**杭银自营系列报"无参照"之前必须先走这一步**，否则一律视为漏查（2026-11-25 实例：添益180天持有、安享优选182天周期型、半年添益全都有多年老份额，series_ref 却报 0）。
-   **⚠️ 招行货架 `m.cmbchina.com/api/financing/product-list` 带 `keyword` 参数时可搜到全目录 7689 只**
-   （不传 keyword 只能按页翻；`prdName`/`prdCode` 参数无效，只有 `keyword` 生效）。
-   用它搜系列名 + `beginDate` 排序，是找招银自营老份额最可靠的路子。
-   同理，**南银系列 series_ref 报 0 时也要直接用 `ny_nav_fetch.py` 按代码拉**（增瑞财富牛 Z70021 实测能拉到 58 点净值，series_ref 却报 0）。华夏系同判断：先跑 `hx_fetch.py` 建索引（1 万+份报告按产品 id 索引），候选代码在 priority 列表里就可用单代码抓取流程拉净值——固收增强周期180天（2119187001，5年老份额）就是这样找回的。
-2. **"同系列"判定（杭银封闭式与招银不同，2026-11-27 修正）**：
-   - **招银**：每期新登记编码，按系列名逐字匹配（去期号/年份/份额字母）。
-   - **杭银封闭式：每期一个新 dengjino，dengjino 是"期"级标识不是"系列"级**（例：丰裕固收386天25205期=Z7002225000395、26174期=Z7002226000420，是同一条滚动产品线的相邻两期）。杭银的同系列判定 = **产品线名去期号/份额字母后逐字一致 + licaiqixian 期限一致 + typeinfo b/c/d 段一致**；括号里的 幸福金桂/稳利低波颐养款/爽盈优选 等是渠道或主题标签，不改变产品线归属。
-   - **要防的是不同名并行线冒充参照**（丰鸿固收 vs 丰鸿（灵动盈/灵动目标盈）、丰裕固收386天 vs 丰裕固收（稳盈）1106天——名称含括号别名且期限不同，策略族也不同，一律不许作业绩背书）。
-   - 拿错参照=虚假业绩背书。
-3. 注意**风险等级的历史变化**：老份额当年可能风险等级更高（如丰鸿系 2026-06 前份额是 R3，之后才降标 R2），要向用户说明参照与本期不完全对应。
-4. **typeinfo 等内部字段可作策略指纹**：杭银 typeinfo `b5`=含转债/弹性敞口（固收+），同带 b5 的产品线即使标 R2 波动也明显高于纯固收（b2/b3）线；稳健型用户优先纯固收线。
-5. 整个系列无 1 年以上老份额的，明确标注"无业绩可参照、盲买管理人"。
-
-## 已知限制
-
-**招行货架的私行/私募份额排除规则（2026-11-26 实测）**：
-私行份额与零售份额**共享同一登记编码**，只有 `prdCode` 的字母段不同：
-`120084A`（零售）vs `PB120084`（私行尊享），`JYPB0123` = JY + PB + 0123。
-判定规则：**代码里含独立 `PB` 或 `PW` 段即私行/私募**，不能只按开头匹配。
-另有定向份额以 `D` 结尾（`NBD`/`JXD`/`BYD`/`NYD`/`ZYD`），靠名称里的"定向"字样识别。
-
-**净值缓存深度对照（决定哪个系列能用历史业绩验证，2026-11-25 实测）**：
-
-| 通道（fetcher 脚本输出） | 历史深度 | 说明 |
-|---|---|---|
-| hx（华夏） | **全历史**（数百点/支） | 净值报告 JSON，最可靠 |
-| xy（兴银） | 全历史（700+ 点） | `adjustedValue` 复权净值 |
-| cmb / hzbank CSV | 全历史 | 招银/杭银自营 |
-| citic（信银） | **仅 ~31 点**（1 个月） | wechat 接口只回近月，深历史拿不到 |
-| ny（南银） | **仅 ~58 点**（约 2 个月） | 只够算近期年化，不能验证长期 |
-| ms（民生） | 无结构化历史 | 仅最新净值+公告 PDF 链接 |
-| ceb（光大） | 仅母行 100 只 | 专款（杭行74只）不在内 |
-| boc（中银） | rows 多为空 | 静态页无结构化数据 |
-
-其他：
-
-- 光大专款（杭行74只/招行20只）：光大理财官网 cebwm.com 有瑞数反爬，脚本化不可行；用同系列公开份额参照
-- 民生理财历史净值：cmbcwm.com.cn BTADailyQry 结构化直连（508只零售），但本地缓存只存了最新净值
-- 南银理财偶发失败：重试即可（失败率~30%）；缓存深度仅 2 个月（见上表）
-- **中国理财网（chinawealth.com.cn）：已退役，勿再使用**。2026-11-24 实测 `prod/search` 返回 `code:-1 "二次校验参数不能为空"`——服务端加了新的二次校验参数，RSA+AES 签名流程整体失效，**不是限频，重试无意义**（曾有记录误写为"限流 3-4 请求即 429"，以本条为准）。历史逆向代码（cw_chinawealth.py 等副本）从未提交过 git，已随 2026-11-25 的 `~/study` 清理删除，不再保留。管理人直连接口已覆盖其原有用途
-- 无直连数据源的管理人（建信/中邮/工银/浦银/交银/平安/宁银/北银等）：业绩不可验证，推荐时明确标注"无业绩可参照、盲买管理人"，不要凭列表信息推荐
-- 华夏银行自营 164 只（杭行货架）：全部"到期"状态，2026底清理，无需关注
+- **负面信号要当场验证并写进卡片**：不推荐必须给数据（近3月实测年化为负、typeinfo b5 固收+、美元款汇率风险、老份额历史风险等级更高），不许只说"波动大"
+- 附"仅供参考，不构成投资建议"

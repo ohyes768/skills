@@ -80,7 +80,10 @@ def load(code):
             return pts
         raise FileNotFoundError(code)
     rows = list(csv.DictReader(open(path)))
-    return [(datetime.date.fromisoformat(r["date"]), float(r["nav"])) for r in rows]
+    pts = [(datetime.date.fromisoformat(r["date"]), float(r["nav"])) for r in rows]
+    # CSV 落盘顺序不保证严格升序（fetch 追加/重跑可能产生乱序或重复日期），
+    # ann_return 用 pts[0] 当起点，乱序会让成立年化完全失真——统一排序去重。
+    return sorted(set(pts))
 
 
 def ann_return(pts, span_days=None):
@@ -174,7 +177,11 @@ def main():
         t6 = trailing(pts, 6)
         y = since(pts, 365)
         sp1y = stats(y)[2] if y else None
-        # 滚动窗口行：近30/90/180天的年化 + 区间最大回撤
+        # 起点净值≠1 的份额（B/C 款溢价发行、老份额折价），成立年化的分母失真：
+        # 同一产品 A 款年化 3% 而 B 款溢价 2% 起步会算出 1%，直接对比会误导。
+        if abs(pts[0][1] - 1) > 0.02:
+            print(f"  ⚠ {code} 起点净值 {pts[0][1]:.4f}≠1（溢价/折价份额），"
+                  f"成立年化含起点偏差，跨份额对比请以滚动窗口为准")
         wins = [(30, '近30天'), (90, '近90天'), (180, '近180天')]
         label = f"  ↳ 滚动  {code}"
         for d, tag in wins:
